@@ -1,0 +1,44 @@
+name: Move Issue to Review
+on:
+  pull_request:
+    types: [ready_for_review]
+
+jobs:
+  move-card:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Buscar ID da Issue vinculada
+        id: get_issue
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_AUTOMATION_TOKEN }}
+        run: |
+          # Busca a primeira issue vinculada ao PR que disparou a action
+          ISSUE_ID=$(gh api graphql -f query='
+            query($node_id: ID!) {
+              node(id: $node_id) {
+                ... on PullRequest {
+                  closingIssuesReferences(first: 1) {
+                    nodes {
+                      id
+                    }
+                  }
+                }
+              }
+            }' -f node_id=${{ github.event.pull_request.node_id }} --jq '.data.node.closingIssuesReferences.nodes[0].id')
+          
+          if [ "$ISSUE_ID" == "null" ] || [ -z "$ISSUE_ID" ]; then
+            echo "Nenhuma issue vinculada encontrada no PR."
+            exit 0
+          fi
+          
+          echo "issue_id=$ISSUE_ID" >> $GITHUB_OUTPUT
+
+      - name: Mover Card da Issue para Review
+        if: steps.get_issue.outputs.issue_id != ''
+        uses: leonsteinhaeuser/project-beta-automations@v2.2.1
+        with:
+          gh_token: ${{ secrets.PROJECT_AUTOMATION_TOKEN }}
+          organization: "LABVIS-UFPA"
+          project_id: 2
+          resource_node_id: ${{ steps.get_issue.outputs.issue_id }}
+          status_value: "Review"
