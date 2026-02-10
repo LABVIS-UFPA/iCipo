@@ -70,14 +70,16 @@ class NodeFsStrategy {
 
   // CRUD methods for Project
   //TODO: verificar se pelo id se o projeto se encontra arquivado. Pois isso, da forma como está, vai sobreescrever projetos arquivados.
-  async saveProject(projectID, projectData) {
+  // Now accepts a single `project` object that must contain `id` (or returns error)
+  async saveProject(project) {
+    const projectID = project.id;
     const relPath = this.path.join(projectID, 'project.json');
 
     // Read existing project if present
     let existing = this.readJson(relPath) || {};
 
     // Merge: preserve existing properties, override/add with incoming projectData
-    const merged = { ...existing, ...projectData };
+    const merged = { ...existing, ...project };
 
     // Write merged project data
     this.writeJson(relPath, merged);
@@ -169,10 +171,16 @@ class NodeFsStrategy {
   }
 
   // CRUD methods for Paper — now use active project implicitly
-  async savePaper(paperId, paperData) {
-    if (!this.activeProjectID) return { status: 'error', message: 'Nenhum projeto está aberto no momento.' };
-    const relPath = this.path.join(this.activeProjectID, 'papers', `${paperId}.json`);
-    this.writeJson(relPath, paperData);
+  // savePaper accepts a single `paper` object which must include `id`.
+  async savePaper(paper) {
+    if (!paper || (!paper.id && !(paper.id === 0))) return { status: 'error', message: 'Paper JSON must include an id.' };
+    const paperId = paper.id;
+    
+    const projectID = this.activeProjectID || (paper.projectID || null);
+    if (!projectID) return { status: 'error', message: 'Nenhum projeto está aberto no momento.' };
+    
+    const relPath = this.path.join(projectID, 'papers', `${paperId}.json`);
+    this.writeJson(relPath, paper);
     return { status: "ok", message: "Paper saved." };
   }
 
@@ -324,9 +332,11 @@ class WebSocketStrategy {
 
   // Accepts a `Project` instance and returns the server response.
   async saveProject(project) {
-    const projectID = project && project.id ? project.id : null;
-    const data = project && typeof project.toJSON === 'function' ? project.toJSON() : project;
-    return this.send('save_project', { projectID, data });
+    if(project && project instanceof Project){
+      const data = project && typeof project.toJSON === 'function' ? project.toJSON() : project;
+      return this.send('save_project', { projectID: data.id, data });
+    }
+    return Promise.reject(new Error("O objeto a salvar deve ser uma instância de Project."));;
   }
 
   async archiveProject(projectID) {
@@ -364,9 +374,12 @@ class WebSocketStrategy {
 
   // Accepts a `Paper` instance and returns the server response
   async savePaper(paper) {
-    const paperId = paper && paper.id ? paper.id : null;
-    const data = paper && typeof paper.toJSON === 'function' ? paper.toJSON() : paper;
-    return this.send('save_paper', { paperId, data });
+    if(paper && paper instanceof Paper){
+      const paperId = paper && paper.id ? paper.id : null;
+      const data = paper && typeof paper.toJSON === 'function' ? paper.toJSON() : paper;
+      return this.send('save_paper', { paperId, data });
+    }
+    return Promise.reject(new Error("O objeto a salvar deve ser uma instância de Paper."));;
   }
 
   // Returns a `Paper` instance (or null)
@@ -595,9 +608,11 @@ class StorageService {
 
   // ========== Project CRUD ==========
 
-  async saveProject(projectID, projectData) {
+  // saveProject accepts a single `project` object (must include `id`)
+  async saveProject(project) {
     if (!this.initialized) await this.init();
-    return this.strategy.saveProject(projectID, projectData);
+    if (!project || (!project.id && !(project.id === 0))) return { status: 'error', message: 'Project JSON must include an id.' };
+    return this.strategy.saveProject(project);
   }
 
   async loadProject(projectID) {
@@ -633,9 +648,11 @@ class StorageService {
 
   // ========== Paper CRUD ==========
 
-  async savePaper(paperId, paperData) {
+  // savePaper accepts a single `paper` object (must include `id`)
+  async savePaper(paper) {
     if (!this.initialized) await this.init();
-    return this.strategy.savePaper(paperId, paperData);
+    if (!paper || (!paper.id && !(paper.id === 0))) return { status: 'error', message: 'Paper JSON must include an id.' };
+    return this.strategy.savePaper(paper);
   }
 
   async loadPaper(paperId) {
