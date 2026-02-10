@@ -185,9 +185,10 @@ function deleteMarkedLink(urlToDelete, done) {
     const papers = Array.isArray(data && data.svat_papers) ? data.svat_papers : [];
     const filteredPapers = papers.filter((p) => normalizeUrl(p?.url) !== target);
 
-    return storage.set({ highlightedLinks, svat_papers: filteredPapers });
-  }).then(() => { done && done(); })
-    .catch((e) => { console.warn('deleteMarkedLink failed', e); done && done(); });
+    chrome.storage.local.set({ highlightedLinks, svat_papers: filteredPapers }, () => {
+      if (done) done();
+    });
+  });
 }
 
 function loadHighlightedLinks() {
