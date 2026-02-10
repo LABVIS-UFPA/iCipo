@@ -235,28 +235,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  addCategoryButton.addEventListener("click", () => {
-    const name = categoryNameInput.value.trim();
-    const color = categoryColorInput.value;
-    if (!name) return;
-
-    storage.get("categories").then((data) => {
-      const categories = data.categories || {};
-      categories[name] = color;
-      storage.set({ categories }).then(() => {
-        categoryNameInput.value = "";
-        loadCategories();
-      });
-    });
-  });
-
-  removeLinks.addEventListener("click", () => {
-    if (!confirm("Tem certeza que deseja remover TODOS os links marcados?")) return;
-    chrome.storage.local.set({ highlightedLinks: {}, svat_papers: [] }, () => {
-      loadHighlightedLinks();
-    });
-  });
-
   if (highlightSearch) {
     highlightSearch.addEventListener("input", () => loadHighlightedLinks());
   }
@@ -418,6 +396,4 @@ document.addEventListener("DOMContentLoaded", () => {
   // Init loads
   // =====================
   loadOnOff();
-  loadCategories();
-  loadHighlightedLinks();
 });

@@ -2,6 +2,8 @@ import {fmtDate, normalizeStr, jaccard} from '../core/utils.mjs';
 import { storage } from '../infrastructure/storage.mjs';
 
 let state = null;
+// Incremental token to guard against out-of-order async renders
+let renderToken = 0;
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -82,6 +84,206 @@ function formatResearchers(value) {
     return value.split(',').map(v => v.trim()).filter(Boolean).join(', ');
   }
   return '';
+}
+
+// ======= Categories & Highlighted Links (moved from options) =======
+function normalizeUrl(url) {
+  return (url || "").replace(/[\?\&]casa\_token=\S+/i, "");
+}
+
+function getLuminanceFromHex(hex) {
+  const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+  hex = (hex || '').replace(shorthandRegex, function (m, r, g, b) {
+    return r + r + g + g + b + b;
+  });
+
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return 0;
+
+  let r = parseInt(result[1], 16) / 255;
+  let g = parseInt(result[2], 16) / 255;
+  let b = parseInt(result[3], 16) / 255;
+
+  r = r <= 0.03928 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4);
+  g = g <= 0.03928 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4);
+  b = b <= 0.03928 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4);
+
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function loadCategories() {
+  const categoryList = document.getElementById("categoryList");
+  if (!categoryList) return;
+  storage.get("categories").then((data) => {
+    categoryList.innerHTML = "";
+    const categories = (data && data.categories) ? data.categories : {};
+    const names = Object.keys(categories).sort((a, b) => a.localeCompare(b));
+
+    function removeCategory(name) {
+      storage.get("categories").then(d => {
+        const cats = d.categories || {};
+        if (!cats[name]) return;
+        delete cats[name];
+        storage.set({ categories: cats }).then(() => {
+          chrome.runtime.sendMessage({ action: "updateContextMenu" });
+          loadCategories();
+        });
+      });
+    }
+
+    for (const category of names) {
+      const color = categories[category];
+
+      const li = document.createElement("li");
+      li.style.backgroundColor = color;
+      li.style.display = "flex";
+      li.style.alignItems = "center";
+      li.style.gap = "8px";
+      li.style.padding = "6px";
+
+      const label = document.createElement("span");
+      label.textContent = category;
+      label.style.fontWeight = "600";
+      label.style.flex = "1";
+      label.style.color = getLuminanceFromHex(color) < 0.5 ? "#fff" : "#000";
+
+      const meta = document.createElement("span");
+      meta.textContent = color;
+      meta.style.fontFamily = "monospace";
+      meta.style.fontSize = "12px";
+      meta.style.color = getLuminanceFromHex(color) < 0.5 ? "#fff" : "#000";
+
+      const btn = document.createElement("button");
+      btn.textContent = "Excluir";
+      btn.addEventListener("click", () => {
+        if (!confirm(`Excluir a categoria "${category}"?`)) return;
+        removeCategory(category);
+      });
+      btn.style.color = getLuminanceFromHex(color) < 0.5 ? "#fff" : "#000";
+      if (getLuminanceFromHex(color) >= 0.5) btn.classList.add("dark");
+
+      li.appendChild(label);
+      li.appendChild(meta);
+      li.appendChild(btn);
+
+      categoryList.appendChild(li);
+    }
+
+    chrome.runtime.sendMessage({ action: "updateContextMenu" });
+  });
+}
+
+function deleteMarkedLink(urlToDelete, done) {
+  const target = normalizeUrl(urlToDelete);
+  storage.get(["highlightedLinks", "svat_papers"]).then((data) => {
+    const highlightedLinks = (data && data.highlightedLinks) ? data.highlightedLinks : {};
+    for (const k of Object.keys(highlightedLinks)) {
+      const nk = normalizeUrl(k);
+      if (k === urlToDelete || nk === target || nk.startsWith(target) || target.startsWith(nk)) {
+        delete highlightedLinks[k];
+      }
+    }
+
+    const papers = Array.isArray(data && data.svat_papers) ? data.svat_papers : [];
+    const filteredPapers = papers.filter((p) => normalizeUrl(p?.url) !== target);
+
+    chrome.storage.local.set({ highlightedLinks, svat_papers: filteredPapers }, () => {
+      if (done) done();
+    });
+  });
+}
+
+function loadHighlightedLinks() {
+  const highlightedList = document.getElementById("highlightedList");
+  if (!highlightedList) return;
+  storage.get(["highlightedLinks", "svat_papers"]).then((data) => {
+    const links = (data && data.highlightedLinks) ? data.highlightedLinks : {};
+    const papers = Array.isArray(data && data.svat_papers) ? data.svat_papers : [];
+    renderHighlighted(links, papers);
+  });
+
+  function renderHighlighted(links, papers) {
+    highlightedList.innerHTML = "";
+    const titleByUrl = new Map();
+    for (const p of papers || []) {
+      const nu = normalizeUrl(p?.url);
+      if (!nu) continue;
+      const t = (p?.title || "").trim();
+      if (t) titleByUrl.set(nu, t);
+    }
+
+    const q = (document.getElementById('highlightSearch')?.value || "").trim().toLowerCase();
+
+    const items = Object.keys(links || {})
+      .map((url) => {
+        const nurl = normalizeUrl(url);
+        const title = titleByUrl.get(nurl) || "";
+        return { url, nurl, title, color: links[url] };
+      })
+      .filter((it) => {
+        if (!q) return true;
+        return (it.url || "").toLowerCase().includes(q) || (it.title || "").toLowerCase().includes(q);
+      });
+
+    const removeBtn = document.getElementById('removeLinks');
+    if (removeBtn) removeBtn.style.display = items.length ? "inline-block" : "none";
+
+    for (const it of items) {
+      const li = document.createElement("li");
+      li.style.backgroundColor = it.color;
+      li.style.display = "flex";
+      li.style.alignItems = "center";
+      li.style.gap = "8px";
+      li.style.padding = "6px";
+
+      const linkWrap = document.createElement("div");
+      linkWrap.style.flex = "1";
+      linkWrap.style.display = "flex";
+      linkWrap.style.flexDirection = "column";
+      linkWrap.style.gap = "2px";
+
+      const a = document.createElement("a");
+      a.href = it.url;
+      a.textContent = it.title ? it.title : it.url;
+      a.target = "_blank";
+      a.rel = "noreferrer";
+      a.style.fontWeight = it.title ? "600" : "400";
+      a.style.overflowWrap = "anywhere";
+      a.style.color = getLuminanceFromHex(it.color) < 0.5 ? "#fff" : "#000";
+
+      const urlSmall = document.createElement("div");
+      if (it.title) {
+        urlSmall.textContent = it.url;
+        urlSmall.style.fontSize = "12px";
+        urlSmall.style.opacity = "0.85";
+        urlSmall.style.overflowWrap = "anywhere";
+      }
+
+      linkWrap.appendChild(a);
+      if (it.title) linkWrap.appendChild(urlSmall);
+
+      const meta = document.createElement("span");
+      meta.textContent = it.color;
+      meta.style.fontFamily = "monospace";
+      meta.style.fontSize = "12px";
+      meta.style.color = getLuminanceFromHex(it.color) < 0.5 ? "#fff" : "#000";
+
+      const btn = document.createElement("button");
+      btn.textContent = "Excluir";
+      btn.addEventListener("click", () => {
+        if (!confirm("Excluir este link marcado?")) return;
+        deleteMarkedLink(it.url, () => loadHighlightedLinks());
+      });
+      btn.style.color = getLuminanceFromHex(it.color) < 0.5 ? "#fff" : "#000";
+      if (getLuminanceFromHex(it.color) >= 0.5) btn.classList.add("dark");
+
+      li.appendChild(linkWrap);
+      li.appendChild(meta);
+      li.appendChild(btn);
+
+      highlightedList.appendChild(li);
+    }
+  }
 }
 
 function toggleNoActiveProjectNotice(show) {
@@ -658,56 +860,139 @@ function filteredPapers() {
   });
 }
 
-function renderPapersTable() {
-  renderIterationFilterOptions();
-  const tbody = $("#papersTable tbody");
-  tbody.innerHTML = "";
+async function renderPapersTable() {
+  // token for this render; only the latest token may write to the DOM
+  const myToken = ++renderToken;
 
-  const rows = filteredPapers().sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+  const f = getFilters();
+  // base papers filtered
+  const base = filteredPapers();
+
+  // fetch highlighted links and svat_papers
+  let hl = {};
+  let svat = [];
+  try {
+    const d = await storage.get(["highlightedLinks", "svat_papers"]);
+    hl = (d && d.highlightedLinks) ? d.highlightedLinks : {};
+    svat = Array.isArray(d && d.svat_papers) ? d.svat_papers : [];
+  } catch (e) {
+    // ignore
+  }
+
+  // Early cancellation: if a newer render started, bail out
+  if (myToken !== renderToken) return;
+
+  const titleByUrl = new Map();
+  for (const p of svat || []) {
+    const nu = normalizeStr(String(p?.url || ''));
+    if (!nu) continue;
+    const t = (p?.title || '').trim();
+    if (t) titleByUrl.set(nu, t);
+  }
+
+  // Map existing papers by normalized url to avoid duplicates
+  const present = new Set((state.papers || []).map(p => normalizeStr(p.url || '')));
+
+  const synth = [];
+  for (const url of Object.keys(hl || {})) {
+    const nurl = normalizeStr(url);
+    if (present.has(nurl)) continue;
+    const title = titleByUrl.get(nurl) || url;
+    const color = hl[url];
+    const item = {
+      id: `marked:${nurl}`,
+      title,
+      authorsRaw: '',
+      createdAt: '',
+      year: '',
+      origin: 'unknown',
+      iterationId: '',
+      status: 'pending',
+      criteriaId: '',
+      tags: [],
+      url: url,
+      highlightedColor: color,
+    };
+    // apply simple filters similar to filteredPapers
+    if (f.status !== "all" && (item.status || "pending") !== f.status) continue;
+    if (f.origin !== "all" && (item.origin || "unknown") !== f.origin) continue;
+    if (f.iteration !== "all" && (item.iterationId || "") !== f.iteration) continue;
+    if (f.q) {
+      const hay = normalizeStr(`${item.title || ''} ${item.authorsRaw || ''} ${(item.tags || []).join(' ')} ${item.year || ''} ${item.url || ''}`);
+      if (!hay.includes(f.q)) continue;
+    }
+    synth.push(item);
+  }
+
+  const rows = [...base, ...synth].sort((a, b) => (b.updatedAt || b.createdAt || "").localeCompare(a.updatedAt || a.createdAt || ""));
+
+  // build HTML in memory
+  let rowsHtml = "";
   for (const p of rows) {
-    const tr = document.createElement("tr");
     const tags = Array.isArray(p.tags) ? p.tags.join(";") : "";
     const critVal = p.criteriaId || "";
+    // highlighted color styling
+    let titleStyle = "";
+    try {
+      const color = p.highlightedColor || p.color || p.highlightColor;
+      if (color) {
+        const lum = getLuminanceFromHex(color);
+        const ts = lum > 0.7 ? 'text-shadow:0 0 1px rgba(0,0,0,0.6);' : (lum < 0.15 ? 'text-shadow:0 0 1px rgba(255,255,255,0.08);' : '');
+        titleStyle = `style="color:${escapeHtml(color)};${ts}"`;
+      }
+    } catch (e) {
+      titleStyle = "";
+    }
 
-    tr.innerHTML = `
-      <td><input type="checkbox" class="rowCheck" data-id="${p.id}" /></td>
-      <td>
-        <button class="linkBtn" data-show-history="${p.id}" title="Ver histórico">${escapeHtml(p.title || "(sem título)")}</button>
-        <div style="color:#666;font-size:11px;margin-top:4px">${escapeHtml(p.authorsRaw || "")} • ${escapeHtml(fmtDate(p.createdAt))}</div>
-      </td>
-      <td><input class="cellInput" data-field="year" data-id="${p.id}" value="${escapeHtml(p.year ?? "")}" placeholder="—" style="width:64px" /></td>
-      <td>
-        <select class="cellSelect" data-field="origin" data-id="${p.id}">
-          ${opt("seed","seed",p.origin)}
-          ${opt("backward","backward",p.origin)}
-          ${opt("forward","forward",p.origin)}
-          ${opt("unknown","unknown",p.origin)}
-        </select>
-      </td>
-      <td>
-        <select class="cellSelect" data-field="iterationId" data-id="${p.id}">
-          ${state.iterations.map(it => `<option value="${it.id}" ${it.id === (p.iterationId||state.project.currentIterationId) ? "selected" : ""}>${it.id}</option>`).join("")}
-        </select>
-      </td>
-      <td>
-        <select class="cellSelect" data-field="status" data-id="${p.id}">
-          ${opt("pending","pending",p.status)}
-          ${opt("included","included",p.status)}
-          ${opt("excluded","excluded",p.status)}
-          ${opt("duplicate","duplicate",p.status)}
-        </select>
-      </td>
-      <td>
-        <select class="cellSelect" data-field="criteriaId" data-id="${p.id}">
-          <option value="" ${!critVal ? "selected" : ""}>—</option>
-          ${Object.keys(state.criteria || {}).filter(k=>k).sort().map(k => `<option value="${k}" ${k === critVal ? "selected" : ""}>${k}</option>`).join("")}
-        </select>
-      </td>
-      <td><input class="cellInput" data-field="tags" data-id="${p.id}" value="${escapeHtml(tags)}" placeholder="ex: vis;ml" /></td>
-      <td><a class="link" href="${escapeHtml(p.url)}" target="_blank" rel="noreferrer">Abrir</a></td>
+    rowsHtml += `
+      <tr>
+        <td><input type="checkbox" class="rowCheck" data-id="${p.id}" /></td>
+        <td>
+          <button class="linkBtn" data-show-history="${p.id}" title="Ver histórico" ${titleStyle}>${escapeHtml(p.title || "(sem título)")}</button>
+          <div style="color:#666;font-size:11px;margin-top:4px">${escapeHtml(p.authorsRaw || "")} • ${escapeHtml(fmtDate(p.createdAt))}</div>
+        </td>
+        <td><input class="cellInput" data-field="year" data-id="${p.id}" value="${escapeHtml(p.year ?? "")}" placeholder="—" style="width:64px" /></td>
+        <td>
+          <select class="cellSelect" data-field="origin" data-id="${p.id}">
+            ${opt("seed","seed",p.origin)}
+            ${opt("backward","backward",p.origin)}
+            ${opt("forward","forward",p.origin)}
+            ${opt("unknown","unknown",p.origin)}
+          </select>
+        </td>
+        <td>
+          <select class="cellSelect" data-field="iterationId" data-id="${p.id}">
+            ${state.iterations.map(it => `<option value="${it.id}" ${it.id === (p.iterationId||state.project.currentIterationId) ? "selected" : ""}>${it.id}</option>`).join("")}
+          </select>
+        </td>
+        <td>
+          <select class="cellSelect" data-field="status" data-id="${p.id}">
+            ${opt("pending","pending",p.status)}
+            ${opt("included","included",p.status)}
+            ${opt("excluded","excluded",p.status)}
+            ${opt("duplicate","duplicate",p.status)}
+          </select>
+        </td>
+        <td>
+          <select class="cellSelect" data-field="criteriaId" data-id="${p.id}">
+            <option value="" ${!critVal ? "selected" : ""}>—</option>
+            ${Object.keys(state.criteria || {}).filter(k=>k).sort().map(k => `<option value="${k}" ${k === critVal ? "selected" : ""}>${k}</option>`).join("")}
+          </select>
+        </td>
+        <td><input class="cellInput" data-field="tags" data-id="${p.id}" value="${escapeHtml(tags)}" placeholder="ex: vis;ml" /></td>
+        <td><a class="link" href="${escapeHtml(p.url)}" target="_blank" rel="noreferrer">Abrir</a></td>
+      </tr>
     `;
-    tbody.appendChild(tr);
   }
+
+  // Before writing to DOM, ensure this render is still the latest
+  if (myToken !== renderToken) return;
+
+  // Apply iteration options and table in one DOM update
+  renderIterationFilterOptions();
+  const tbody = $("#papersTable tbody");
+  if (!tbody) return;
+  tbody.innerHTML = rowsHtml;
 
   // Bind inputs
   tbody.querySelectorAll(".cellSelect").forEach(el => el.addEventListener("change", onCellChange));
@@ -774,6 +1059,45 @@ async function bulkSet(field, value) {
   }
   await persist();
   renderAll();
+}
+
+async function bulkDeleteMarkedSelected() {
+  const ids = selectedPaperIds();
+  if (!ids.length) {
+    alert("Selecione pelo menos 1 artigo.");
+    return;
+  }
+  const targets = ids.filter(id => id && id.startsWith("marked:")).map(id => id.slice(7));
+  if (!targets.length) {
+    alert("Nenhum artigo marcado selecionado.");
+    return;
+  }
+  if (!confirm(`Remover ${targets.length} link(s) marcado(s)?`)) return;
+
+  const d = await storage.get(["highlightedLinks", "svat_papers"]);
+  const highlightedLinks = (d && d.highlightedLinks) ? d.highlightedLinks : {};
+  const svat_papers = Array.isArray(d && d.svat_papers) ? d.svat_papers : [];
+
+  for (const t of targets) {
+    for (const k of Object.keys(highlightedLinks)) {
+      try {
+        if (normalizeStr(k) === t || normalizeUrl(k) === t || normalizeStr(normalizeUrl(k)) === t) {
+          delete highlightedLinks[k];
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+  }
+
+  const filteredPapers = svat_papers.filter(p => {
+    const nu = normalizeStr(p?.url || "");
+    return !targets.includes(nu);
+  });
+
+  await storage.set({ highlightedLinks, svat_papers: filteredPapers });
+  loadHighlightedLinks();
+  renderPapersTable();
 }
 
 function renderIterations() {
@@ -1153,6 +1477,7 @@ function bindEvents() {
   $("#btnBulkExclude").addEventListener("click", () => bulkSet("status", "excluded"));
   $("#btnBulkPending").addEventListener("click", () => bulkSet("status", "pending"));
   $("#btnBulkDuplicate").addEventListener("click", () => bulkSet("status", "duplicate"));
+  $("#btnBulkDeleteMarked").addEventListener("click", () => bulkDeleteMarkedSelected());
 
   // Iterations
   $("#btnAddIteration").addEventListener("click", async () => {
@@ -1188,6 +1513,53 @@ function bindEvents() {
     renderAll();
   });
 
+  // Categories & Links (moved from options)
+  const addCategoryButton = document.getElementById("addCategory");
+  const categoryNameInput = document.getElementById("categoryName");
+  const categoryColorInput = document.getElementById("categoryColor");
+  const seedDefaultCategoriesButton = document.getElementById("seedDefaultCategories");
+  const highlightSearch = document.getElementById("highlightSearch");
+  const removeLinks = document.getElementById("removeLinks");
+
+  if (seedDefaultCategoriesButton) {
+    seedDefaultCategoriesButton.addEventListener("click", () => {
+      chrome.runtime.sendMessage({ action: "seedDefaultCategories" }, () => {
+        loadCategories();
+        alert("Categorias padrão de Snowballing criadas/mescladas!");
+      });
+    });
+  }
+
+  if (addCategoryButton) {
+    addCategoryButton.addEventListener("click", () => {
+      const name = (categoryNameInput?.value || "").trim();
+      const color = categoryColorInput?.value || "#000000";
+      if (!name) return;
+
+      storage.get("categories").then((data) => {
+        const categories = data.categories || {};
+        categories[name] = color;
+        storage.set({ categories }).then(() => {
+          if (categoryNameInput) categoryNameInput.value = "";
+          loadCategories();
+        });
+      });
+    });
+  }
+
+  if (removeLinks) {
+    removeLinks.addEventListener("click", () => {
+      if (!confirm("Tem certeza que deseja remover TODOS os links marcados?")) return;
+      storage.set({ highlightedLinks: {}, svat_papers: [] }).then(() => {
+        loadHighlightedLinks();
+      }).catch((e) => { console.warn('removeLinks set failed', e); });
+    });
+  }
+
+  if (highlightSearch) {
+    highlightSearch.addEventListener("input", () => loadHighlightedLinks());
+  }
+
   // Citations
   $("#btnAddCitation").addEventListener("click", async () => {
     const from = $("#c_from").value;
@@ -1217,6 +1589,9 @@ async function init() {
   await loadState();
   bindEvents();
   renderAll();
+  // Load moved features
+  loadCategories();
+  loadHighlightedLinks();
   setActiveView("overview");
 }
 
