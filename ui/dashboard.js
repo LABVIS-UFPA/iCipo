@@ -173,8 +173,8 @@ function loadCategories() {
 
 function deleteMarkedLink(urlToDelete, done) {
   const target = normalizeUrl(urlToDelete);
-  chrome.storage.local.get(["highlightedLinks", "svat_papers"], (data) => {
-    const highlightedLinks = data.highlightedLinks || {};
+  storage.get(["highlightedLinks", "svat_papers"]).then((data) => {
+    const highlightedLinks = (data && data.highlightedLinks) ? data.highlightedLinks : {};
     for (const k of Object.keys(highlightedLinks)) {
       const nk = normalizeUrl(k);
       if (k === urlToDelete || nk === target || nk.startsWith(target) || target.startsWith(nk)) {
@@ -182,26 +182,21 @@ function deleteMarkedLink(urlToDelete, done) {
       }
     }
 
-    const papers = Array.isArray(data.svat_papers) ? data.svat_papers : [];
+    const papers = Array.isArray(data && data.svat_papers) ? data.svat_papers : [];
     const filteredPapers = papers.filter((p) => normalizeUrl(p?.url) !== target);
 
-    storage.set({ highlightedLinks, svat_papers: filteredPapers }).then(() => { done && done(); });
-  });
+    return storage.set({ highlightedLinks, svat_papers: filteredPapers });
+  }).then(() => { done && done(); })
+    .catch((e) => { console.warn('deleteMarkedLink failed', e); done && done(); });
 }
 
 function loadHighlightedLinks() {
   const highlightedList = document.getElementById("highlightedList");
   if (!highlightedList) return;
   storage.get(["highlightedLinks", "svat_papers"]).then((data) => {
-    // storage.get wrapper may return an object or value; fallback to chrome.storage.local
-    if (!data || (typeof data === 'object' && !('highlightedLinks' in data))) {
-      chrome.storage.local.get(["highlightedLinks", "svat_papers"], (d) => {
-        renderHighlighted(d.highlightedLinks || {}, d.svat_papers || []);
-      });
-      return;
-    }
-
-    renderHighlighted(data.highlightedLinks || {}, data.svat_papers || []);
+    const links = (data && data.highlightedLinks) ? data.highlightedLinks : {};
+    const papers = Array.isArray(data && data.svat_papers) ? data.svat_papers : [];
+    renderHighlighted(links, papers);
   });
 
   function renderHighlighted(links, papers) {
@@ -876,16 +871,8 @@ async function renderPapersTable() {
   let svat = [];
   try {
     const d = await storage.get(["highlightedLinks", "svat_papers"]);
-    if (d && ('highlightedLinks' in d || 'svat_papers' in d)) {
-      hl = d.highlightedLinks || {};
-      svat = Array.isArray(d.svat_papers) ? d.svat_papers : (d.svat_papers || []);
-    } else {
-      // fallback to chrome.storage
-      const prom = new Promise((res) => chrome.storage.local.get(["highlightedLinks","svat_papers"], res));
-      const d2 = await prom;
-      hl = d2.highlightedLinks || {};
-      svat = Array.isArray(d2.svat_papers) ? d2.svat_papers : (d2.svat_papers || []);
-    }
+    hl = (d && d.highlightedLinks) ? d.highlightedLinks : {};
+    svat = Array.isArray(d && d.svat_papers) ? d.svat_papers : [];
   } catch (e) {
     // ignore
   }
@@ -1074,9 +1061,9 @@ async function bulkDeleteMarkedSelected() {
   }
   if (!confirm(`Remover ${targets.length} link(s) marcado(s)?`)) return;
 
-  const d = await new Promise(res => chrome.storage.local.get(["highlightedLinks", "svat_papers"], res));
-  const highlightedLinks = d.highlightedLinks || {};
-  const svat_papers = Array.isArray(d.svat_papers) ? d.svat_papers : [];
+  const d = await storage.get(["highlightedLinks", "svat_papers"]);
+  const highlightedLinks = (d && d.highlightedLinks) ? d.highlightedLinks : {};
+  const svat_papers = Array.isArray(d && d.svat_papers) ? d.svat_papers : [];
 
   for (const t of targets) {
     for (const k of Object.keys(highlightedLinks)) {
@@ -1550,9 +1537,9 @@ function bindEvents() {
   if (removeLinks) {
     removeLinks.addEventListener("click", () => {
       if (!confirm("Tem certeza que deseja remover TODOS os links marcados?")) return;
-      chrome.storage.local.set({ highlightedLinks: {}, svat_papers: [] }, () => {
+      storage.set({ highlightedLinks: {}, svat_papers: [] }).then(() => {
         loadHighlightedLinks();
-      });
+      }).catch((e) => { console.warn('removeLinks set failed', e); });
     });
   }
 
