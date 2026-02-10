@@ -2,6 +2,8 @@ import {fmtDate, normalizeStr, jaccard} from '../core/utils.mjs';
 import { storage } from '../infrastructure/storage.mjs';
 
 let state = null;
+// Incremental token to guard against out-of-order async renders
+let renderToken = 0;
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -859,9 +861,8 @@ function filteredPapers() {
 }
 
 async function renderPapersTable() {
-  renderIterationFilterOptions();
-  const tbody = $("#papersTable tbody");
-  tbody.innerHTML = "";
+  // token for this render; only the latest token may write to the DOM
+  const myToken = ++renderToken;
 
   const f = getFilters();
   // base papers filtered
@@ -877,6 +878,9 @@ async function renderPapersTable() {
   } catch (e) {
     // ignore
   }
+
+  // Early cancellation: if a newer render started, bail out
+  if (myToken !== renderToken) return;
 
   const titleByUrl = new Map();
   for (const p of svat || []) {
@@ -921,66 +925,74 @@ async function renderPapersTable() {
   }
 
   const rows = [...base, ...synth].sort((a, b) => (b.updatedAt || b.createdAt || "").localeCompare(a.updatedAt || a.createdAt || ""));
+
+  // build HTML in memory
+  let rowsHtml = "";
   for (const p of rows) {
-    const tr = document.createElement("tr");
     const tags = Array.isArray(p.tags) ? p.tags.join(";") : "";
     const critVal = p.criteriaId || "";
-
-    tr.innerHTML = `
-      <td><input type="checkbox" class="rowCheck" data-id="${p.id}" /></td>
-      <td>
-        <button class="linkBtn" data-show-history="${p.id}" title="Ver histórico">${escapeHtml(p.title || "(sem título)")}</button>
-        <div style="color:#666;font-size:11px;margin-top:4px">${escapeHtml(p.authorsRaw || "")} • ${escapeHtml(fmtDate(p.createdAt))}</div>
-      </td>
-      <td><input class="cellInput" data-field="year" data-id="${p.id}" value="${escapeHtml(p.year ?? "")}" placeholder="—" style="width:64px" /></td>
-      <td>
-        <select class="cellSelect" data-field="origin" data-id="${p.id}">
-          ${opt("seed","seed",p.origin)}
-          ${opt("backward","backward",p.origin)}
-          ${opt("forward","forward",p.origin)}
-          ${opt("unknown","unknown",p.origin)}
-        </select>
-      </td>
-      <td>
-        <select class="cellSelect" data-field="iterationId" data-id="${p.id}">
-          ${state.iterations.map(it => `<option value="${it.id}" ${it.id === (p.iterationId||state.project.currentIterationId) ? "selected" : ""}>${it.id}</option>`).join("")}
-        </select>
-      </td>
-      <td>
-        <select class="cellSelect" data-field="status" data-id="${p.id}">
-          ${opt("pending","pending",p.status)}
-          ${opt("included","included",p.status)}
-          ${opt("excluded","excluded",p.status)}
-          ${opt("duplicate","duplicate",p.status)}
-        </select>
-      </td>
-      <td>
-        <select class="cellSelect" data-field="criteriaId" data-id="${p.id}">
-          <option value="" ${!critVal ? "selected" : ""}>—</option>
-          ${Object.keys(state.criteria || {}).filter(k=>k).sort().map(k => `<option value="${k}" ${k === critVal ? "selected" : ""}>${k}</option>`).join("")}
-        </select>
-      </td>
-      <td><input class="cellInput" data-field="tags" data-id="${p.id}" value="${escapeHtml(tags)}" placeholder="ex: vis;ml" /></td>
-      <td><a class="link" href="${escapeHtml(p.url)}" target="_blank" rel="noreferrer">Abrir</a></td>
-    `;
-    tbody.appendChild(tr);
-    // If item has a highlighted color, paint the title text and remove any swatch
+    // highlighted color styling
+    let titleStyle = "";
     try {
       const color = p.highlightedColor || p.color || p.highlightColor;
       if (color) {
-        const btn = tr.querySelector('button.linkBtn');
-        if (btn) {
-          btn.style.color = color;
-          // Ensure adequate contrast: apply subtle text-shadow for light/dark extremes
-          const lum = getLuminanceFromHex(color);
-          if (lum > 0.7) btn.style.textShadow = '0 0 1px rgba(0,0,0,0.6)';
-          else if (lum < 0.15) btn.style.textShadow = '0 0 1px rgba(255,255,255,0.08)';
-        }
+        const lum = getLuminanceFromHex(color);
+        const ts = lum > 0.7 ? 'text-shadow:0 0 1px rgba(0,0,0,0.6);' : (lum < 0.15 ? 'text-shadow:0 0 1px rgba(255,255,255,0.08);' : '');
+        titleStyle = `style="color:${escapeHtml(color)};${ts}"`;
       }
     } catch (e) {
-      // ignore
+      titleStyle = "";
     }
+
+    rowsHtml += `
+      <tr>
+        <td><input type="checkbox" class="rowCheck" data-id="${p.id}" /></td>
+        <td>
+          <button class="linkBtn" data-show-history="${p.id}" title="Ver histórico" ${titleStyle}>${escapeHtml(p.title || "(sem título)")}</button>
+          <div style="color:#666;font-size:11px;margin-top:4px">${escapeHtml(p.authorsRaw || "")} • ${escapeHtml(fmtDate(p.createdAt))}</div>
+        </td>
+        <td><input class="cellInput" data-field="year" data-id="${p.id}" value="${escapeHtml(p.year ?? "")}" placeholder="—" style="width:64px" /></td>
+        <td>
+          <select class="cellSelect" data-field="origin" data-id="${p.id}">
+            ${opt("seed","seed",p.origin)}
+            ${opt("backward","backward",p.origin)}
+            ${opt("forward","forward",p.origin)}
+            ${opt("unknown","unknown",p.origin)}
+          </select>
+        </td>
+        <td>
+          <select class="cellSelect" data-field="iterationId" data-id="${p.id}">
+            ${state.iterations.map(it => `<option value="${it.id}" ${it.id === (p.iterationId||state.project.currentIterationId) ? "selected" : ""}>${it.id}</option>`).join("")}
+          </select>
+        </td>
+        <td>
+          <select class="cellSelect" data-field="status" data-id="${p.id}">
+            ${opt("pending","pending",p.status)}
+            ${opt("included","included",p.status)}
+            ${opt("excluded","excluded",p.status)}
+            ${opt("duplicate","duplicate",p.status)}
+          </select>
+        </td>
+        <td>
+          <select class="cellSelect" data-field="criteriaId" data-id="${p.id}">
+            <option value="" ${!critVal ? "selected" : ""}>—</option>
+            ${Object.keys(state.criteria || {}).filter(k=>k).sort().map(k => `<option value="${k}" ${k === critVal ? "selected" : ""}>${k}</option>`).join("")}
+          </select>
+        </td>
+        <td><input class="cellInput" data-field="tags" data-id="${p.id}" value="${escapeHtml(tags)}" placeholder="ex: vis;ml" /></td>
+        <td><a class="link" href="${escapeHtml(p.url)}" target="_blank" rel="noreferrer">Abrir</a></td>
+      </tr>
+    `;
   }
+
+  // Before writing to DOM, ensure this render is still the latest
+  if (myToken !== renderToken) return;
+
+  // Apply iteration options and table in one DOM update
+  renderIterationFilterOptions();
+  const tbody = $("#papersTable tbody");
+  if (!tbody) return;
+  tbody.innerHTML = rowsHtml;
 
   // Bind inputs
   tbody.querySelectorAll(".cellSelect").forEach(el => el.addEventListener("change", onCellChange));
