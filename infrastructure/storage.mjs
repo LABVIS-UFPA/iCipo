@@ -8,6 +8,8 @@
  * Padrão Strategy para abstrair as diferenças de persistência
  */
 
+import { Project, Paper } from '../core/entities.mjs';
+
 // ============================================================================
 // STRATEGY PATTERN - Node.js Driver (fs-based)
 // ============================================================================
@@ -316,16 +318,28 @@ class WebSocketStrategy {
     });
   }
 
-  async saveProject(projectID, projectData) {
-    return this.send('save_project', { projectID, data: projectData });
+  // Accepts a `Project` instance and returns the server response.
+  async saveProject(project) {
+    const projectID = project && project.id ? project.id : null;
+    const data = project && typeof project.toJSON === 'function' ? project.toJSON() : project;
+    return this.send('save_project', { projectID, data });
   }
 
   async archiveProject(projectID) {
     return this.send('archive_project', { projectID });
   }
 
+  // Returns a `Project` instance (or null)
   async loadProject(projectID) {
-    return this.send('load_project', { projectID });
+    const res = await this.send('load_project', { projectID });
+    if (!res) return null;
+    const payload = (res && res.data) ? res.data : res;
+    if (!payload) return null;
+    try {
+      return Project.fromJSON(projectID, projectID, payload);
+    } catch (e) {
+      return null;
+    }
   }
 
   async openProject(projectID) {
@@ -344,20 +358,40 @@ class WebSocketStrategy {
     return this.send('list_projects', {});
   }
 
-  async savePaper(projectID, paperId, paperData) {
-    return this.send('save_paper', { projectID, paperId, data: paperData });
+  // Accepts a `Paper` instance and returns the server response
+  async savePaper(projectID, paper) {
+    const paperId = paper && paper.id ? paper.id : null;
+    const data = paper && typeof paper.toJSON === 'function' ? paper.toJSON() : paper;
+    return this.send('save_paper', { projectID, paperId, data });
   }
 
+  // Returns a `Paper` instance (or null)
   async loadPaper(projectID, paperId) {
-    return this.send('load_paper', { projectID, paperId });
+    const res = await this.send('load_paper', { projectID, paperId });
+    if (!res) return null;
+    const payload = (res && res.data) ? res.data : res;
+    if (!payload) return null;
+    try {
+      return Paper.fromJSON(payload);
+    } catch (e) {
+      return null;
+    }
   }
 
   async deletePaper(projectID, paperId) {
     return this.send('delete_paper', { projectID, paperId });
   }
 
+  // Returns array of `Paper` instances
   async listPapers(projectID) {
-    return this.send('list_papers', { projectID });
+    const res = await this.send('list_papers', { projectID });
+    const payload = (res && res.data) ? res.data : res;
+    if (!payload) return [];
+    try {
+      return Array.isArray(payload) ? payload.map(p => Paper.fromJSON(p)) : [];
+    } catch (e) {
+      return [];
+    }
   }
 
   // Storage-like get/set methods (sends via WebSocket)
@@ -577,6 +611,22 @@ class StorageService {
     return this.strategy.listProjects();
   }
 
+  async archiveProject(projectID) {
+    if (!this.initialized) await this.init();
+    return this.strategy.archiveProject(projectID);
+  }
+ 
+  // Set/get active project (delegates to strategy when available)
+  async openProject(projectID) {
+    if (!this.initialized) await this.init();
+    return this.strategy.openProject(projectID);
+  }
+
+  async getActiveProject() {
+    if (!this.initialized) await this.init();
+    return this.strategy.getActiveProject();
+  }
+
   // ========== Paper CRUD ==========
 
   async savePaper(projectName, paperId, paperData) {
@@ -599,30 +649,7 @@ class StorageService {
     return this.strategy.listPapers(projectName);
   }
 
-  // Project methods delegate to active strategy (NodeFsStrategy implements config.json logic)
-  async listProjects() {
-    if (!this.initialized) await this.init();
-    const res = await this.strategy.listProjects();
-    if (Array.isArray(res)) return res;
-    if (res && res.data) return res.data;
-    return [];
-  }
-
-  async archiveProject(projectID) {
-    if (!this.initialized) await this.init();
-    return this.strategy.archiveProject(projectID);
-  }
- 
-  // Set/get active project (delegates to strategy when available)
-  async openProject(projectID) {
-    if (!this.initialized) await this.init();
-    return this.strategy.openProject(projectID);
-  }
-
-  async getActiveProject() {
-    if (!this.initialized) await this.init();
-    return this.strategy.getActiveProject();
-  }
+  
   // ============================================================================
 }
 
