@@ -168,21 +168,24 @@ class NodeFsStrategy {
     return { status: 'ok', data: [] };
   }
 
-  // CRUD methods for Paper
-  async savePaper(projectName, paperId, paperData) {
-    const relPath = this.path.join(projectName, 'papers', `${paperId}.json`);
+  // CRUD methods for Paper — now use active project implicitly
+  async savePaper(paperId, paperData) {
+    if (!this.activeProjectID) return { status: 'error', message: 'Nenhum projeto está aberto no momento.' };
+    const relPath = this.path.join(this.activeProjectID, 'papers', `${paperId}.json`);
     this.writeJson(relPath, paperData);
     return { status: "ok", message: "Paper saved." };
   }
 
-  async loadPaper(projectName, paperId) {
-    const relPath = this.path.join(projectName, 'papers', `${paperId}.json`);
+  async loadPaper(paperId) {
+    if (!this.activeProjectID) return { status: 'error', message: 'Nenhum projeto está aberto no momento.' };
+    const relPath = this.path.join(this.activeProjectID, 'papers', `${paperId}.json`);
     const data = this.readJson(relPath);
     return { status: "ok", data };
   }
 
-  async deletePaper(projectName, paperId) {
-    const full = this.path.join(this.baseDir, projectName, 'papers', `${paperId}.json`);
+  async deletePaper(paperId) {
+    if (!this.activeProjectID) return { status: 'error', message: 'Nenhum projeto está aberto no momento.' };
+    const full = this.path.join(this.baseDir, this.activeProjectID, 'papers', `${paperId}.json`);
     if (this.fs.existsSync(full)) {
       this.fs.unlinkSync(full);
       return { status: "ok", message: "Paper deleted." };
@@ -190,8 +193,9 @@ class NodeFsStrategy {
     return { status: "error", message: "Paper not found." };
   }
 
-  async listPapers(projectName) {
-    const papersDir = this.path.join(this.baseDir, projectName, 'papers');
+  async listPapers() {
+    if (!this.activeProjectID) return { status: 'error', message: 'Nenhum projeto está aberto no momento.' };
+    const papersDir = this.path.join(this.baseDir, this.activeProjectID, 'papers');
     try {
       if (!this.fs.existsSync(papersDir)) {
         return { status: "ok", data: [] };
@@ -201,7 +205,7 @@ class NodeFsStrategy {
         .filter(f => f.endsWith('.json'))
         .map(f => {
           const id = f.replace('.json', '');
-          const data = this.readJson(this.path.join(projectName, 'papers', f));
+          const data = this.readJson(this.path.join(this.activeProjectID, 'papers', f));
           return { id, ...data };
         });
       return { status: "ok", data: papers };
@@ -359,15 +363,15 @@ class WebSocketStrategy {
   }
 
   // Accepts a `Paper` instance and returns the server response
-  async savePaper(projectID, paper) {
+  async savePaper(paper) {
     const paperId = paper && paper.id ? paper.id : null;
     const data = paper && typeof paper.toJSON === 'function' ? paper.toJSON() : paper;
-    return this.send('save_paper', { projectID, paperId, data });
+    return this.send('save_paper', { paperId, data });
   }
 
   // Returns a `Paper` instance (or null)
-  async loadPaper(projectID, paperId) {
-    const res = await this.send('load_paper', { projectID, paperId });
+  async loadPaper(paperId) {
+    const res = await this.send('load_paper', { paperId });
     if (!res) return null;
     const payload = (res && res.data) ? res.data : res;
     if (!payload) return null;
@@ -378,13 +382,13 @@ class WebSocketStrategy {
     }
   }
 
-  async deletePaper(projectID, paperId) {
-    return this.send('delete_paper', { projectID, paperId });
+  async deletePaper(paperId) {
+    return this.send('delete_paper', { paperId });
   }
 
   // Returns array of `Paper` instances
-  async listPapers(projectID) {
-    const res = await this.send('list_papers', { projectID });
+  async listPapers() {
+    const res = await this.send('list_papers', {});
     const payload = (res && res.data) ? res.data : res;
     if (!payload) return [];
     try {
@@ -629,24 +633,24 @@ class StorageService {
 
   // ========== Paper CRUD ==========
 
-  async savePaper(projectName, paperId, paperData) {
+  async savePaper(paperId, paperData) {
     if (!this.initialized) await this.init();
-    return this.strategy.savePaper(projectName, paperId, paperData);
+    return this.strategy.savePaper(paperId, paperData);
   }
 
-  async loadPaper(projectName, paperId) {
+  async loadPaper(paperId) {
     if (!this.initialized) await this.init();
-    return this.strategy.loadPaper(projectName, paperId);
+    return this.strategy.loadPaper(paperId);
   }
 
-  async deletePaper(projectName, paperId) {
+  async deletePaper(paperId) {
     if (!this.initialized) await this.init();
-    return this.strategy.deletePaper(projectName, paperId);
+    return this.strategy.deletePaper(paperId);
   }
 
-  async listPapers(projectName) {
+  async listPapers() {
     if (!this.initialized) await this.init();
-    return this.strategy.listPapers(projectName);
+    return this.strategy.listPapers();
   }
 
   
