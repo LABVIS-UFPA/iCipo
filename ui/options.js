@@ -235,32 +235,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  if (addCategoryButton) {
-    addCategoryButton.addEventListener("click", () => {
-      const name = (categoryNameInput?.value || "").trim();
-      const color = categoryColorInput?.value || "#000000";
-      if (!name) return;
-
-      storage.get("categories").then((data) => {
-        const categories = data.categories || {};
-        categories[name] = color;
-        storage.set({ categories }).then(() => {
-          if (categoryNameInput) categoryNameInput.value = "";
-          loadCategories();
-        });
-      });
-    });
-  }
-
-  if (removeLinks) {
-    removeLinks.addEventListener("click", () => {
-      if (!confirm("Tem certeza que deseja remover TODOS os links marcados?")) return;
-      chrome.storage.local.set({ highlightedLinks: {}, svat_papers: [] }, () => {
-        loadHighlightedLinks();
-      });
-    });
-  }
-
   if (highlightSearch) {
     highlightSearch.addEventListener("input", () => loadHighlightedLinks());
   }
@@ -422,6 +396,4 @@ document.addEventListener("DOMContentLoaded", () => {
   // Init loads
   // =====================
   loadOnOff();
-  if (document.getElementById('categoryList')) loadCategories();
-  if (document.getElementById('highlightedList')) loadHighlightedLinks();
 });
