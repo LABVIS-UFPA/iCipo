@@ -860,7 +860,7 @@ function filteredPapers() {
 }
 
 async function renderPapersTable() {
-  // Increment render token to prevent race conditions
+  // Capture a unique token for this render to detect if a newer render has started
   const currentToken = ++renderToken;
   
   renderIterationFilterOptions();
@@ -880,7 +880,7 @@ async function renderPapersTable() {
     // ignore
   }
 
-  // Check if this render is still current after async operation
+  // Abandon this render if a newer one has started (prevents race conditions)
   if (currentToken !== renderToken) return;
 
   // Clear table only if this render is still current
