@@ -2,6 +2,7 @@ import {fmtDate, normalizeStr, jaccard} from '../core/utils.mjs';
 import { storage } from '../infrastructure/storage.mjs';
 
 let state = null;
+let renderToken = 0;
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -859,6 +860,9 @@ function filteredPapers() {
 }
 
 async function renderPapersTable() {
+  // Increment render token to prevent race conditions
+  const currentToken = ++renderToken;
+  
   renderIterationFilterOptions();
   const tbody = $("#papersTable tbody");
   tbody.innerHTML = "";
@@ -877,6 +881,9 @@ async function renderPapersTable() {
   } catch (e) {
     // ignore
   }
+
+  // Check if this render is still current after async operation
+  if (currentToken !== renderToken) return;
 
   const titleByUrl = new Map();
   for (const p of svat || []) {
