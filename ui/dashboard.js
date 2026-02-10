@@ -864,8 +864,6 @@ async function renderPapersTable() {
   const currentToken = ++renderToken;
   
   renderIterationFilterOptions();
-  const tbody = $("#papersTable tbody");
-  tbody.innerHTML = "";
 
   const f = getFilters();
   // base papers filtered
@@ -884,6 +882,10 @@ async function renderPapersTable() {
 
   // Check if this render is still current after async operation
   if (currentToken !== renderToken) return;
+
+  // Clear table only if this render is still current
+  const tbody = $("#papersTable tbody");
+  tbody.innerHTML = "";
 
   const titleByUrl = new Map();
   for (const p of svat || []) {
