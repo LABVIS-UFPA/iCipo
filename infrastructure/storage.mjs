@@ -110,7 +110,12 @@ class NodeFsStrategy {
 
   async loadProject(projectID) {
     const relPath = this.path.join(projectID, 'project.json');
-    return this.readJson(relPath);
+    try{
+      return { status: 'ok', data: this.readJson(relPath) };
+    }catch(e){
+      return { status: 'error', message: e.message };
+    }
+    
   }
 
   // Keep a project loaded in memory as "active"
@@ -124,7 +129,7 @@ class NodeFsStrategy {
   }
 
   getActiveProject() {
-    return { id: this.activeProjectID, data: this.activeProjectData };
+    return { status: 'ok', data: this.activeProjectData };
   }
 
   async deleteProject(projectID) {
@@ -136,7 +141,7 @@ class NodeFsStrategy {
       this.fs.rmSync(full, { recursive: true });
       return { status: "ok", message: "Project deleted." };
     }
-    return { status: "ok", message: "Project not found." };
+    return { status: "error", message: "Project not found." };
   }
 
   async archiveProject(projectID) {
@@ -144,6 +149,7 @@ class NodeFsStrategy {
     try {
       const cfg = this.readJson('config.json');
       cfg.projects = Array.isArray(cfg.projects) ? cfg.projects.filter(p => p.id !== projectID) : [];
+      //TODO: deve esperar a resposta do writeJSON para confirmar a resposta no return abaixo.
       this.writeJson('config.json', cfg);
       return { status: 'ok', message: 'Project archived.' };
     } catch (e) {
@@ -368,7 +374,12 @@ class WebSocketStrategy {
   }
 
   async getActiveProject(){
-    return this.send('get_active_project', {});
+    const res = await this.send('get_active_project', {});
+    try {
+      return Project.fromJSON(res.id, res);
+    } catch (e) {
+      return null;
+    }
   }
 
   async deleteProject(projectID) {
@@ -392,6 +403,7 @@ class WebSocketStrategy {
   // Returns a `Paper` instance (or null)
   async loadPaper(paperId) {
     const res = await this.send('load_paper', { paperId });
+    console.log("WebSocketStrategy.loadPaper response", res);
     if (!res) return null;
     const payload = (res && res.data) ? res.data : res;
     if (!payload) return null;

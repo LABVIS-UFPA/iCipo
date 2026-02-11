@@ -58,7 +58,9 @@ document.addEventListener('DOMContentLoaded', () => {
     btnRename.textContent = 'Editar';
     btnRename.addEventListener('click', async () => {
       // Open sidenav in edit mode with project data
+      console.log('Editing project', p);
       const project = await storage.loadProject(p.id);
+      console.log('Loaded project', project);
       openEditSidenav(project);
     });
 

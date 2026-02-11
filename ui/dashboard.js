@@ -315,56 +315,51 @@ async function loadState() {
     criteria: {},
   };
 
-  try {
-    const activeRes = await storage.getActiveProject();
-    if (isConnectionError(activeRes)) {
-      state = baseState;
-      toggleServerOfflineNotice(true);
-      toggleNoActiveProjectNotice(false);
-      return;
-    }
-    const activePayload = activeRes && activeRes.status && activeRes.data ? activeRes.data : activeRes;
-    const activeId = activePayload?.id || null;
-    let projectData = activePayload?.data || null;
+  state = baseState;
 
-    if (!projectData && activeId) {
-      const loaded = await storage.loadProject(activeId);
-      projectData = loaded && loaded.status && loaded.data ? loaded.data : loaded;
-    }
+  return new Promise((resolve, reject) => {
+    storage.getActiveProject().then(async (res) => {
 
-    if (!activeId && !projectData) {
-      state = baseState;
-      toggleServerOfflineNotice(false);
-      toggleNoActiveProjectNotice(true);
-      return;
-    }
-
-    const project = {
-      ...(projectData || {}),
-      id: activeId || projectData?.id,
-    };
-
+    let project = res;
     let papers = [];
-    if (activeId) {
-      const papersRes = await storage.listPapers(activeId);
+    if (project.id) {
+      const papersRes = await storage.listPapers(project.id);
       if (Array.isArray(papersRes)) papers = papersRes;
       else if (papersRes?.data && Array.isArray(papersRes.data)) papers = papersRes.data;
     }
 
-    const iterations = Array.isArray(projectData?.iterations) ? projectData.iterations : [];
-    const citations = Array.isArray(projectData?.citations) ? projectData.citations : [];
-    const critCandidate = projectData?.criteriaMap ?? projectData?.criteria;
+    const iterations = Array.isArray(project?.iterations) ? project.iterations : [];
+    const citations = Array.isArray(project?.citations) ? project.citations : [];
+    const critCandidate = project?.criteriaMap ?? project?.criteria;
     const criteria = (critCandidate && typeof critCandidate === 'object' && !Array.isArray(critCandidate)) ? critCandidate : {};
 
     state = { project, papers, iterations, citations, criteria };
     toggleServerOfflineNotice(false);
     toggleNoActiveProjectNotice(false);
-  } catch (e) {
-    console.warn('loadState failed', e);
-    state = baseState;
-    toggleServerOfflineNotice(true);
-    toggleNoActiveProjectNotice(false);
-  }
+    resolve(state);
+
+  }).catch((err) => {
+    //TODO Verificar se o erro é de conexão ou falta projeto ativo. Para executar uma das opções abaixo:
+    // if (isConnectionError(activeRes)) {
+    //   state = baseState;
+    //   toggleServerOfflineNotice(true);
+    //   toggleNoActiveProjectNotice(false);
+    //   return;
+    // }
+
+    
+    // if (!activeId && !projectData) {
+    //   state = baseState;
+    //   toggleServerOfflineNotice(false);
+    //   toggleNoActiveProjectNotice(true);
+    //   return;
+    // }
+    console.warn('getActiveProject failed', err);
+    reject(err);
+  });
+  });
+
+  
 }
 
 function setActiveView(view) {
