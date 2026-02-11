@@ -85,7 +85,8 @@ const messageHandler = {
     return await storage.getActiveProject();
   },
   "save_project": async (payload) => {
-    return verifyProjectID(payload) || await storage.saveProject(payload.projectID, payload.data);
+    payload.projectID = payload.data.id;
+    return verifyProjectID(payload) || await storage.saveProject(payload.data);
   },
   "load_project": async (payload) => {
     return verifyProjectID(payload) || await storage.loadProject(payload.projectID);
@@ -100,16 +101,16 @@ const messageHandler = {
     return verifyProjectID(payload) || await storage.archiveProject(payload.projectID);
   },
   "save_paper": async (payload) => {
-    return await storage.savePaper(payload.projectID, payload.paperId, payload.data);
+    return await storage.savePaper(payload.data);
   },
   "load_paper": async (payload) => {
-    return await storage.loadPaper(payload.projectID, payload.paperId);
+    return await storage.loadPaper(payload.paperId);
   },
   "delete_paper": async (payload) => {
-    return await storage.deletePaper(payload.projectID, payload.paperId);
+    return await storage.deletePaper(payload.paperId);
   },
-  "list_papers": async (payload) => {
-    return await storage.listPapers(payload.projectID);
+  "list_papers": async () => {
+    return await storage.listPapers();
   },
  
   "storage_get": async (payload) => {

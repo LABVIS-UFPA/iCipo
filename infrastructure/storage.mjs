@@ -8,6 +8,8 @@
  * Padrão Strategy para abstrair as diferenças de persistência
  */
 
+import { Project, Paper } from '../core/entities.mjs';
+
 // ============================================================================
 // STRATEGY PATTERN - Node.js Driver (fs-based)
 // ============================================================================
@@ -68,14 +70,16 @@ class NodeFsStrategy {
 
   // CRUD methods for Project
   //TODO: verificar se pelo id se o projeto se encontra arquivado. Pois isso, da forma como está, vai sobreescrever projetos arquivados.
-  async saveProject(projectID, projectData) {
+  // Now accepts a single `project` object that must contain `id` (or returns error)
+  async saveProject(project) {
+    const projectID = project.id;
     const relPath = this.path.join(projectID, 'project.json');
 
     // Read existing project if present
     let existing = this.readJson(relPath) || {};
 
     // Merge: preserve existing properties, override/add with incoming projectData
-    const merged = { ...existing, ...projectData };
+    const merged = { ...existing, ...project };
 
     // Write merged project data
     this.writeJson(relPath, merged);
@@ -106,7 +110,12 @@ class NodeFsStrategy {
 
   async loadProject(projectID) {
     const relPath = this.path.join(projectID, 'project.json');
-    return this.readJson(relPath);
+    try{
+      return { status: 'ok', data: this.readJson(relPath) };
+    }catch(e){
+      return { status: 'error', message: e.message };
+    }
+    
   }
 
   // Keep a project loaded in memory as "active"
@@ -120,19 +129,19 @@ class NodeFsStrategy {
   }
 
   getActiveProject() {
-    return { id: this.activeProjectID, data: this.activeProjectData };
+    return { status: 'ok', data: this.activeProjectData };
   }
 
   async deleteProject(projectID) {
     const full = this.path.join(this.baseDir, projectID);
     // remove from config.json
-    const {status} = this.archiveProject(projectID);
+    const {status} = await this.archiveProject(projectID);
 
     if (status==="ok" && this.fs.existsSync(full)) {
       this.fs.rmSync(full, { recursive: true });
       return { status: "ok", message: "Project deleted." };
     }
-    return { status: "ok", message: "Project not found." };
+    return { status: "error", message: "Project not found." };
   }
 
   async archiveProject(projectID) {
@@ -140,6 +149,7 @@ class NodeFsStrategy {
     try {
       const cfg = this.readJson('config.json');
       cfg.projects = Array.isArray(cfg.projects) ? cfg.projects.filter(p => p.id !== projectID) : [];
+      //TODO: deve esperar a resposta do writeJSON para confirmar a resposta no return abaixo.
       this.writeJson('config.json', cfg);
       return { status: 'ok', message: 'Project archived.' };
     } catch (e) {
@@ -152,10 +162,13 @@ class NodeFsStrategy {
       // Prefer config.json managed list
       const cfg = this.readJson('config.json');
       if (cfg && Array.isArray(cfg.projects)){
+        // Desmarca todos como não atuais
+        cfg.projects.forEach(p => p.isCurrent = false);
+        // Marca o atual se houver
         if(this.activeProjectID){
           const idx = cfg.projects.findIndex(p => p.id === this.activeProjectID);
           if(idx!==-1){
-            cfg.projects[idx].active = true;
+            cfg.projects[idx].isCurrent = true;
           }
         }
         return { status: 'ok', data: cfg.projects };
@@ -166,21 +179,30 @@ class NodeFsStrategy {
     return { status: 'ok', data: [] };
   }
 
-  // CRUD methods for Paper
-  async savePaper(projectName, paperId, paperData) {
-    const relPath = this.path.join(projectName, 'papers', `${paperId}.json`);
-    this.writeJson(relPath, paperData);
+  // CRUD methods for Paper — now use active project implicitly
+  // savePaper accepts a single `paper` object which must include `id`.
+  async savePaper(paper) {
+    if (!paper || (!paper.id && !(paper.id === 0))) return { status: 'error', message: 'Paper JSON must include an id.' };
+    const paperId = paper.id;
+    
+    const projectID = this.activeProjectID || (paper.projectID || null);
+    if (!projectID) return { status: 'error', message: 'Nenhum projeto está aberto no momento.' };
+    
+    const relPath = this.path.join(projectID, 'papers', `${paperId}.json`);
+    this.writeJson(relPath, paper);
     return { status: "ok", message: "Paper saved." };
   }
 
-  async loadPaper(projectName, paperId) {
-    const relPath = this.path.join(projectName, 'papers', `${paperId}.json`);
+  async loadPaper(paperId) {
+    if (!this.activeProjectID) return { status: 'error', message: 'Nenhum projeto está aberto no momento.' };
+    const relPath = this.path.join(this.activeProjectID, 'papers', `${paperId}.json`);
     const data = this.readJson(relPath);
     return { status: "ok", data };
   }
 
-  async deletePaper(projectName, paperId) {
-    const full = this.path.join(this.baseDir, projectName, 'papers', `${paperId}.json`);
+  async deletePaper(paperId) {
+    if (!this.activeProjectID) return { status: 'error', message: 'Nenhum projeto está aberto no momento.' };
+    const full = this.path.join(this.baseDir, this.activeProjectID, 'papers', `${paperId}.json`);
     if (this.fs.existsSync(full)) {
       this.fs.unlinkSync(full);
       return { status: "ok", message: "Paper deleted." };
@@ -188,8 +210,9 @@ class NodeFsStrategy {
     return { status: "error", message: "Paper not found." };
   }
 
-  async listPapers(projectName) {
-    const papersDir = this.path.join(this.baseDir, projectName, 'papers');
+  async listPapers() {
+    if (!this.activeProjectID) return { status: 'error', message: 'Nenhum projeto está aberto no momento.' };
+    const papersDir = this.path.join(this.baseDir, this.activeProjectID, 'papers');
     try {
       if (!this.fs.existsSync(papersDir)) {
         return { status: "ok", data: [] };
@@ -199,7 +222,7 @@ class NodeFsStrategy {
         .filter(f => f.endsWith('.json'))
         .map(f => {
           const id = f.replace('.json', '');
-          const data = this.readJson(this.path.join(projectName, 'papers', f));
+          const data = this.readJson(this.path.join(this.activeProjectID, 'papers', f));
           return { id, ...data };
         });
       return { status: "ok", data: papers };
@@ -298,34 +321,47 @@ class WebSocketStrategy {
 
   async send(act, payload) {
     // 1. Aguarda a conexão ser estabelecida
-    console.log("WebSocketStrategy.send", act, payload);
     const isConnected = await this.ensureConnection();
-    console.log("WebSocketStrategy.isConnected", isConnected);
 
-    return new Promise((resolve) => {
-      // In a real scenario, we'd use a request-response pattern
-      // For now, send via wsManager
+    return new Promise((resolve, reject) => {
       if (isConnected && this.wsManager && this.wsManager.send) {
         this.wsManager.send({ act, payload }, (response) => {
-          console.log("WebSocketStrategy.receive", response);
-          resolve(response);
+          if(response && response.status === "ok") {
+            resolve(response.data);
+          } else {
+            reject(response);
+          }
         });
       } else {
-        resolve({ status: "error", message: "WebSocket not connected" });
+        reject({ status: "error", message: "WebSocket not connected" });
       }
     });
   }
 
-  async saveProject(projectID, projectData) {
-    return this.send('save_project', { projectID, data: projectData });
+  // Accepts a `Project` instance and returns the server response.
+  async saveProject(project) {
+    if(project && project instanceof Project){
+      const data = project.toJSON();
+      return this.send('save_project', { projectID: data.id, data });
+    }
+    return Promise.reject(new Error("O objeto a salvar deve ser uma instância de Project."));
   }
 
   async archiveProject(projectID) {
     return this.send('archive_project', { projectID });
   }
 
+  // Returns a `Project` instance (or null)
   async loadProject(projectID) {
-    return this.send('load_project', { projectID });
+    const res = await this.send('load_project', { projectID });
+    if (!res) return null;
+    const payload = (res && res.data) ? res.data : res;
+    if (!payload) return null;
+    try {
+      return Project.fromJSON(projectID, payload);
+    } catch (e) {
+      return null;
+    }
   }
 
   async openProject(projectID) {
@@ -333,7 +369,12 @@ class WebSocketStrategy {
   }
 
   async getActiveProject(){
-    return this.send('get_active_project', {});
+    const res = await this.send('get_active_project', {});
+    try {
+      return Project.fromJSON(res.id, res);
+    } catch (e) {
+      return null;
+    }
   }
 
   async deleteProject(projectID) {
@@ -344,20 +385,42 @@ class WebSocketStrategy {
     return this.send('list_projects', {});
   }
 
-  async savePaper(projectID, paperId, paperData) {
-    return this.send('save_paper', { projectID, paperId, data: paperData });
+  // Accepts a `Paper` instance and returns the server response
+  async savePaper(paper) {
+    if(paper && paper instanceof Paper){
+      const data = paper.toJSON();
+      return this.send('save_paper', { paperId: data.id, data });
+    }
+    return Promise.reject(new Error("O objeto a salvar deve ser uma instância de Paper."));;
   }
 
-  async loadPaper(projectID, paperId) {
-    return this.send('load_paper', { projectID, paperId });
+  // Returns a `Paper` instance (or null)
+  async loadPaper(paperId) {
+    const res = await this.send('load_paper', { paperId });
+    if (!res) return null;
+    const payload = (res && res.data) ? res.data : res;
+    if (!payload) return null;
+    try {
+      return Paper.fromJSON(payload);
+    } catch (e) {
+      return null;
+    }
   }
 
-  async deletePaper(projectID, paperId) {
-    return this.send('delete_paper', { projectID, paperId });
+  async deletePaper(paperId) {
+    return this.send('delete_paper', { paperId });
   }
 
-  async listPapers(projectID) {
-    return this.send('list_papers', { projectID });
+  // Returns array of `Paper` instances
+  async listPapers() {
+    const res = await this.send('list_papers', {});
+    const payload = (res && res.data) ? res.data : res;
+    if (!payload) return [];
+    try {
+      return Array.isArray(payload) ? payload.map(p => Paper.fromJSON(p)) : [];
+    } catch (e) {
+      return [];
+    }
   }
 
   // Storage-like get/set methods (sends via WebSocket)
@@ -557,9 +620,11 @@ class StorageService {
 
   // ========== Project CRUD ==========
 
-  async saveProject(projectID, projectData) {
+  // saveProject accepts a single `project` object (must include `id`)
+  async saveProject(project) {
     if (!this.initialized) await this.init();
-    return this.strategy.saveProject(projectID, projectData);
+    if (!project || (!project.id && !(project.id === 0))) return { status: 'error', message: 'Project JSON must include an id.' };
+    return this.strategy.saveProject(project);
   }
 
   async loadProject(projectID) {
@@ -577,37 +642,6 @@ class StorageService {
     return this.strategy.listProjects();
   }
 
-  // ========== Paper CRUD ==========
-
-  async savePaper(projectName, paperId, paperData) {
-    if (!this.initialized) await this.init();
-    return this.strategy.savePaper(projectName, paperId, paperData);
-  }
-
-  async loadPaper(projectName, paperId) {
-    if (!this.initialized) await this.init();
-    return this.strategy.loadPaper(projectName, paperId);
-  }
-
-  async deletePaper(projectName, paperId) {
-    if (!this.initialized) await this.init();
-    return this.strategy.deletePaper(projectName, paperId);
-  }
-
-  async listPapers(projectName) {
-    if (!this.initialized) await this.init();
-    return this.strategy.listPapers(projectName);
-  }
-
-  // Project methods delegate to active strategy (NodeFsStrategy implements config.json logic)
-  async listProjects() {
-    if (!this.initialized) await this.init();
-    const res = await this.strategy.listProjects();
-    if (Array.isArray(res)) return res;
-    if (res && res.data) return res.data;
-    return [];
-  }
-
   async archiveProject(projectID) {
     if (!this.initialized) await this.init();
     return this.strategy.archiveProject(projectID);
@@ -623,6 +657,32 @@ class StorageService {
     if (!this.initialized) await this.init();
     return this.strategy.getActiveProject();
   }
+
+  // ========== Paper CRUD ==========
+
+  // savePaper accepts a single `paper` object (must include `id`)
+  async savePaper(paper) {
+    if (!this.initialized) await this.init();
+    if (!paper || (!paper.id && !(paper.id === 0))) return { status: 'error', message: 'Paper JSON must include an id.' };
+    return this.strategy.savePaper(paper);
+  }
+
+  async loadPaper(paperId) {
+    if (!this.initialized) await this.init();
+    return this.strategy.loadPaper(paperId);
+  }
+
+  async deletePaper(paperId) {
+    if (!this.initialized) await this.init();
+    return this.strategy.deletePaper(paperId);
+  }
+
+  async listPapers() {
+    if (!this.initialized) await this.init();
+    return this.strategy.listPapers();
+  }
+
+  
   // ============================================================================
 }
 

@@ -3,6 +3,7 @@ import { checkArray, slugify, mapToJSON } from "./utils.mjs";
 class Project {
   // Default project schema (matches ui/projects.html form)
   static defaults = {
+    name: "",
     description: "",
     researchers: [],
     objective: "",
@@ -11,30 +12,27 @@ class Project {
     criterios: [],
     fases: [],
     isCurrent: false,
-    color: null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     papers: [],
   };
 
-  constructor(id, projectDir, data = null) {
+  constructor(id, data = null, withDefaults = false) {
     this.id = id;
-    this.projectDir = projectDir;
+    this.projectDir = id;
 
-    Object.assign(this, Project.defaults, data);
+    if (withDefaults) {
+      Object.assign(this, Project.defaults, data);
+    } else {
+      Object.assign(this, data);
+    }
 
     if (data && typeof data === 'object') {
-      // Merge provided data over defaults
-      this.papers = checkArray(this.papers).map(p => Paper.fromJSON(p));
-      this.categorias = checkArray(this.categorias).map(c => Categoria.fromJSON(c));
-      this.criterios = checkArray(this.criterios).map(c => Criterio.fromJSON(c));
-      this.fases = checkArray(this.fases).map(f => Fase.fromJSON(f));
-    } else {
-      Object.assign(this, Project.defaults);
-      this.papers = [];
-      this.categorias = [];
-      this.criterios = [];
-      this.fases = [];
+      // Create object from JSON for nested structures (papers, categorias, criterios, fases) if present
+      if(this.papers) this.papers = checkArray(this.papers).map(p => Paper.fromJSON(p));
+      if(this.categorias) this.categorias = checkArray(this.categorias).map(c => Categoria.fromJSON(c));
+      if(this.criterios) this.criterios = checkArray(this.criterios).map(c => Criterio.fromJSON(c));
+      if(this.fases) this.fases = checkArray(this.fases).map(f => Fase.fromJSON(f));
     }
   }
 
@@ -49,7 +47,8 @@ class Project {
     const obj = Object.fromEntries(
       Object.entries(this).filter(([key]) => key in Project.defaults)
     );
-
+    obj.id = this.id;
+    obj.projectDir = this.projectDir;
     obj.papers = mapToJSON(this.papers);
     obj.categorias = mapToJSON(this.categorias);
     obj.criterios = mapToJSON(this.criterios);
@@ -58,8 +57,8 @@ class Project {
     return obj;
   }
 
-  static fromJSON(name, projectDir, json) {
-    return new Project(name, projectDir, json);
+  static fromJSON(id, json) {
+    return new Project(id, json);
   }
 }
 

@@ -315,56 +315,51 @@ async function loadState() {
     criteria: {},
   };
 
-  try {
-    const activeRes = await storage.getActiveProject();
-    if (isConnectionError(activeRes)) {
-      state = baseState;
-      toggleServerOfflineNotice(true);
-      toggleNoActiveProjectNotice(false);
-      return;
-    }
-    const activePayload = activeRes && activeRes.status && activeRes.data ? activeRes.data : activeRes;
-    const activeId = activePayload?.id || null;
-    let projectData = activePayload?.data || null;
+  state = baseState;
 
-    if (!projectData && activeId) {
-      const loaded = await storage.loadProject(activeId);
-      projectData = loaded && loaded.status && loaded.data ? loaded.data : loaded;
-    }
+  return new Promise((resolve, reject) => {
+    storage.getActiveProject().then(async (res) => {
 
-    if (!activeId && !projectData) {
-      state = baseState;
+      if(!res) throw new Error("No active project");
+
+      let project = res;
+      let papers = [];
+      if (project.id) {
+        const papersRes = await storage.listPapers(project.id);
+        if (Array.isArray(papersRes)) papers = papersRes;
+        else if (papersRes?.data && Array.isArray(papersRes.data)) papers = papersRes.data;
+      }
+
+      const iterations = Array.isArray(project?.iterations) ? project.iterations : [];
+      const citations = Array.isArray(project?.citations) ? project.citations : [];
+      const critCandidate = project?.criteriaMap ?? project?.criteria;
+      const criteria = (critCandidate && typeof critCandidate === 'object' && !Array.isArray(critCandidate)) ? critCandidate : {};
+
+      state = { project, papers, iterations, citations, criteria };
       toggleServerOfflineNotice(false);
-      toggleNoActiveProjectNotice(true);
-      return;
-    }
+      toggleNoActiveProjectNotice(false);
+      resolve(state);
 
-    const project = {
-      ...(projectData || {}),
-      id: activeId || projectData?.id,
-    };
+    }).catch((err) => {
+      console.warn('getActiveProject failed', err);
+      if(err.message === "No active project"){
+        state = baseState;
+        toggleServerOfflineNotice(false);
+        toggleNoActiveProjectNotice(true);
+        resolve(baseState);
+      }else if(err.message === "WebSocket not connected"){
+        state = baseState;
+        toggleServerOfflineNotice(true); 
+        toggleNoActiveProjectNotice(false);
+        resolve(baseState);
+      }else{
+        reject(err);
+      }
+      
+    }); 
+  });
 
-    let papers = [];
-    if (activeId) {
-      const papersRes = await storage.listPapers(activeId);
-      if (Array.isArray(papersRes)) papers = papersRes;
-      else if (papersRes?.data && Array.isArray(papersRes.data)) papers = papersRes.data;
-    }
-
-    const iterations = Array.isArray(projectData?.iterations) ? projectData.iterations : [];
-    const citations = Array.isArray(projectData?.citations) ? projectData.citations : [];
-    const critCandidate = projectData?.criteriaMap ?? projectData?.criteria;
-    const criteria = (critCandidate && typeof critCandidate === 'object' && !Array.isArray(critCandidate)) ? critCandidate : {};
-
-    state = { project, papers, iterations, citations, criteria };
-    toggleServerOfflineNotice(false);
-    toggleNoActiveProjectNotice(false);
-  } catch (e) {
-    console.warn('loadState failed', e);
-    state = baseState;
-    toggleServerOfflineNotice(true);
-    toggleNoActiveProjectNotice(false);
-  }
+  
 }
 
 function setActiveView(view) {
