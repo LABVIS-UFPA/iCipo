@@ -346,12 +346,12 @@ async function loadState() {
         state = baseState;
         toggleServerOfflineNotice(false);
         toggleNoActiveProjectNotice(true);
-        return;
+        resolve(baseState);
       }else if(err.message === "WebSocket not connected"){
         state = baseState;
         toggleServerOfflineNotice(true); 
         toggleNoActiveProjectNotice(false);
-        return;
+        resolve(baseState);
       }else{
         reject(err);
       }

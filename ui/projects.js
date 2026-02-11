@@ -58,14 +58,12 @@ document.addEventListener('DOMContentLoaded', () => {
     btnRename.textContent = 'Editar';
     btnRename.addEventListener('click', async () => {
       // Open sidenav in edit mode with project data
-      console.log('Editing project', p);
       const project = await storage.loadProject(p.id);
-      console.log('Loaded project', project);
       openEditSidenav(project);
     });
 
     const btnSet = document.createElement('button');
-    btnSet.textContent = p.active ? 'Ver' : 'Abrir';
+    btnSet.textContent = p.isCurrent ? 'Ver' : 'Abrir';
     btnSet.addEventListener('click', async () => {
       // Ask storage to open the project (sets active project) and navigate to dashboard
       try {
@@ -237,7 +235,6 @@ document.addEventListener('DOMContentLoaded', () => {
           objective,
           isCurrent: false,
         };
-        console.log('Saving project', p);
         await storage.saveProject(new Project(p.id, p, true));
         projects.push(p);
         // renderProjects(filterInput.value || '');

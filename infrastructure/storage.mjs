@@ -135,7 +135,7 @@ class NodeFsStrategy {
   async deleteProject(projectID) {
     const full = this.path.join(this.baseDir, projectID);
     // remove from config.json
-    const {status} = this.archiveProject(projectID);
+    const {status} = await this.archiveProject(projectID);
 
     if (status==="ok" && this.fs.existsSync(full)) {
       this.fs.rmSync(full, { recursive: true });
@@ -321,14 +321,11 @@ class WebSocketStrategy {
 
   async send(act, payload) {
     // 1. Aguarda a conexão ser estabelecida
-    console.log("WebSocketStrategy.send", act, payload);
     const isConnected = await this.ensureConnection();
-    console.log("WebSocketStrategy.isConnected", isConnected);
 
     return new Promise((resolve, reject) => {
       if (isConnected && this.wsManager && this.wsManager.send) {
         this.wsManager.send({ act, payload }, (response) => {
-          console.log("WebSocketStrategy.receive", response);
           if(response && response.status === "ok") {
             resolve(response.data);
           } else {
@@ -344,9 +341,7 @@ class WebSocketStrategy {
   // Accepts a `Project` instance and returns the server response.
   async saveProject(project) {
     if(project && project instanceof Project){
-      console.log("WebSocketStrategy.saveProject received project", project);
       const data = project.toJSON();
-      console.log("WebSocketStrategy chamou saveProject", data);
       return this.send('save_project', { projectID: data.id, data });
     }
     return Promise.reject(new Error("O objeto a salvar deve ser uma instância de Project."));
@@ -393,9 +388,8 @@ class WebSocketStrategy {
   // Accepts a `Paper` instance and returns the server response
   async savePaper(paper) {
     if(paper && paper instanceof Paper){
-      const paperId = paper && paper.id ? paper.id : null;
-      const data = paper && typeof paper.toJSON === 'function' ? paper.toJSON() : paper;
-      return this.send('save_paper', { paperId, data });
+      const data = paper.toJSON();
+      return this.send('save_paper', { paperId: data.id, data });
     }
     return Promise.reject(new Error("O objeto a salvar deve ser uma instância de Paper."));;
   }
@@ -403,7 +397,6 @@ class WebSocketStrategy {
   // Returns a `Paper` instance (or null)
   async loadPaper(paperId) {
     const res = await this.send('load_paper', { paperId });
-    console.log("WebSocketStrategy.loadPaper response", res);
     if (!res) return null;
     const payload = (res && res.data) ? res.data : res;
     if (!payload) return null;
