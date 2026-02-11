@@ -1,5 +1,6 @@
 import { storage } from '../infrastructure/storage.mjs';
 import { slugify } from '../core/utils.mjs';
+import { Project } from '../core/entities.mjs';
 
 document.addEventListener('DOMContentLoaded', () => {
   const filterInput = document.getElementById('newProjectName');
@@ -212,7 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
           p.description = desc;
           p.researchers = researchers.split(',').map((s) => s.trim()).filter(Boolean);
           p.objective = objective;
-          await storage.saveProject(p.id, p);
+          await storage.saveProject(new Project(p.id, p));
           // renderProjects(filterInput.value || '');
         }
       } else {
@@ -234,7 +235,8 @@ document.addEventListener('DOMContentLoaded', () => {
           objective,
           isCurrent: false,
         };
-        await storage.saveProject(p.id, p);
+        console.log('Saving project', p);
+        await storage.saveProject(new Project(p.id, p, true));
         projects.push(p);
         // renderProjects(filterInput.value || '');
       }

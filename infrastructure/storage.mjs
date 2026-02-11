@@ -156,10 +156,13 @@ class NodeFsStrategy {
       // Prefer config.json managed list
       const cfg = this.readJson('config.json');
       if (cfg && Array.isArray(cfg.projects)){
+        // Desmarca todos como não atuais
+        cfg.projects.forEach(p => p.isCurrent = false);
+        // Marca o atual se houver
         if(this.activeProjectID){
           const idx = cfg.projects.findIndex(p => p.id === this.activeProjectID);
           if(idx!==-1){
-            cfg.projects[idx].active = true;
+            cfg.projects[idx].isCurrent = true;
           }
         }
         return { status: 'ok', data: cfg.projects };
@@ -316,16 +319,18 @@ class WebSocketStrategy {
     const isConnected = await this.ensureConnection();
     console.log("WebSocketStrategy.isConnected", isConnected);
 
-    return new Promise((resolve) => {
-      // In a real scenario, we'd use a request-response pattern
-      // For now, send via wsManager
+    return new Promise((resolve, reject) => {
       if (isConnected && this.wsManager && this.wsManager.send) {
         this.wsManager.send({ act, payload }, (response) => {
           console.log("WebSocketStrategy.receive", response);
-          resolve(response);
+          if(response && response.status === "ok") {
+            resolve(response.data);
+          } else {
+            reject(response);
+          }
         });
       } else {
-        resolve({ status: "error", message: "WebSocket not connected" });
+        reject({ status: "error", message: "WebSocket not connected" });
       }
     });
   }
@@ -333,10 +338,12 @@ class WebSocketStrategy {
   // Accepts a `Project` instance and returns the server response.
   async saveProject(project) {
     if(project && project instanceof Project){
-      const data = project && typeof project.toJSON === 'function' ? project.toJSON() : project;
+      console.log("WebSocketStrategy.saveProject received project", project);
+      const data = project.toJSON();
+      console.log("WebSocketStrategy chamou saveProject", data);
       return this.send('save_project', { projectID: data.id, data });
     }
-    return Promise.reject(new Error("O objeto a salvar deve ser uma instância de Project."));;
+    return Promise.reject(new Error("O objeto a salvar deve ser uma instância de Project."));
   }
 
   async archiveProject(projectID) {
@@ -350,7 +357,7 @@ class WebSocketStrategy {
     const payload = (res && res.data) ? res.data : res;
     if (!payload) return null;
     try {
-      return Project.fromJSON(projectID, projectID, payload);
+      return Project.fromJSON(projectID, payload);
     } catch (e) {
       return null;
     }
