@@ -320,43 +320,43 @@ async function loadState() {
   return new Promise((resolve, reject) => {
     storage.getActiveProject().then(async (res) => {
 
-    let project = res;
-    let papers = [];
-    if (project.id) {
-      const papersRes = await storage.listPapers(project.id);
-      if (Array.isArray(papersRes)) papers = papersRes;
-      else if (papersRes?.data && Array.isArray(papersRes.data)) papers = papersRes.data;
-    }
+      if(!res) throw new Error("No active project");
 
-    const iterations = Array.isArray(project?.iterations) ? project.iterations : [];
-    const citations = Array.isArray(project?.citations) ? project.citations : [];
-    const critCandidate = project?.criteriaMap ?? project?.criteria;
-    const criteria = (critCandidate && typeof critCandidate === 'object' && !Array.isArray(critCandidate)) ? critCandidate : {};
+      let project = res;
+      let papers = [];
+      if (project.id) {
+        const papersRes = await storage.listPapers(project.id);
+        if (Array.isArray(papersRes)) papers = papersRes;
+        else if (papersRes?.data && Array.isArray(papersRes.data)) papers = papersRes.data;
+      }
 
-    state = { project, papers, iterations, citations, criteria };
-    toggleServerOfflineNotice(false);
-    toggleNoActiveProjectNotice(false);
-    resolve(state);
+      const iterations = Array.isArray(project?.iterations) ? project.iterations : [];
+      const citations = Array.isArray(project?.citations) ? project.citations : [];
+      const critCandidate = project?.criteriaMap ?? project?.criteria;
+      const criteria = (critCandidate && typeof critCandidate === 'object' && !Array.isArray(critCandidate)) ? critCandidate : {};
 
-  }).catch((err) => {
-    //TODO Verificar se o erro é de conexão ou falta projeto ativo. Para executar uma das opções abaixo:
-    // if (isConnectionError(activeRes)) {
-    //   state = baseState;
-    //   toggleServerOfflineNotice(true);
-    //   toggleNoActiveProjectNotice(false);
-    //   return;
-    // }
+      state = { project, papers, iterations, citations, criteria };
+      toggleServerOfflineNotice(false);
+      toggleNoActiveProjectNotice(false);
+      resolve(state);
 
-    
-    // if (!activeId && !projectData) {
-    //   state = baseState;
-    //   toggleServerOfflineNotice(false);
-    //   toggleNoActiveProjectNotice(true);
-    //   return;
-    // }
-    console.warn('getActiveProject failed', err);
-    reject(err);
-  });
+    }).catch((err) => {
+      console.warn('getActiveProject failed', err);
+      if(err.message === "No active project"){
+        state = baseState;
+        toggleServerOfflineNotice(false);
+        toggleNoActiveProjectNotice(true);
+        return;
+      }else if(err.message === "WebSocket not connected"){
+        state = baseState;
+        toggleServerOfflineNotice(true); 
+        toggleNoActiveProjectNotice(false);
+        return;
+      }else{
+        reject(err);
+      }
+      
+    }); 
   });
 
   
