@@ -290,23 +290,26 @@
 
         <!-- CATEGORIES (moved from options) -->
         <section class="view hidden" id="view_categories">
-          <div class="card">
-            <div class="cardTitle">Categorias</div>
-            <div class="muted" style="margin-bottom:8px">Crie cores para marcar artigos</div>
+          <div class="panelHeader">
+            <h2>Categorias</h2>
+            <p>Crie cores para marcar artigos</p>
+          </div>
 
-            <div class="toolbar" style="margin-bottom:10px;align-items:center">
-              <input type="text" id="categoryName" class="input" placeholder="Ex.: Seed" />
-              <input type="color" id="categoryColor" class="input" style="max-width:120px" />
+          <div class="toolbar" style="margin-bottom:10px;align-items:center">
+            <input type="text" id="categoryName" class="input" placeholder="Ex.: Seed" />
+            <input type="color" id="categoryColor" class="input" style="max-width:120px" />
 
-              <div style="margin-left:auto;display:flex;gap:8px">
-                <button id="addCategory" class="btn">Adicionar</button>
-                <button id="seedDefaultCategories" class="btn">Categorias padrão</button>
-              </div>
+            <div style="margin-left:auto;display:flex;gap:8px">
+              <button id="addCategory" class="btn">Adicionar</button>
+              <button id="seedDefaultCategories" class="btn">Categorias padrão</button>
             </div>
+          </div>
 
-            <div style="margin-top:6px">
-              <div class="cardTitle" style="font-size:14px;margin-bottom:6px">Lista de categorias</div>
-              <div class="muted" style="margin-bottom:8px">Clique em <b>Excluir</b> para remover uma categoria.</div>
+          <div class="card">
+            <div class="cardTitle">Lista de categorias</div>
+            <div class="muted" style="margin-bottom:8px">Clique em <b>Excluir</b> para remover uma categoria.</div>
+
+            <div class="tableWrap" style="margin-top:8px">
               <ul id="categoryList" class="categoryList"></ul>
             </div>
           </div>
