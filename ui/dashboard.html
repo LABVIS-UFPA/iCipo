@@ -295,32 +295,22 @@
             <p>Crie cores para marcar artigos</p>
           </div>
 
-          <div class="card">
-            <div class="formRow">
-              <div class="field">
-                <label for="categoryName">Nome</label>
-                <input type="text" id="categoryName" placeholder="Ex.: Seed" />
-              </div>
-
-              <div class="field fieldColor">
-                <label for="categoryColor">Cor</label>
-                <input type="color" id="categoryColor" />
-              </div>
-
-              <div class="field fieldActions">
-                <label>&nbsp;</label>
-                <div class="btnRow">
-                  <button id="addCategory" class="btn primary">Adicionar</button>
-                  <button id="seedDefaultCategories" class="btn">Categorias padrão</button>
-                </div>
-              </div>
+          <div class="toolbar">
+            <input type="text" id="categoryName" class="input" placeholder="Ex.: Seed" />
+            <input type="color" id="categoryColor" class="input" style="max-width:120px" />
+            <div class="menu" style="margin-left:auto;display:flex;gap:8px">
+              <button id="addCategory" class="btn">Adicionar</button>
+              <button id="seedDefaultCategories" class="btn">Categorias padrão</button>
             </div>
+          </div>
 
-            <div class="listHead">
-              <h3>Lista de categorias</h3>
-              <span class="muted">Clique em <b>Excluir</b> para remover uma categoria.</span>
+          <div class="card" style="margin-top:12px">
+            <div class="cardTitle">Lista de categorias</div>
+            <div class="muted" style="margin-bottom:8px">Clique em <b>Excluir</b> para remover uma categoria.</div>
+
+            <div class="tableWrap" style="margin-top:8px">
+              <ul id="categoryList" class="categoryList"></ul>
             </div>
-            <ul id="categoryList" class="list"></ul>
           </div>
         </section>
 
