@@ -98,6 +98,12 @@ body{
 
 .hint{font-size:11px;color:var(--muted);line-height:1.35}
 
+/* utility: visual muted text (used in markup as class="muted") */
+.muted{color:var(--muted);font-size:12px;line-height:1.35}
+
+/* Utility: visually hidden element for accessibility (keeps element available to screen readers) */
+.visually-hidden{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
 /* Main */
 .main{padding:18px 18px 22px}
 
