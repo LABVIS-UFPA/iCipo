@@ -135,23 +135,45 @@ function loadCategories() {
       const color = categories[category];
 
       const li = document.createElement("li");
+      // keep only backgroundColor on the root so the color shows visually
       li.style.backgroundColor = color;
-      li.style.display = "flex";
-      li.style.alignItems = "center";
-      li.style.gap = "8px";
-      li.style.padding = "6px";
 
-      const label = document.createElement("span");
-      label.textContent = category;
-      label.style.fontWeight = "600";
-      label.style.flex = "1";
-      label.style.color = getLuminanceFromHex(color) < 0.5 ? "#fff" : "#000";
+      // left block: pill + title/sub
+      const left = document.createElement("div");
+      left.className = "left";
+
+      const pill = document.createElement("span");
+      pill.className = "pill";
+      pill.style.backgroundColor = color;
+
+      const textWrap = document.createElement("div");
+      textWrap.style.minWidth = "0";
+
+      const title = document.createElement("span");
+      title.className = "title";
+      title.textContent = category;
+
+      // optional subtext (not used currently)
+      const sub = document.createElement("span");
+      sub.className = "sub";
+      sub.textContent = "";
+
+      textWrap.appendChild(title);
+      // only append sub if it has content
+      if (sub.textContent) textWrap.appendChild(sub);
+
+      left.appendChild(pill);
+      left.appendChild(textWrap);
+
+      // right block: meta + actions
+      const right = document.createElement("div");
+      right.className = "right";
 
       const meta = document.createElement("span");
+      meta.className = "meta";
       meta.textContent = color;
       meta.style.fontFamily = "monospace";
       meta.style.fontSize = "12px";
-      meta.style.color = getLuminanceFromHex(color) < 0.5 ? "#fff" : "#000";
 
       const btn = document.createElement("button");
       btn.textContent = "Excluir";
@@ -159,12 +181,18 @@ function loadCategories() {
         if (!confirm(`Excluir a categoria "${category}"?`)) return;
         removeCategory(category);
       });
-      btn.style.color = getLuminanceFromHex(color) < 0.5 ? "#fff" : "#000";
-      if (getLuminanceFromHex(color) >= 0.5) btn.classList.add("dark");
 
-      li.appendChild(label);
-      li.appendChild(meta);
-      li.appendChild(btn);
+      const textColor = getLuminanceFromHex(color) < 0.5 ? "#fff" : "#000";
+      title.style.color = textColor;
+      meta.style.color = textColor;
+      btn.style.color = textColor;
+      if (textColor === "#000") btn.classList.add("dark");
+
+      right.appendChild(meta);
+      right.appendChild(btn);
+
+      li.appendChild(left);
+      li.appendChild(right);
 
       categoryList.appendChild(li);
     }
