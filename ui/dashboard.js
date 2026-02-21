@@ -369,7 +369,7 @@ async function loadState() {
       resolve(state);
 
     }).catch((err) => {
-      console.warn('getActiveProject failed', err);
+      console.log('getActiveProject failed', err);
       if(err.message === "No active project"){
         state = baseState;
         toggleServerOfflineNotice(false);

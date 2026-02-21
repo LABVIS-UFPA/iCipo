@@ -3,6 +3,11 @@
   "name": " iCipó  ",
   "version": "1.0",
   "description": "Marca links no Google Scholar e gerencia um projeto RSL com dashboard e exportação.",
+  "icons": {
+    "16": "img/favicon.ico",
+    "48": "img/favicon-96x96.png",
+    "128": "img/web-app-manifest-192x192.png"
+  },
   "permissions": ["contextMenus", "scripting", "storage", "unlimitedStorage", "downloads", "alarms"],
   "background": {
     "service_worker": "background.js",
@@ -10,7 +15,12 @@
   },
   "action": {
     "default_title": "ICipó",
-    "default_popup": "ui/popup.html"
+    "default_popup": "ui/popup.html",
+    "default_icon": {
+      "16": "img/favicon.ico",
+      "48": "img/favicon-96x96.png",
+      "128": "img/web-app-manifest-192x192.png"
+    }
   },
   "options_page": "ui/options.html",
   "host_permissions": ["<all_urls>"],

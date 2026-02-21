@@ -49,14 +49,18 @@ body{
 }
 
 .logo{
-  width:42px;
+  width:75px;
   height:42px;
-  border-radius: 14px;
   display:grid;
   place-items:center;
-  font-weight: 900;
-  background: linear-gradient(135deg, rgba(110,168,255,0.92), rgba(170,110,255,0.92));
-  box-shadow: 0 12px 30px rgba(110,168,255,0.18);
+}
+
+.logo .brandLogo,
+.brand .brandLogo{
+  width:100%;
+  height:100%;
+  object-fit:contain;
+  display:block;
 }
 
 .brandTitle{font-weight:900;font-size:15px;letter-spacing:0.2px}
