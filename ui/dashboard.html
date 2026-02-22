@@ -5,13 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Dashboard •  iCipó</title>
     <link rel="stylesheet" href="dashboard.css" />
+
+    <!-- #region Favicons -->
+    <link rel="icon" type="image/png" href="/img/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/img/favicon.svg" />
+    <link rel="shortcut icon" href="/img/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/img/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-title" content="iCipó" />
+    <link rel="manifest" href="/img/site.webmanifest" />
+    <!-- #endregion -->
+
   </head>
   <body>
     <div class="app">
       
       <aside class="sidebar">
         <div class="brand">
-          <div class="logo">iCipó</div>
+          <div class="logo">
+            <picture>
+              <source srcset="/img/icipo_logo[dark].png" media="(prefers-color-scheme: dark)">
+              <img class="brandLogo" src="/img/icipo_logo.png" alt="iCipó" />
+            </picture>
+          </div>
           <div>
             <div class="brandTitle">Dashboard</div>
             <div class="brandSub" id="brandSub">—</div>
