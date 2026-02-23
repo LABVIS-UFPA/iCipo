@@ -39,8 +39,6 @@ body{
   background: rgba(11,15,23,0.65);
   backdrop-filter: blur(10px);
   border-right: 1px solid var(--border);
-  display:flex;
-  flex-direction:column;
 }
 
 .brand{
@@ -69,7 +67,7 @@ body{
 .brandTitle{font-weight:900;font-size:15px;letter-spacing:0.2px}
 .brandSub{color:var(--muted);font-size:12px;margin-top:2px}
 
-.nav{padding:12px;display:flex;flex-direction:column;gap:8px}
+.nav{padding:12px;gap:8px;}
 .navBtn{
   border:1px solid transparent;
   background: transparent;
@@ -88,7 +86,7 @@ body{
   box-shadow: 0 12px 30px rgba(110,168,255,0.10);
 }
 
-.sideFooter{margin-top:auto;padding:12px 12px 14px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:10px}
+.sideFooter{padding:12px 12px 14px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:10px}
 .ghost{
   border:1px solid var(--border);
   background: rgba(255,255,255,0.04);
@@ -243,10 +241,6 @@ body{
   border-radius: var(--radius);
   padding:12px;
   box-shadow: var(--shadow);
-  display: flex;
-  flex-flow: column;
-  flex: 1;
-  min-height: 0;
 }
 .cardTitle{font-weight:900;font-size:13px;margin-bottom:10px;letter-spacing:0.2px}
 
@@ -277,13 +271,6 @@ body{
 
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 
-.view{
-  display: flex;
-  flex-flow: column;
-  flex: 1;
-  min-height: 0;
-}
-
 
 .tableWrap{
   border:1px solid var(--border);
@@ -291,23 +278,8 @@ body{
   background: rgba(255,255,255,0.03);
   /* Limit height so growth scrolls inside this box instead of the page */
   /* Use flexbox to make the table area fill the available space and scroll internally */
-  flex: 1;
-  overflow: hidden;
-  /* nicer scroll for Firefox */
-  display: flex;
-  flex-flow: column;
-  min-height: 0;
 }
-/* WebKit scrollbar styling */
-.categoryList::-webkit-scrollbar{width:10px;height:10px}
-.categoryList::-webkit-scrollbar-thumb{
-  background: rgba(255,255,255,0.4);
-  border-radius:999px;
-  border:2px solid transparent;
-  background-clip: padding-box;
-}
-.categoryList::-webkit-scrollbar-thumb:hover{background: rgba(255,255,255,0.12)}
-.categoryList::-webkit-scrollbar-track{background: transparent}
+
 .table{width:100%;border-collapse:collapse;font-size:13px}
 .table th,.table td{padding:10px 10px;border-bottom:1px solid rgba(234,240,255,0.10);vertical-align:top}
 .table th{position:sticky;top:0;background: rgba(11,15,23,0.6);backdrop-filter: blur(8px);text-align:left;font-size:12px;color: rgba(234,240,255,0.85);z-index:2}
@@ -436,12 +408,7 @@ svg .axis line, svg .axis path{stroke: rgba(234,240,255,0.18)}
 .categoryList{
   list-style:none;
   padding:10px;
-  display:flex;
-  flex-direction:column;
   gap:10px;
-  overflow: auto;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.4) transparent;
 }
 .categoryList li{
   display:flex;
@@ -478,4 +445,55 @@ svg .axis line, svg .axis path{stroke: rgba(234,240,255,0.18)}
   .sidebar{position:sticky;top:0;z-index:20}
   .kpiGrid{grid-template-columns:repeat(3,1fr)}
   .grid2{grid-template-columns:1fr}
+}
+
+/* =========================================
+   UTILITIES: Internal Scrolling & Layout
+   ========================================= */
+
+/* 1. Container Flexível Vertical
+  Use esta classe no elemento PAI da lista. 
+  Ela força o elemento a ocupar todo o espaço restante e impede 
+  que ele cresça além da tela (o que quebraria o scroll interno).
+*/
+.flex-fill-col {
+  display: flex;
+  flex-flow: column;
+  flex: 1;
+  min-height: 0;     /* Crucial: permite que o flex item encolha abaixo do tamanho do conteúdo */
+  overflow: hidden;  /* Garante que o scroll aconteça no filho, não aqui */
+}
+
+/* 2. Área de Scroll Estilizada
+  Use esta classe no elemento que deve ter a barra de rolagem (a <ul>, <table> ou div wrapper).
+*/
+.u-scroll-y {
+  overflow-y: auto;        /* Habilita scroll vertical */
+  overflow-x: hidden;      /* Evita scroll horizontal acidental em listas */
+  height: 100%;            /* Ocupa a altura do pai .u-flex-fill-col */
+  
+  /* Firefox Scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.4) transparent;
+}
+
+/* WebKit Scrollbar (Chrome, Edge, Safari) */
+.u-scroll-y::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.u-scroll-y::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.u-scroll-y::-webkit-scrollbar-thumb {
+  background-color: rgba(255,255,255,0.4);
+  border-radius: 999px;
+  border: 2px solid transparent; /* Cria o efeito de "padding" na barra */
+  background-clip: padding-box;
+}
+
+.u-scroll-y::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255,255,255,0.6); /* Um pouco mais claro no hover */
 }
