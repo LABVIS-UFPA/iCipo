@@ -470,7 +470,7 @@ svg .axis line, svg .axis path{stroke: rgba(234,240,255,0.18)}
   Ela força o elemento a ocupar todo o espaço restante e impede 
   que ele cresça além da tela (o que quebraria o scroll interno).
 */
-.flex-fill-col {
+.u-flex-fill-col {
   display: flex;
   flex-flow: column;
   flex: 1;
@@ -482,7 +482,7 @@ svg .axis line, svg .axis path{stroke: rgba(234,240,255,0.18)}
   Use esta classe no elemento que deve ter a barra de rolagem (a <ul>, <table> ou div wrapper).
 */
 .u-scroll-y {
-  overflow-y: overlay;        /* Habilita scroll vertical */
+  overflow-y: auto;           /* Habilita scroll vertical (compatível cross-browser) */
   overflow-x: hidden;      /* Evita scroll horizontal acidental em listas */
   flex: 1;                 /* Ocupa o espaço disponível dentro do container flex pai */  
   min-height: 0;           /* Permite que o conteúdo encolha e o scroll funcione corretamente */ 
