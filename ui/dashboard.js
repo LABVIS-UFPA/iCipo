@@ -138,16 +138,17 @@ function loadCategories() {
     });
   }
 
-  function removeCategory(name) {
+  function removeCategory(label) {
     if (!project) return;
     const cats =project.categories || [];
-    const filtered = (Array.isArray(cats) ? cats : []).filter(c => c.title !== name);
+    const filtered = (Array.isArray(cats) ? cats : []).filter(c => c.label !== label);
     project.categories = filtered;
     persistProjectAndReload();
   }
 
   for (const cat of items) {
     const category = cat.title;
+    const categoryLabel = cat.label;
     const color = cat.color || "#ffffff";
 
     const li = document.createElement("li");
@@ -190,7 +191,7 @@ function loadCategories() {
     btn.textContent = "Excluir";
     btn.addEventListener("click", () => {
       if (!confirm(`Excluir a categoria "${category}"?`)) return;
-      removeCategory(category);
+      removeCategory(categoryLabel);
     });
 
     const textColor = getLuminanceFromHex(color) < 0.5 ? "#fff" : "#000";
