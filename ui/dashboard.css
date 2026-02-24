@@ -276,13 +276,27 @@ body{
   border:1px solid var(--border);
   border-radius: 16px;
   background: rgba(255,255,255,0.03);
-  /* Limit height so growth scrolls inside this box instead of the page */
-  /* Use flexbox to make the table area fill the available space and scroll internally */
+  /* Contêiner visual para tabelas: aplica borda, raio e fundo */
+  /* Não é responsável por limitar altura ou controlar scroll; isso deve ser feito pelo layout externo */
 }
 
-.table{width:100%;border-collapse:collapse;font-size:13px}
+.table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:13px
+}
 .table th,.table td{padding:10px 10px;border-bottom:1px solid rgba(234,240,255,0.10);vertical-align:top}
-.table th{position:sticky;top:0;background: rgba(11,15,23,0.6);backdrop-filter: blur(8px);text-align:left;font-size:12px;color: rgba(234,240,255,0.85);z-index:2}
+.table th{
+  position:sticky;
+  top:0;
+  z-index:10;
+
+  background: rgba(11,15,23,0.6);
+  backdrop-filter: blur(8px);
+  text-align:left;
+  font-size:12px;
+  color: rgba(234,240,255,0.85);
+}
 .table tr:hover td{background: rgba(255,255,255,0.03)}
 
 .pill{
@@ -468,9 +482,10 @@ svg .axis line, svg .axis path{stroke: rgba(234,240,255,0.18)}
   Use esta classe no elemento que deve ter a barra de rolagem (a <ul>, <table> ou div wrapper).
 */
 .u-scroll-y {
-  overflow-y: auto;        /* Habilita scroll vertical */
+  overflow-y: overlay;        /* Habilita scroll vertical */
   overflow-x: hidden;      /* Evita scroll horizontal acidental em listas */
-  height: 100%;            /* Ocupa a altura do pai .u-flex-fill-col */
+  flex: 1;                 /* Ocupa o espaço disponível dentro do container flex pai */  
+  min-height: 0;           /* Permite que o conteúdo encolha e o scroll funcione corretamente */ 
   
   /* Firefox Scrollbar */
   scrollbar-width: thin;

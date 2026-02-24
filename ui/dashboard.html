@@ -137,8 +137,8 @@
             <button id="btnBulkDeleteMarked" class="btn">Remover marcado</button>
           </div>
 
-          
-            <table class="table flex-fill-col" id="papersTable">
+          <div class="tableWrap u-flex-fill-col u-scroll-y">
+            <table class="table" id="papersTable">
               <thead>
                 <tr>
                   <th style="width:36px"><input type="checkbox" id="checkAll" /></th>
@@ -152,9 +152,10 @@
                   <th style="width:90px">Link</th>
                 </tr>
               </thead>
-              <tbody class="flex-fill-col u-scroll-y"></tbody>
+              <tbody>
+              </tbody>
             </table>
-          
+          </div>
         </section>
 
         <!-- ITERATIONS -->
