@@ -1,6 +1,6 @@
 import {fmtDate, normalizeStr, jaccard, slugify} from '../core/utils.mjs';
 import { storage } from '../infrastructure/storage.mjs';
-import { Project } from '../core/entities.mjs';
+// import { Project } from '../core/entities.mjs';
 
 let state = null;
 // Incremental token to guard against out-of-order async renders
@@ -119,11 +119,10 @@ function loadCategories() {
   categoryList.innerHTML = "";
   const project = state && state.project ? state.project : null;
 
-  console.log("Projeto ativo: ",project);
-  const rawCats = project?.categories;
-
-  // Normalize to array of {title, color}
-  const items = rawCats.map(c => ({ title: c.title, color: c.color}));
+  const rawCats = Array.isArray(project?.categories) ? project.categories : [];
+  
+  // Copy to avoid mutating original data during sort, which can cause issues with state management and rendering
+  const items = [...rawCats];
 
   items.sort((a, b) => String(a.title).localeCompare(String(b.title)));
 
@@ -140,8 +139,8 @@ function loadCategories() {
 
   function removeCategory(label) {
     if (!project) return;
-    const cats =project.categories || [];
-    const filtered = (Array.isArray(cats) ? cats : []).filter(c => c.label !== label);
+    const cats = Array.isArray(project.categories) ? project.categories : [];
+    const filtered = cats.filter(c => c.label !== label);
     project.categories = filtered;
     persistProjectAndReload();
   }

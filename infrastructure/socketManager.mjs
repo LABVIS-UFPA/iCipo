@@ -101,6 +101,7 @@ class WebsocketManager {
       this.setStatus("Conectado");
       this.appendLog("✅ Conectado");
       this.autoConnectionTime = 100;
+      currentConnectingUrl = ""; // Limpa a URL global para não silenciar erros de conexões futuras
       
       // Trigger all registered open listeners
       this.onOpenListeners.forEach(callback => {
@@ -128,10 +129,12 @@ class WebsocketManager {
     this.socket.onerror = () => {
       this.setStatus("Erro");
       this.appendLog("❌ Erro na conexão");
+      currentConnectingUrl = ""; // Limpa a URL global para não silenciar erros de conexões futuras
     };
 
     this.socket.onclose = () => {
       this.finalizeClose("🔌 Conexão encerrada", "Desconectado");
+      currentConnectingUrl = ""; // Limpa a URL global para não silenciar erros de conexões futuras
       setTimeout(() => this.tryAutoConnect(), this.autoConnectionTime);
       this.autoConnectionTime *= 2;
       if (this.autoConnectionTime > 60000) this.autoConnectionTime = 60000;
