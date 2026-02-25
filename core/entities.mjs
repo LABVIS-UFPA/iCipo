@@ -27,7 +27,7 @@ class Project {
     }
 
     if (data && typeof data === 'object') {
-      // Create object from JSON for nested structures (papers, categories, criterios, fases) if present
+      // Create object from JSON for nested structures (papers, categories, criteria, phases) if present
       if(this.papers) this.papers = checkArray(this.papers).map(p => Paper.fromJSON(p));
       if(this.categories) this.categories = checkArray(this.categories).map(c => Category.fromJSON(c));
       if(this.criteria) this.criteria = checkArray(this.criteria).map(c => Criterion.fromJSON(c));
