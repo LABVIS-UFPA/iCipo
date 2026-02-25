@@ -479,3 +479,110 @@ svg .axis line, svg .axis path{stroke: rgba(234,240,255,0.18)}
   .kpiGrid{grid-template-columns:repeat(3,1fr)}
   .grid2{grid-template-columns:1fr}
 }
+<<<<<<< Updated upstream
+=======
+
+/* =========================================
+   UTILITIES: Internal Scrolling & Layout
+   ========================================= */
+
+/* 1. Container Flexível Vertical
+  Use esta classe no elemento PAI da lista. 
+  Ela força o elemento a ocupar todo o espaço restante e impede 
+  que ele cresça além da tela (o que quebraria o scroll interno).
+*/
+.u-flex-fill-col {
+  display: flex;
+  flex-flow: column;
+  flex: 1;
+  min-height: 0;     /* Crucial: permite que o flex item encolha abaixo do tamanho do conteúdo */
+  overflow: hidden;  /* Garante que o scroll aconteça no filho, não aqui */
+}
+
+/* 2. Área de Scroll Estilizada
+  Use esta classe no elemento que deve ter a barra de rolagem (a <ul>, <table> ou div wrapper).
+*/
+.u-scroll-y {
+  overflow-y: auto;           /* Habilita scroll vertical (compatível cross-browser) */
+  overflow-x: hidden;      /* Evita scroll horizontal acidental em listas */
+  flex: 1;                 /* Ocupa o espaço disponível dentro do container flex pai */  
+  min-height: 0;           /* Permite que o conteúdo encolha e o scroll funcione corretamente */ 
+  
+  /* Firefox Scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.4) transparent;
+}
+
+/* WebKit Scrollbar (Chrome, Edge, Safari) */
+.u-scroll-y::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.u-scroll-y::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.u-scroll-y::-webkit-scrollbar-thumb {
+  background-color: rgba(255,255,255,0.4);
+  border-radius: 999px;
+  border: 2px solid transparent; /* Cria o efeito de "padding" na barra */
+  background-clip: padding-box;
+}
+
+.u-scroll-y::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255,255,255,0.6); /* Um pouco mais claro no hover */
+}
+
+/* ====== Phases UI ====== */
+.phasesRow{padding:8px 6px}
+.phasesList{
+  display:flex;
+  gap:12px;
+  align-items:flex-start;
+  padding:12px;
+  overflow-x:auto;
+}
+.phaseCard{
+  min-width:220px;
+  max-width:320px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:12px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.phaseCard .phaseTitle{font-weight:900;font-size:14px}
+.phaseCard .phaseDesc{font-size:13px;color:var(--muted);line-height:1.35}
+.phaseCard .phaseCriteria{font-size:12px;color:var(--muted);display:block}
+
+/* Side panel sliding from right (used by phases add/edit) */
+.sidePanel{
+  position:fixed;
+  right:0;
+  top:0;
+  height:100%;
+  width:420px;
+  max-width:96vw;
+  background: rgba(11,15,23,0.96);
+  border-left:1px solid var(--border);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  transform: translateX(110%);
+  transition: transform .28s ease;
+  z-index:60;
+  display:flex;
+  flex-direction:column;
+  padding:16px;
+}
+.sidePanel.open{transform: translateX(0)}
+.sidePanelHeader{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.sidePanelBody{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+
+/* Make phases list look fine on small screens */
+@media (max-width: 980px){
+  .phasesList{padding-bottom:40px}
+  .sidePanel{width:100%;}
+}
+>>>>>>> Stashed changes

@@ -1583,6 +1583,51 @@ function bindEvents() {
     highlightSearch.addEventListener("input", () => loadHighlightedLinks());
   }
 
+  // --- Phases (UI stub) ---
+  const btnShowAddPhase = document.getElementById('btnShowAddPhase');
+  const phasePanel = document.getElementById('phasePanel');
+  const btnClosePhase = document.getElementById('btnClosePhase');
+  const btnCancelPhase = document.getElementById('btnCancelPhase');
+  const btnSavePhase = document.getElementById('btnSavePhase');
+  const phasesList = document.getElementById('phasesList');
+
+  function createPhaseCard({ title, desc, criteria }) {
+    const el = document.createElement('div');
+    el.className = 'phaseCard';
+    el.innerHTML = `
+      <div class="phaseTitle">${escapeHtml(title || '(sem título)')}</div>
+      <div class="phaseDesc">${escapeHtml(desc || '')}</div>
+      <div class="phaseCriteria">${escapeHtml(criteria || '')}</div>
+    `;
+    return el;
+  }
+
+  if (btnShowAddPhase && phasePanel) {
+    btnShowAddPhase.addEventListener('click', () => {
+      phasePanel.classList.add('open');
+      phasePanel.setAttribute('aria-hidden', 'false');
+      setTimeout(() => document.getElementById('phaseTitle')?.focus(), 60);
+    });
+  }
+  if (btnClosePhase) btnClosePhase.addEventListener('click', () => { phasePanel.classList.remove('open'); phasePanel.setAttribute('aria-hidden','true'); });
+  if (btnCancelPhase) btnCancelPhase.addEventListener('click', () => { phasePanel.classList.remove('open'); phasePanel.setAttribute('aria-hidden','true'); });
+
+  if (btnSavePhase) btnSavePhase.addEventListener('click', (e) => {
+    const title = (document.getElementById('phaseTitle')?.value || '').trim();
+    const desc = (document.getElementById('phaseDesc')?.value || '').trim();
+    const criteria = (document.getElementById('phaseCriteria')?.value || '').trim();
+    if (!title) return alert('Informe um título para a fase (apenas demo).');
+    const card = createPhaseCard({ title, desc, criteria });
+    if (phasesList) phasesList.appendChild(card);
+    // Clear & close (UI-only, no persistence)
+    document.getElementById('phaseTitle').value = '';
+    document.getElementById('phaseDesc').value = '';
+    document.getElementById('phaseCriteria').value = '';
+    phasePanel.classList.remove('open');
+    phasePanel.setAttribute('aria-hidden','true');
+  });
+
+
   // Citations
   $("#btnAddCitation").addEventListener("click", async () => {
     const from = $("#c_from").value;

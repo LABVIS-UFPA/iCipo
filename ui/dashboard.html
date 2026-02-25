@@ -35,6 +35,7 @@
 
         <nav class="nav">
           <button class="navBtn active" data-view="overview">📌 Visão geral</button>
+          <button class="navBtn" data-view="phases">🧭 Fases</button>
           <button class="navBtn" data-view="categories">🎨 Categorias</button>
           <button class="navBtn" data-view="papers">📚 Artigos</button>
           <button class="navBtn" data-view="iterations">🔁 Iterações</button>
@@ -331,6 +332,28 @@
           </div>
         </section>
 
+        <!-- PHASES -->
+        <section class="view hidden u-flex-fill-col" id="view_phases">
+          <div class="panelHeader">
+            <h2>Fases</h2>
+            <p>Gerencie as fases do seu processo (IU apenas, demo stub).</p>
+          </div>
+
+          <div class="toolbar">
+            <div style="display:flex;gap:8px;align-items:center">
+              <button id="btnShowAddPhase" class="btn">Adicionar nova fase</button>
+              <div class="muted">As fases são exibidas como blocos lado a lado para visualizar a progressão.</div>
+            </div>
+          </div>
+
+          <div class="card u-flex-fill-col" style="margin-top:12px">
+            <div class="cardTitle">Progressão de fases</div>
+            <div class="phasesRow">
+              <div id="phasesList" class="phasesList u-scroll-y" aria-live="polite"></div>
+            </div>
+          </div>
+        </section>
+
         <!-- Documents merged into Artigos view -->
 
         <!-- HISTORY MODAL (fallback) -->
@@ -345,6 +368,29 @@
                 <thead><tr><th>Quando</th><th>Ação</th><th>Detalhes</th></tr></thead>
                 <tbody></tbody>
               </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- SIDE PANEL: Add / Edit Phase (UI stub) -->
+        <div id="phasePanel" class="sidePanel" aria-hidden="true">
+          <div class="sidePanelHeader">
+            <div style="font-weight:900">Nova fase</div>
+            <button id="btnClosePhase" class="btn">Fechar</button>
+          </div>
+          <div class="sidePanelBody">
+            <label class="visually-hidden" for="phaseTitle">Título</label>
+            <input id="phaseTitle" class="input" placeholder="Título da fase" />
+
+            <label class="visually-hidden" for="phaseDesc">Descrição</label>
+            <textarea id="phaseDesc" class="input" style="min-height:120px" placeholder="Descrição da fase"></textarea>
+
+            <label class="visually-hidden" for="phaseCriteria">Critérios</label>
+            <input id="phaseCriteria" class="input" placeholder="Critérios (texto livre)" />
+
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <button id="btnSavePhase" class="btn">Salvar (demo)</button>
+              <button id="btnCancelPhase" class="btn ghost">Cancelar</button>
             </div>
           </div>
         </div>
