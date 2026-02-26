@@ -82,6 +82,8 @@ class NodeFsStrategy {
     // Merge: preserve existing properties, override/add with incoming projectData
     const merged = { ...existing, ...project };
 
+    console.log(`Saving project ${projectID} to disk at ${relPath}...`, merged);
+
     // Write merged project data
     this.writeJson(relPath, merged);
 

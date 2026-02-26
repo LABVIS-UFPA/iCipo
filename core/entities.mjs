@@ -35,6 +35,27 @@ class Project {
     }
   }
 
+  // --- Category management ---
+  addCategory(categoryData) {
+    if (!categoryData) return;
+    //Categorias devem ter pelo menos título e cor para serem criadas, caso contrário, são ignoradas
+    if (!categoryData.title || !categoryData.color) return;
+
+    const c = categoryData instanceof Category ? categoryData : Category.fromJSON(categoryData);
+    this.categories.push(c);
+    return c;
+  }
+
+  removeCategory(label) {
+    const index = this.categories.findIndex(c => c.label === label);
+    if (index !== -1) {
+      return this.categories.splice(index, 1)[0];
+    }else{
+      return null;
+    }
+  }
+
+  // --- Paper management ---
   addPaper(paperData) {
     const p = paperData instanceof Paper ? paperData : Paper.fromJSON(paperData);
     this.papers.push(p);

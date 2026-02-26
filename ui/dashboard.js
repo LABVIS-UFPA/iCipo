@@ -1,4 +1,4 @@
-import {fmtDate, normalizeStr, jaccard, slugify} from '../core/utils.mjs';
+import {fmtDate, normalizeStr, jaccard} from '../core/utils.mjs';
 import { storage } from '../infrastructure/storage.mjs';
 // import { Project } from '../core/entities.mjs';
 
@@ -128,6 +128,7 @@ function loadCategories() {
 
   function persistProjectAndReload() {
     if (!project || !project.id) return;
+    console.log('Persisting project changes...', project);
     // Save using Project wrapper for compatibility with remote storage
     storage.saveProject(project).then(() => {
       loadCategories();
@@ -135,14 +136,6 @@ function loadCategories() {
       console.warn('saveProject failed', e);
       loadCategories();
     });
-  }
-
-  function removeCategory(label) {
-    if (!project) return;
-    const cats = Array.isArray(project.categories) ? project.categories : [];
-    const filtered = cats.filter(c => c.label !== label);
-    project.categories = filtered;
-    persistProjectAndReload();
   }
 
   for (const cat of items) {
@@ -190,7 +183,8 @@ function loadCategories() {
     btn.textContent = "Excluir";
     btn.addEventListener("click", () => {
       if (!confirm(`Excluir a categoria "${category}"?`)) return;
-      removeCategory(categoryLabel);
+      project.removeCategory(categoryLabel);
+      persistProjectAndReload(); // Reload categories after removal
     });
 
     const textColor = getLuminanceFromHex(color) < 0.5 ? "#fff" : "#000";
@@ -1573,7 +1567,7 @@ function bindEvents() {
       const existing = new Set((project.categories || []).map(c => c.title));
       for (const [name, color] of Object.entries(DEFAULT_SNOWBALLING_CATEGORIES)) {
         if (!existing.has(name)) {
-          project.categories.push({ title: name, label: slugify(name), color: color });
+          project.addCategory({ title: name, color: color });
         }
       }
 
@@ -1600,9 +1594,10 @@ function bindEvents() {
       // Update if exists
       const idx = project.categories.findIndex(c => c.title === name);
       if (idx !== -1) {
+        //TODO: editar pelo CRUD da class Category, que ainda não existe.
         project.categories[idx].color = color;
       } else {
-        project.categories.push({ title: name, label: slugify(name), color: color });
+        project.addCategory({ title: name, color: color });
       }
 
       storage.saveProject(project).then(() => {
