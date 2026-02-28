@@ -16,46 +16,7 @@
 
 
     <link rel="stylesheet" href="options.css" />
-    <style>
-      .panelHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
-      .panelHeader .headerActions{display:flex;align-items:flex-end;gap:8px;height: 100%;}
-      .btn.createGreen{background:#2ea44f;color:white;border:none;padding:8px 12px;border-radius:6px;min-width: 120px;}
-      .btn.createGreen:hover{filter:brightness(0.95)}
-
-      .sidenav{height:100%;width:0px;transform:scale(0 1);transition: width .7s ease, display .7s ease allow-discrete;overflow:auto;display:none;}
-      .sidenav.open{width: 380px;display: flex;}
-
-      @starting-style {
-        .sidenav.open {
-          width: 0;
-        }
-      }
-
-      .sidenav .formRow{display:block;margin-bottom:12px}
-      .sidenav label{display:block;font-size:12px;color:#333;margin-bottom:6px}
-      .sidenav input[type=text], .sidenav textarea{width:100%;padding:8px;border:1px solid #ddd;border-radius:6px}
-      .sidenav .formActions{text-align:right;margin-top:12px}
-      .sidenav h2{color: #303030;margin-bottom: 0;}
-      .sidenav .btn.primary{ color: #101010;border: 1px solid var(--btn);}
-
-      /* Estilização da barra de rolagem para combinar com o tema Dark */
-      .sidenav::-webkit-scrollbar {
-        width: 8px;
-      }
-      .sidenav::-webkit-scrollbar-track {
-        background: rgb(255 255 255 / 14%);
-        border-radius: 4px;
-        margin: 3px 3px 3px 0px;
-      }
-      .sidenav::-webkit-scrollbar-thumb {
-        border-radius: 4px;
-        background: #00000069;
-      }
-      .sidenav::-webkit-scrollbar-thumb:hover {
-        background: var(--btnHover);
-      }
-
-    </style>
+    <link rel="stylesheet" href="projects.css" />
     <script defer type="module" src="projects.js"></script>
   </head>
   <body>
@@ -80,8 +41,8 @@
       </header>
 
       <div class="main">
-        <main class="workarea" style="margin-left:0;">
-          <section class="panel active" id="panel-projects-dedicated" style="height:100%">
+        <main class="workarea noLeftMargin">
+          <section class="panel active fullHeight" id="panel-projects-dedicated">
             <div class="panelHeader">
               <div>
                 <h2>Meus projetos</h2>
@@ -89,7 +50,7 @@
               </div>
               <div class="headerActions">
                 
-                <div style="display:flex;align-items:center">
+                <div class="alignCenter">
                   <button id="openCreateBtn" class="btn createGreen">Novo projeto</button>
                 </div>
               </div>
@@ -97,12 +58,12 @@
 
             <div class="card">
 
-              <div class="field" style="min-width:220px">
+              <div class="field minWidth220">
                   <label for="newProjectName">Filtrar projetos</label>
                   <input type="text" id="newProjectName" placeholder="Filtrar por nome ou id" />
                 </div>
 
-              <div style="height:6px"></div>
+              <div class="spacer6"></div>
 
               <div class="listHead">
                 <h3>Projetos</h3>
@@ -125,9 +86,8 @@
             </div>
 
             <div class="formRow">
-              <label for="projectIdPreview">ID do projeto <span id="projectIdStatus" class="muted" style="font-size:12px;margin-top:6px"></span></label>
+              <label for="projectIdPreview">ID do projeto <span id="projectIdStatus" class="muted"></span></label>
               <input type="text" id="projectIdPreview" readonly placeholder="Pré-visualização do ID" disabled />
-              
             </div>
 
             <div class="formRow">
