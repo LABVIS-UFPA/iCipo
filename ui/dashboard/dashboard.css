@@ -609,6 +609,14 @@ svg .axis line, svg .axis path{stroke: rgba(234,240,255,0.18)}
 .phaseCardFooter{display:flex;justify-content:space-between;gap:8px;margin-top:6px;flex-shrink:0}
 .btn.small{padding:6px 10px;font-size:13px}
 
+/* Force fixed order: active label on the left, actions (buttons) on the right */
+.phaseCardFooter .activeLabel{order:0; margin-right:auto}
+.phaseCardFooter button{order:1}
+
+/* Actions wrapper inside footer to keep buttons grouped and right-aligned */
+.phaseCardActions{display:flex;gap:8px;align-items:center;margin-left:auto}
+.phaseCardActions button{order:1}
+
 /* Active phase visual state */
 .phaseCard.active{
   border-color: var(--good);

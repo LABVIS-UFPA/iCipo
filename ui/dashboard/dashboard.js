@@ -1630,7 +1630,9 @@ function bindEvents() {
       </div>
       <div class="phaseCardFooter">
         <span class="activeLabel pill" aria-hidden="true">Ativo</span>
-        <button class="btn small" data-action="edit">Editar</button>
+        <div class="phaseCardActions">
+          <button class="btn small" data-action="edit">Editar</button>
+        </div>
       </div>
     `;
 
