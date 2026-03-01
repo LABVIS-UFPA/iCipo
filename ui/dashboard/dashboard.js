@@ -1586,10 +1586,16 @@ function bindEvents() {
   // --- Phases (UI stub) ---
   const btnShowAddPhase = document.getElementById('btnShowAddPhase');
   const phasePanel = document.getElementById('phasePanel');
+  const sideOverlay = document.getElementById('sideOverlay');
   const btnClosePhase = document.getElementById('btnClosePhase');
   const btnCancelPhase = document.getElementById('btnCancelPhase');
   const btnSavePhase = document.getElementById('btnSavePhase');
   const phasesList = document.getElementById('phasesList');
+
+  const phaseTitleInput = document.getElementById('phaseTitle');
+  const phaseDescInput = document.getElementById('phaseDesc');
+  const phaseCriteriaInput = document.getElementById('phaseCriteria');
+  const phaseError = document.getElementById('phaseError');
 
   function createPhaseCard({ title, desc, criteria }) {
     const el = document.createElement('div');
@@ -1602,29 +1608,64 @@ function bindEvents() {
     return el;
   }
 
-  if (btnShowAddPhase && phasePanel) {
-    btnShowAddPhase.addEventListener('click', () => {
-      phasePanel.classList.add('open');
-      phasePanel.setAttribute('aria-hidden', 'false');
-      setTimeout(() => document.getElementById('phaseTitle')?.focus(), 60);
-    });
+  function openPhasePanel(){
+    phasePanel.classList.add('open');
+    phasePanel.setAttribute('aria-hidden', 'false');
+    if(sideOverlay) { sideOverlay.classList.add('open'); sideOverlay.setAttribute('aria-hidden','false'); }
+    document.body.classList.add('no-scroll');
+    setTimeout(() => phaseTitleInput?.focus(), 60);
   }
-  if (btnClosePhase) btnClosePhase.addEventListener('click', () => { phasePanel.classList.remove('open'); phasePanel.setAttribute('aria-hidden','true'); });
-  if (btnCancelPhase) btnCancelPhase.addEventListener('click', () => { phasePanel.classList.remove('open'); phasePanel.setAttribute('aria-hidden','true'); });
+  function closePhasePanel(){
+    phasePanel.classList.remove('open');
+    phasePanel.setAttribute('aria-hidden','true');
+    if(sideOverlay) { sideOverlay.classList.remove('open'); sideOverlay.setAttribute('aria-hidden','true'); }
+    document.body.classList.remove('no-scroll');
+  }
+
+  if (btnShowAddPhase && phasePanel) {
+    btnShowAddPhase.addEventListener('click', openPhasePanel);
+  }
+  if (btnClosePhase) btnClosePhase.addEventListener('click', closePhasePanel);
+  if (btnCancelPhase) btnCancelPhase.addEventListener('click', closePhasePanel);
+  if (sideOverlay) sideOverlay.addEventListener('click', closePhasePanel);
+
+  // Disable save until required fields are filled
+  function updateSaveState(){
+    const title = (phaseTitleInput?.value || '').trim();
+    const desc = (phaseDescInput?.value || '').trim();
+    const crit = (phaseCriteriaInput?.value || '').trim();
+    const ok = title && desc && crit;
+    if(btnSavePhase) btnSavePhase.disabled = !ok;
+    if(ok && phaseError) phaseError.textContent = '';
+  }
+  // Init
+  [phaseTitleInput, phaseDescInput, phaseCriteriaInput].forEach(inp => {
+    if(!inp) return;
+    inp.addEventListener('input', updateSaveState);
+  });
 
   if (btnSavePhase) btnSavePhase.addEventListener('click', (e) => {
-    const title = (document.getElementById('phaseTitle')?.value || '').trim();
-    const desc = (document.getElementById('phaseDesc')?.value || '').trim();
-    const criteria = (document.getElementById('phaseCriteria')?.value || '').trim();
-    if (!title) return alert('Informe um título para a fase (apenas demo).');
+    const title = (phaseTitleInput?.value || '').trim();
+    const desc = (phaseDescInput?.value || '').trim();
+    const criteria = (phaseCriteriaInput?.value || '').trim();
+    const missing = [];
+    if(!title) missing.push('Título');
+    if(!desc) missing.push('Descrição');
+    if(!criteria) missing.push('Critérios');
+    if(missing.length){
+      if(phaseError) phaseError.textContent = 'Preencha: ' + missing.join(', ') + '.';
+      const first = !title ? phaseTitleInput : (!desc ? phaseDescInput : phaseCriteriaInput);
+      first?.focus();
+      return;
+    }
     const card = createPhaseCard({ title, desc, criteria });
     if (phasesList) phasesList.appendChild(card);
     // Clear & close (UI-only, no persistence)
-    document.getElementById('phaseTitle').value = '';
-    document.getElementById('phaseDesc').value = '';
-    document.getElementById('phaseCriteria').value = '';
-    phasePanel.classList.remove('open');
-    phasePanel.setAttribute('aria-hidden','true');
+    if(phaseTitleInput) phaseTitleInput.value = '';
+    if(phaseDescInput) phaseDescInput.value = '';
+    if(phaseCriteriaInput) phaseCriteriaInput.value = '';
+    updateSaveState();
+    closePhasePanel();
   });
 
 

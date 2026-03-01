@@ -373,6 +373,7 @@
         </div>
 
         <!-- SIDE PANEL: Add / Edit Phase (UI stub) -->
+        <div id="sideOverlay" class="sideOverlay" aria-hidden="true"></div>
         <div id="phasePanel" class="sidePanel" aria-hidden="true">
           <div class="sidePanelHeader">
             <div style="font-weight:900">Nova fase</div>
@@ -387,6 +388,7 @@
 
             <label class="visually-hidden" for="phaseCriteria">Critérios</label>
             <input id="phaseCriteria" class="input" placeholder="Critérios (texto livre)" />
+            <div id="phaseError" class="panelNotice danger" aria-live="polite" role="status"></div>
 
             <div style="display:flex;gap:8px;margin-top:12px">
               <button id="btnSavePhase" class="btn">Salvar (demo)</button>
