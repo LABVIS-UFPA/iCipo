@@ -391,6 +391,7 @@ body{
 .linkBtn:hover{color: rgba(234,240,255,0.92)}
 
 /* Panel-local notice that follows the floatingNotice visual style but sized for side panels */
+.panelNotice{
   background: rgba(11,15,23,0.92);
   border: 1px solid rgba(255,209,102,0.12);
   box-shadow: var(--shadow2);
