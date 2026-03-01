@@ -4,7 +4,7 @@ Plugin para Chrome que auxilia a marcação e organização de links durante o p
 ---
 
 ## Status atual (28/02/2026)
-- **Frontend**: interfaces principais implementadas (`ui/popup.html`, `ui/options.html`, `ui/projects.html`, `ui/dashboard.html`) com scripts de interação (`ui/*.js`).
+- **Frontend**: interfaces principais implementadas (`ui/popup/popup.html`, `ui/options/options.html`, `ui/projects/projects.html`, `ui/dashboard/dashboard.html`) com scripts de interação (`ui/*/*.js`).
 - **Extensão**: `background.js` e `content.js` presentes e tratam mensagens entre UI e background.
 - **Core**: lógica e modelos em [core/entities.mjs](core/entities.mjs) e [core/utils.mjs](core/utils.mjs).
 - **Infraestrutura**: persistência e comunicação em [infrastructure/storage.mjs](infrastructure/storage.mjs) e [infrastructure/socketManager.mjs](infrastructure/socketManager.mjs).
@@ -14,7 +14,7 @@ Plugin para Chrome que auxilia a marcação e organização de links durante o p
 ---
 
 ## Funcionalidades implementadas
-- UI para gerenciar projetos (criar, renomear, remover, definir projeto atual) — lógica frontend implementada em `ui/projects.js`.
+- UI para gerenciar projetos (criar, renomear, remover, definir projeto atual) — lógica frontend implementada em `ui/projects/projects.js`.
 - Popup e página de opções com navegação para Dashboard e Projetos.
 - Contrato de mensagens básico entre frontend e background (ex.: `projects.list`, `projects.create`, `projects.rename`, `projects.remove`, `projects.setCurrent`).
 
@@ -31,7 +31,7 @@ node server.mjs
   - Selecione a pasta do repositório.
 3. Testes rápidos:
   - Abra o popup da extensão e navegue para "Meus projetos";
-  - Abra `ui/projects.html` e realize operações (criar/renomear/remover/definir atual) observando o console da extensão;
+  - Abra `ui/projects/projects.html` e realize operações (criar/renomear/remover/definir atual) observando o console da extensão;
   - Verifique mensagens entre UI e `background.js` no DevTools da extensão.
 
 ---
@@ -44,7 +44,7 @@ node server.mjs
 - [core/utils.mjs](core/utils.mjs)
 - [infrastructure/storage.mjs](infrastructure/storage.mjs)
 - [infrastructure/socketManager.mjs](infrastructure/socketManager.mjs)
-- UI: [ui/projects.html](ui/projects.html), [ui/projects.js](ui/projects.js), [ui/options.html](ui/options.html), [ui/popup.html](ui/popup.html), [ui/dashboard.html](ui/dashboard.html)
+- UI: [ui/projects/projects.html](ui/projects/projects.html), [ui/projects/projects.js](ui/projects/projects.js), [ui/options/options.html](ui/options/options.html), [ui/popup/popup.html](ui/popup/popup.html), [ui/dashboard/dashboard.html](ui/dashboard/dashboard.html)
 
 ---
 

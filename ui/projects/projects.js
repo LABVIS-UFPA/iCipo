@@ -1,6 +1,6 @@
-import { storage } from '../infrastructure/storage.mjs';
-import { slugify } from '../core/utils.mjs';
-import { Project } from '../core/entities.mjs';
+import { storage } from '../../infrastructure/storage.mjs';
+import { slugify } from '../../core/utils.mjs';
+import { Project } from '../../core/entities.mjs';
 
 /* ==========================================================================
    projects.js - Gerenciamento de Projetos SVAT
@@ -230,7 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.addEventListener('click', async () => {
       try {
         await storage.openProject(project.id);
-        window.location.href = 'dashboard.html';
+        window.location.href = '../dashboard/dashboard.html';
       } catch (e) {
         console.warn('openProject failed', e);
         alert('Falha ao abrir o projeto. Veja console.');

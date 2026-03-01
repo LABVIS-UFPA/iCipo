@@ -1,5 +1,5 @@
-import {fmtDate, normalizeStr, jaccard} from '../core/utils.mjs';
-import { storage } from '../infrastructure/storage.mjs';
+import {fmtDate, normalizeStr, jaccard} from '../../core/utils.mjs';
+import { storage } from '../../infrastructure/storage.mjs';
 
 let state = null;
 // Incremental token to guard against out-of-order async renders
@@ -1428,10 +1428,10 @@ function bindEvents() {
   const btnProjects = document.getElementById("btnProjects");
   if (btnProjects) btnProjects.addEventListener("click", () => {
     
-    // Go to the dedicated Projects page (ui/projects.html).
-    // Note: we intentionally *don't* open options/config here.
+    // Go to the dedicated Projects page (ui/projects/projects.html).
+    // Note: we intentionally *don't* open options/config aqui.
     try {
-      window.location.href = "projects.html";
+      window.location.href = "../projects/projects.html";
     } catch {
       alert("Não foi possível abrir a página de Projetos.");
     }

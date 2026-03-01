@@ -1,7 +1,7 @@
 import { checkArray, slugify, mapToJSON } from "./utils.mjs";
 
 class Project {
-  // Default project schema (matches ui/projects.html form)
+  // Default project schema (matches ui/projects/projects.html form)
   static defaults = {
     name: "",
     description: "",

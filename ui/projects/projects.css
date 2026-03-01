@@ -1,4 +1,4 @@
-/* Estilos extraídos de projects.html */
+/* Estilos extraídos de ui/projects/projects.html */
 .panelHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 .panelHeader .headerActions{display:flex;align-items:flex-end;gap:8px;height: 100%;}
 .btn.createGreen{background:#2ea44f;color:white;border:none;padding:8px 12px;border-radius:6px;min-width: 120px;}
@@ -20,7 +20,7 @@
 .sidenav::-webkit-scrollbar-thumb { border-radius: 4px; background: #00000069; }
 .sidenav::-webkit-scrollbar-thumb:hover { background: var(--btnHover); }
 
-/* Regras para substituir estilos inline em projects.html */
+/* Regras para substituir estilos inline em ui/projects/projects.html */
 .workarea.noLeftMargin{ margin-left: 0; }
 .panel.fullHeight{ height: 100%; }
 .alignCenter{ display:flex; align-items:center; }

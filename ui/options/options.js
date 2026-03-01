@@ -1,4 +1,4 @@
-import { storage } from '../infrastructure/storage.mjs';
+import { storage } from '../../infrastructure/storage.mjs';
 
 document.addEventListener("DOMContentLoaded", () => {
   const categoryNameInput = document.getElementById("categoryName");
@@ -381,6 +381,12 @@ document.addEventListener("DOMContentLoaded", () => {
   function activate(targetId) {
     panels.forEach((p) => p.classList.toggle("active", p.id === targetId));
     buttons.forEach((b) => b.classList.toggle("active", b.dataset.target === targetId));
+    try {
+      if (history && history.replaceState) history.replaceState(null, '', `#${targetId}`);
+      else location.hash = `#${targetId}`;
+    } catch (e) {
+      try { location.hash = `#${targetId}`; } catch (e) {}
+    }
   }
 
   buttons.forEach((btn) => {
@@ -390,6 +396,11 @@ document.addEventListener("DOMContentLoaded", () => {
   if (location.hash) {
     const id = location.hash.replace("#", "");
     if (panels.some((p) => p.id === id)) activate(id);
+  }
+
+  // Ensure at least one panel is active by default (fallback)
+  if (!panels.some((p) => p.classList.contains('active'))) {
+    activate('panel-backup');
   }
 
   // =====================
