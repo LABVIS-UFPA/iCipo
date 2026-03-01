@@ -1595,16 +1595,62 @@ function bindEvents() {
   const phaseTitleInput = document.getElementById('phaseTitle');
   const phaseDescInput = document.getElementById('phaseDesc');
   const phaseCriteriaInput = document.getElementById('phaseCriteria');
-  const phaseError = document.getElementById('phaseError');
+  const phaseTitleError = document.getElementById('phaseTitleError');
+  const phaseDescError = document.getElementById('phaseDescError');
+  const phaseCriteriaError = document.getElementById('phaseCriteriaError');
 
   function createPhaseCard({ title, desc, criteria }) {
     const el = document.createElement('div');
     el.className = 'phaseCard';
+
+    // derive some demo values if not provided
+    const safeTitle = escapeHtml(title || '(sem título)');
+    const safeDesc = escapeHtml(desc || '');
+    const safeCriteria = (criteria || '').trim();
+    const criteriaCount = safeCriteria ? safeCriteria.split(/\n|,|;/).map(s=>s.trim()).filter(Boolean).length : 0;
+    // allow optional extra fields in object (label, categories, stats)
+    const label = escapeHtml((arguments[0] && arguments[0].label) || (safeTitle.toLowerCase().replace(/\s+/g,'-')) || 'sem-label');
+    const categories = (arguments[0] && arguments[0].categories) || [];
+    const stats = (arguments[0] && arguments[0].stats) || { inherited:0, added:0, selected:0, removed:0, utilization:0 };
+
     el.innerHTML = `
-      <div class="phaseTitle">${escapeHtml(title || '(sem título)')}</div>
-      <div class="phaseDesc">${escapeHtml(desc || '')}</div>
-      <div class="phaseCriteria">${escapeHtml(criteria || '')}</div>
+      <div class="phaseCardHeader">
+        <div class="statusDot" title="Ativa"></div>
+        <div class="phaseHeadText">
+          <div class="phaseTitle">${safeTitle}</div>
+          <div class="phaseLabel">rotulo: ${label}</div>
+        </div>
+      </div>
+      <div class="phaseCardBody">
+        <div class="phaseDesc">${safeDesc}</div>
+        <div class="phaseMeta">
+          <div class="metaBlock categories">
+            <div class="metaTitle">📂 Categorias:</div>
+            <div class="tags">${categories.map(c=>`<span class="tag">${escapeHtml(c)}</span>`).join(' ')}</div>
+          </div>
+          <div class="metaBlock criteria">
+            <div class="metaTitle">📋 Critérios:</div>
+            <div class="metaValue">${criteriaCount} aplicados</div>
+          </div>
+        </div>
+
+        <div class="papersSection">
+          <div class="papersTitle">📊 Papers</div>
+          <div class="papersGrid">
+            <div><span class="muted">Herdados:</span> <strong>${stats.inherited}</strong></div>
+            <div><span class="muted">Novos:</span> <strong>${stats.added}</strong></div>
+            <div><span class="muted">Selecionados:</span> <strong>${stats.selected}</strong></div>
+            <div><span class="muted">Removidos:</span> <strong>${stats.removed}</strong></div>
+          </div>
+          <div class="papersUtil">Aproveitamento: <strong>${stats.utilization}%</strong></div>
+        </div>
+      </div>
+      <div class="phaseCardFooter">
+        <button class="btn ghost small">Ver Detalhes</button>
+        <button class="btn small">Editar</button>
+      </div>
     `;
+
     return el;
   }
 
@@ -1631,31 +1677,47 @@ function bindEvents() {
 
   // Disable save until required fields are filled
   function updateSaveState(){
-    const title = (phaseTitleInput?.value || '').trim();
-    const desc = (phaseDescInput?.value || '').trim();
-    const crit = (phaseCriteriaInput?.value || '').trim();
-    const ok = title && desc && crit;
-    if(btnSavePhase) btnSavePhase.disabled = !ok;
-    if(ok && phaseError) phaseError.textContent = '';
+    const ok = (phaseTitleInput?.value || '').trim() && (phaseDescInput?.value || '').trim() && (phaseCriteriaInput?.value || '').trim();
+    if(btnSavePhase) {
+      if(ok) btnSavePhase.classList.add('ready'); else btnSavePhase.classList.remove('ready');
+    }
   }
   // Init
+  // keep button enabled so user can attempt save and see validation messages
+  updateSaveState();
   [phaseTitleInput, phaseDescInput, phaseCriteriaInput].forEach(inp => {
     if(!inp) return;
-    inp.addEventListener('input', updateSaveState);
+    inp.addEventListener('input', (e) => {
+      updateSaveState();
+      // clear inline error for this field when user types
+      if(!e?.target) return;
+      const id = e.target.id;
+      if(id === 'phaseTitle' && phaseTitleError){ phaseTitleError.classList.remove('visible'); phaseTitleError.textContent=''; }
+      if(id === 'phaseDesc' && phaseDescError){ phaseDescError.classList.remove('visible'); phaseDescError.textContent=''; }
+      if(id === 'phaseCriteria' && phaseCriteriaError){ phaseCriteriaError.classList.remove('visible'); phaseCriteriaError.textContent=''; }
+    });
   });
-
   if (btnSavePhase) btnSavePhase.addEventListener('click', (e) => {
     const title = (phaseTitleInput?.value || '').trim();
     const desc = (phaseDescInput?.value || '').trim();
     const criteria = (phaseCriteriaInput?.value || '').trim();
-    const missing = [];
-    if(!title) missing.push('Título');
-    if(!desc) missing.push('Descrição');
-    if(!criteria) missing.push('Critérios');
-    if(missing.length){
-      if(phaseError) phaseError.textContent = 'Preencha: ' + missing.join(', ') + '.';
-      const first = !title ? phaseTitleInput : (!desc ? phaseDescInput : phaseCriteriaInput);
-      first?.focus();
+    // clear previous errors
+    if(phaseTitleError){ phaseTitleError.classList.remove('visible'); phaseTitleError.textContent=''; }
+    if(phaseDescError){ phaseDescError.classList.remove('visible'); phaseDescError.textContent=''; }
+    if(phaseCriteriaError){ phaseCriteriaError.classList.remove('visible'); phaseCriteriaError.textContent=''; }
+    // validate and show inline messages
+    const emptyFields = [];
+    if(!title) emptyFields.push('title');
+    if(!desc) emptyFields.push('desc');
+    if(!criteria) emptyFields.push('criteria');
+    if(emptyFields.length){
+      if(emptyFields.includes('title') && phaseTitleError){ phaseTitleError.textContent = 'Preencha o título da fase.'; phaseTitleError.classList.add('visible'); }
+      if(emptyFields.includes('desc') && phaseDescError){ phaseDescError.textContent = 'Preencha a descrição da fase.'; phaseDescError.classList.add('visible'); }
+      if(emptyFields.includes('criteria') && phaseCriteriaError){ phaseCriteriaError.textContent = 'Preencha os critérios da fase.'; phaseCriteriaError.classList.add('visible'); }
+      // focus first empty field
+      if(emptyFields[0] === 'title') phaseTitleInput?.focus();
+      else if(emptyFields[0] === 'desc') phaseDescInput?.focus();
+      else if(emptyFields[0] === 'criteria') phaseCriteriaInput?.focus();
       return;
     }
     const card = createPhaseCard({ title, desc, criteria });

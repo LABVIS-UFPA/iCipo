@@ -382,13 +382,15 @@
           <div class="sidePanelBody">
             <label class="visually-hidden" for="phaseTitle">Título</label>
             <input id="phaseTitle" class="input" placeholder="Título da fase" />
+            <div id="phaseTitleError" class="fieldError" aria-live="polite"></div>
 
             <label class="visually-hidden" for="phaseDesc">Descrição</label>
             <textarea id="phaseDesc" class="input" style="min-height:120px" placeholder="Descrição da fase"></textarea>
+            <div id="phaseDescError" class="fieldError" aria-live="polite"></div>
 
             <label class="visually-hidden" for="phaseCriteria">Critérios</label>
             <input id="phaseCriteria" class="input" placeholder="Critérios (texto livre)" />
-            <div id="phaseError" class="panelNotice danger" aria-live="polite" role="status"></div>
+            <div id="phaseCriteriaError" class="fieldError" aria-live="polite"></div>
 
             <div style="display:flex;gap:8px;margin-top:12px">
               <button id="btnSavePhase" class="btn">Salvar (demo)</button>
