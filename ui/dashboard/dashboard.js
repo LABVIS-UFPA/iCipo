@@ -1595,70 +1595,82 @@ function bindEvents() {
   const phaseTitleInput = document.getElementById('phaseTitle');
   const phaseDescInput = document.getElementById('phaseDesc');
   const phaseCriteriaInput = document.getElementById('phaseCriteria');
+  const phaseCategoriesInput = document.getElementById('phaseCategories');
+  const btnDeletePhase = document.getElementById('btnDeletePhase');
   const phaseTitleError = document.getElementById('phaseTitleError');
   const phaseDescError = document.getElementById('phaseDescError');
   const phaseCriteriaError = document.getElementById('phaseCriteriaError');
+  let phaseEditingCard = null; // when set, save updates this card instead of creating new
 
-  function createPhaseCard({ title, desc, criteria }) {
+  function createPhaseCard({ title, desc, criteria, categories, stats }) {
     const el = document.createElement('div');
     el.className = 'phaseCard';
 
-    // derive some demo values if not provided
     const safeTitle = escapeHtml(title || '(sem título)');
-    const safeDesc = escapeHtml(desc || '');
-    const safeCriteria = (criteria || '').trim();
-    const criteriaCount = safeCriteria ? safeCriteria.split(/\n|,|;/).map(s=>s.trim()).filter(Boolean).length : 0;
-    // allow optional extra fields in object (label, categories, stats)
-    const label = escapeHtml((arguments[0] && arguments[0].label) || (safeTitle.toLowerCase().replace(/\s+/g,'-')) || 'sem-label');
-    const categories = (arguments[0] && arguments[0].categories) || [];
-    const stats = (arguments[0] && arguments[0].stats) || { inherited:0, added:0, selected:0, removed:0, utilization:0 };
+    const s = stats || { inherited:0, added:0, selected:0, removed:0, utilization:0 };
 
     el.innerHTML = `
       <div class="phaseCardHeader">
         <div class="statusDot" title="Ativa"></div>
         <div class="phaseHeadText">
           <div class="phaseTitle">${safeTitle}</div>
-          <div class="phaseLabel">rotulo: ${label}</div>
         </div>
       </div>
       <div class="phaseCardBody">
-        <div class="phaseDesc">${safeDesc}</div>
-        <div class="phaseMeta">
-          <div class="metaBlock categories">
-            <div class="metaTitle">📂 Categorias:</div>
-            <div class="tags">${categories.map(c=>`<span class="tag">${escapeHtml(c)}</span>`).join(' ')}</div>
-          </div>
-          <div class="metaBlock criteria">
-            <div class="metaTitle">📋 Critérios:</div>
-            <div class="metaValue">${criteriaCount} aplicados</div>
-          </div>
-        </div>
-
         <div class="papersSection">
           <div class="papersTitle">📊 Papers</div>
           <div class="papersGrid">
-            <div><span class="muted">Herdados:</span> <strong>${stats.inherited}</strong></div>
-            <div><span class="muted">Novos:</span> <strong>${stats.added}</strong></div>
-            <div><span class="muted">Selecionados:</span> <strong>${stats.selected}</strong></div>
-            <div><span class="muted">Removidos:</span> <strong>${stats.removed}</strong></div>
+            <div><span class="muted">Herdados:</span> <strong>${s.inherited}</strong></div>
+            <div><span class="muted">Novos:</span> <strong>${s.added}</strong></div>
+            <div><span class="muted">Selecionados:</span> <strong>${s.selected}</strong></div>
+            <div><span class="muted">Removidos:</span> <strong>${s.removed}</strong></div>
           </div>
-          <div class="papersUtil">Aproveitamento: <strong>${stats.utilization}%</strong></div>
+          <div class="papersUtil">Aproveitamento: <strong>${s.utilization}%</strong></div>
         </div>
       </div>
       <div class="phaseCardFooter">
-        <button class="btn ghost small">Ver Detalhes</button>
-        <button class="btn small">Editar</button>
+        <span class="activeLabel pill" aria-hidden="true">Ativo</span>
+        <button class="btn small" data-action="edit">Editar</button>
       </div>
     `;
+
+    // wire actions
+    const btnEdit = el.querySelector('button[data-action="edit"]');
+    if(btnEdit) btnEdit.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      // populate fields for editing and open panel in edit mode
+      if(phaseTitleInput) phaseTitleInput.value = title || '';
+      if(phaseDescInput) phaseDescInput.value = desc || '';
+      if(phaseCriteriaInput) phaseCriteriaInput.value = criteria || '';
+      if(phaseCategoriesInput) phaseCategoriesInput.value = (categories || []).join(', ');
+      phaseEditingCard = el;
+      updateSaveState();
+      openPhasePanel(true);
+    });
+
+    // clicking the card marks it active (except when clicking buttons)
+    el.addEventListener('click', (ev) => {
+      // ignore clicks coming from buttons inside the card
+      if(ev.target.closest('button')) return;
+      if(phasesList){
+        Array.from(phasesList.querySelectorAll('.phaseCard.active')).forEach(c => c.classList.remove('active'));
+      }
+      el.classList.add('active');
+    });
 
     return el;
   }
 
-  function openPhasePanel(){
+  function openPhasePanel(isEditing){
     phasePanel.classList.add('open');
     phasePanel.setAttribute('aria-hidden', 'false');
     if(sideOverlay) { sideOverlay.classList.add('open'); sideOverlay.setAttribute('aria-hidden','false'); }
     document.body.classList.add('no-scroll');
+    // show delete button when editing an existing card
+    if(btnDeletePhase){
+      if(isEditing) btnDeletePhase.style.display = '';
+      else btnDeletePhase.style.display = 'none';
+    }
     setTimeout(() => phaseTitleInput?.focus(), 60);
   }
   function closePhasePanel(){
@@ -1666,10 +1678,25 @@ function bindEvents() {
     phasePanel.setAttribute('aria-hidden','true');
     if(sideOverlay) { sideOverlay.classList.remove('open'); sideOverlay.setAttribute('aria-hidden','true'); }
     document.body.classList.remove('no-scroll');
+    // clear editing state and any inline errors when closing/cancelling
+    phaseEditingCard = null;
+    if(phaseTitleError){ phaseTitleError.classList.remove('visible'); phaseTitleError.textContent=''; }
+    if(phaseDescError){ phaseDescError.classList.remove('visible'); phaseDescError.textContent=''; }
+    if(phaseCriteriaError){ phaseCriteriaError.classList.remove('visible'); phaseCriteriaError.textContent=''; }
+    if(btnDeletePhase) btnDeletePhase.style.display = 'none';
   }
 
   if (btnShowAddPhase && phasePanel) {
-    btnShowAddPhase.addEventListener('click', openPhasePanel);
+    btnShowAddPhase.addEventListener('click', () => {
+      // ensure fresh empty form when adding
+      phaseEditingCard = null;
+      if(phaseTitleInput) phaseTitleInput.value = '';
+      if(phaseDescInput) phaseDescInput.value = '';
+      if(phaseCriteriaInput) phaseCriteriaInput.value = '';
+      if(phaseCategoriesInput) phaseCategoriesInput.value = '';
+      updateSaveState();
+      openPhasePanel(false);
+    });
   }
   if (btnClosePhase) btnClosePhase.addEventListener('click', closePhasePanel);
   if (btnCancelPhase) btnCancelPhase.addEventListener('click', closePhasePanel);
@@ -1720,13 +1747,39 @@ function bindEvents() {
       else if(emptyFields[0] === 'criteria') phaseCriteriaInput?.focus();
       return;
     }
-    const card = createPhaseCard({ title, desc, criteria });
-    if (phasesList) phasesList.appendChild(card);
+    // parse categories (comma separated) into array
+    const rawCats = (phaseCategoriesInput?.value || '').trim();
+    const categories = rawCats ? rawCats.split(',').map(s=>s.trim()).filter(Boolean) : [];
+
+    const cardData = { title, desc, criteria, categories };
+    if(phaseEditingCard){
+      // replace existing card with updated one
+      const newCard = createPhaseCard(cardData);
+      if(phasesList && phaseEditingCard.parentNode === phasesList){
+        phasesList.replaceChild(newCard, phaseEditingCard);
+      }
+      phaseEditingCard = null;
+    } else {
+      const card = createPhaseCard(cardData);
+      if (phasesList) phasesList.appendChild(card);
+    }
     // Clear & close (UI-only, no persistence)
     if(phaseTitleInput) phaseTitleInput.value = '';
     if(phaseDescInput) phaseDescInput.value = '';
     if(phaseCriteriaInput) phaseCriteriaInput.value = '';
+    if(phaseCategoriesInput) phaseCategoriesInput.value = '';
     updateSaveState();
+    closePhasePanel();
+  });
+
+  // Delete handler (UI-only)
+  if(btnDeletePhase) btnDeletePhase.addEventListener('click', () => {
+    if(!phaseEditingCard) return;
+    if(!confirm('Excluir esta fase?')) return;
+    if(phasesList && phaseEditingCard.parentNode === phasesList){
+      phasesList.removeChild(phaseEditingCard);
+    }
+    phaseEditingCard = null;
     closePhasePanel();
   });
 
