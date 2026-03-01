@@ -634,6 +634,62 @@ svg .axis line, svg .axis path{stroke: rgba(234,240,255,0.18)}
 .phaseCard.active .activeLabel{display:inline-flex}
 .activeLabel.pill{background: rgba(59,225,155,0.08);border:1px solid rgba(59,225,155,0.12);color:var(--good);font-weight:800;padding:6px 8px;border-radius:999px;font-size:12px}
 
+/* Phase categories (checkbox chips) inside side panel */
+#phaseCategories{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  padding:8px 6px;
+  margin-top:6px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));
+  border-radius: 10px;
+  border:1px solid rgba(255,255,255,0.03);
+  max-height:160px;
+  overflow:auto;
+}
+.phaseCategoryItem{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 10px;
+  border-radius:999px;
+  background: rgba(255,255,255,0.02);
+  border:1px solid rgba(255,255,255,0.03);
+  cursor:pointer;
+  transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+  user-select:none;
+  font-weight:800;
+  font-size:13px;
+  color: var(--text);
+}
+.phaseCategoryItem:hover{transform: translateY(-2px); box-shadow: 0 8px 18px rgba(0,0,0,0.28)}
+.phaseCategoryItem input[type=checkbox]{
+  -webkit-appearance: none;
+  appearance: none;
+  width:18px;height:18px;border-radius:6px;border:1px solid rgba(255,255,255,0.08);
+  background: transparent;display:inline-block;flex:0 0 auto;position:relative;cursor:pointer;
+}
+.phaseCategoryItem input[type=checkbox]:after{
+  content:'';position:absolute;left:3px;top:3px;width:10px;height:10px;border-radius:4px;opacity:0;transform:scale(0.6);transition:opacity .12s ease, transform .12s ease;
+}
+.phaseCategoryItem input[type=checkbox]:checked{
+  border-color: transparent; background: linear-gradient(135deg,var(--accent),var(--accent2));
+}
+.phaseCategoryItem input[type=checkbox]:checked:after{opacity:1;transform:scale(1);background: rgba(255,255,255,0.95)}
+.phaseCategoryItem span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}
+
+/* For many categories, show two-column grid on wider panels */
+@media (min-width:700px){
+  #phaseCategories{gap:10px}
+  .phaseCategoryItem{padding:8px 12px;font-size:13px}
+}
+
+/* Phase label status styles */
+.phaseLabelStatus{display:inline-block;padding:6px 10px;border-radius:999px;font-weight:900;font-size:13px}
+.phaseLabelStatus.done{background: rgba(59,225,155,0.10);color: var(--good);border:1px solid rgba(59,225,155,0.12)}
+.phaseLabelStatus.pending{background: rgba(255,209,102,0.08);color: var(--warn);border:1px solid rgba(255,209,102,0.10)}
+
+
 /* Side panel sliding from right (used by phases add/edit) */
 .sidePanel{
   position:fixed;

@@ -395,7 +395,12 @@
             <!-- rótulo removido -->
 
             <label class="visually-hidden" for="phaseCategories">Categorias</label>
-            <input id="phaseCategories" class="input" placeholder="Categorias (separadas por vírgula)" />
+            <div id="phaseCategories" class="categoriesList" aria-live="polite"></div>
+
+            <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+              <span class="muted">Rótulo:</span>
+              <button id="btnTogglePhaseStatus" class="btn ghost small" data-status="pending">Em análise</button>
+            </div>
 
             <div style="display:flex;gap:8px;margin-top:12px">
               <button id="btnSavePhase" class="btn">Salvar (demo)</button>

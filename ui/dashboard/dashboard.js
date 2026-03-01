@@ -1596,11 +1596,68 @@ function bindEvents() {
   const phaseDescInput = document.getElementById('phaseDesc');
   const phaseCriteriaInput = document.getElementById('phaseCriteria');
   const phaseCategoriesInput = document.getElementById('phaseCategories');
+  const btnTogglePhaseStatus = document.getElementById('btnTogglePhaseStatus');
   const btnDeletePhase = document.getElementById('btnDeletePhase');
   const phaseTitleError = document.getElementById('phaseTitleError');
   const phaseDescError = document.getElementById('phaseDescError');
   const phaseCriteriaError = document.getElementById('phaseCriteriaError');
   let phaseEditingCard = null; // when set, save updates this card instead of creating new
+  let phaseLabelStatus = 'pending'; // 'pending' | 'done'
+
+  function updateToggleButtonUI(){
+    if(!btnTogglePhaseStatus) return;
+    const s = phaseLabelStatus === 'done' ? 'done' : 'pending';
+    btnTogglePhaseStatus.dataset.status = s;
+    btnTogglePhaseStatus.textContent = s === 'done' ? 'Concluída' : 'Em análise';
+    btnTogglePhaseStatus.classList.toggle('ghost', s === 'pending');
+  }
+
+  if(btnTogglePhaseStatus){
+    btnTogglePhaseStatus.addEventListener('click', (e) => {
+      e.preventDefault();
+      phaseLabelStatus = (phaseLabelStatus === 'done') ? 'pending' : 'done';
+      updateToggleButtonUI();
+    });
+  }
+
+  // Render available categories as checkboxes inside the phase edit panel.
+  function renderPhaseCategories(selected = []){
+    if(!phaseCategoriesInput) return;
+    phaseCategoriesInput.innerHTML = '';
+    storage.get('categories').then((data) => {
+      const cats = (data && data.categories) ? data.categories : {};
+      const names = Object.keys(cats).sort((a,b)=>a.localeCompare(b));
+      for (const name of names){
+        const id = `phase_cat_${cssSafeId(name)}`;
+        const wrap = document.createElement('label');
+        wrap.className = 'phaseCategoryItem';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = name;
+        cb.id = id;
+        if(Array.isArray(selected) && selected.includes(name)) cb.checked = true;
+        // color pill (left)
+        const pill = document.createElement('span');
+        pill.className = 'catPill';
+        pill.style.width = '12px';
+        pill.style.height = '12px';
+        pill.style.borderRadius = '4px';
+        pill.style.flex = '0 0 auto';
+        pill.style.background = cats[name] || 'transparent';
+        pill.style.border = '1px solid rgba(0,0,0,0.12)';
+        const txt = document.createElement('span');
+        txt.textContent = name;
+        wrap.appendChild(cb);
+        wrap.appendChild(pill);
+        wrap.appendChild(txt);
+        phaseCategoriesInput.appendChild(wrap);
+      }
+    }).catch(() => { /* ignore */ });
+  }
+
+  function cssSafeId(s){
+    return String(s||'').replace(/[^a-z0-9_-]+/ig,'_');
+  }
 
   function createPhaseCard({ title, desc, criteria, categories, stats }) {
     const el = document.createElement('div');
@@ -1608,6 +1665,7 @@ function bindEvents() {
 
     const safeTitle = escapeHtml(title || '(sem título)');
     const s = stats || { inherited:0, added:0, selected:0, removed:0, utilization:0 };
+    const labelStatus = (arguments[0] && arguments[0].labelStatus) ? arguments[0].labelStatus : (s.utilization >= 50 ? 'done' : 'pending');
 
     el.innerHTML = `
       <div class="phaseCardHeader">
@@ -1625,7 +1683,7 @@ function bindEvents() {
             <div><span class="muted">Selecionados:</span> <strong>${s.selected}</strong></div>
             <div><span class="muted">Removidos:</span> <strong>${s.removed}</strong></div>
           </div>
-          <div class="papersUtil">Aproveitamento: <strong>${s.utilization}%</strong></div>
+          <div class="papersUtil">Rótulo: <strong class="phaseLabelStatus ${labelStatus === 'done' ? 'done' : 'pending'}">${labelStatus === 'done' ? 'Concluída' : 'Em análise'}</strong></div>
         </div>
       </div>
       <div class="phaseCardFooter">
@@ -1644,11 +1702,17 @@ function bindEvents() {
       if(phaseTitleInput) phaseTitleInput.value = title || '';
       if(phaseDescInput) phaseDescInput.value = desc || '';
       if(phaseCriteriaInput) phaseCriteriaInput.value = criteria || '';
-      if(phaseCategoriesInput) phaseCategoriesInput.value = (categories || []).join(', ');
+      if(phaseCategoriesInput) renderPhaseCategories(categories || []);
+      // set the editing status from the card (fallback to computed labelStatus)
+      phaseLabelStatus = el.dataset.labelStatus || labelStatus || 'pending';
+      updateToggleButtonUI();
       phaseEditingCard = el;
       updateSaveState();
       openPhasePanel(true);
     });
+
+    // store status on the element for later editing
+    el.dataset.labelStatus = labelStatus;
 
     // clicking the card marks it active (except when clicking buttons)
     el.addEventListener('click', (ev) => {
@@ -1682,6 +1746,9 @@ function bindEvents() {
     document.body.classList.remove('no-scroll');
     // clear editing state and any inline errors when closing/cancelling
     phaseEditingCard = null;
+    if(phaseCategoriesInput) phaseCategoriesInput.innerHTML = '';
+    phaseLabelStatus = 'pending';
+    updateToggleButtonUI();
     if(phaseTitleError){ phaseTitleError.classList.remove('visible'); phaseTitleError.textContent=''; }
     if(phaseDescError){ phaseDescError.classList.remove('visible'); phaseDescError.textContent=''; }
     if(phaseCriteriaError){ phaseCriteriaError.classList.remove('visible'); phaseCriteriaError.textContent=''; }
@@ -1695,7 +1762,9 @@ function bindEvents() {
       if(phaseTitleInput) phaseTitleInput.value = '';
       if(phaseDescInput) phaseDescInput.value = '';
       if(phaseCriteriaInput) phaseCriteriaInput.value = '';
-      if(phaseCategoriesInput) phaseCategoriesInput.value = '';
+      if(phaseCategoriesInput) renderPhaseCategories([]);
+      phaseLabelStatus = 'pending';
+      updateToggleButtonUI();
       updateSaveState();
       openPhasePanel(false);
     });
@@ -1749,11 +1818,14 @@ function bindEvents() {
       else if(emptyFields[0] === 'criteria') phaseCriteriaInput?.focus();
       return;
     }
-    // parse categories (comma separated) into array
-    const rawCats = (phaseCategoriesInput?.value || '').trim();
-    const categories = rawCats ? rawCats.split(',').map(s=>s.trim()).filter(Boolean) : [];
+    // parse categories from checkboxes into array
+    let categories = [];
+    if(phaseCategoriesInput){
+      const checked = Array.from(phaseCategoriesInput.querySelectorAll('input[type=checkbox]:checked'));
+      categories = checked.map(c => (c.value || '').trim()).filter(Boolean);
+    }
 
-    const cardData = { title, desc, criteria, categories };
+    const cardData = { title, desc, criteria, categories, labelStatus: phaseLabelStatus };
     if(phaseEditingCard){
       // replace existing card with updated one
       const newCard = createPhaseCard(cardData);
@@ -1769,7 +1841,9 @@ function bindEvents() {
     if(phaseTitleInput) phaseTitleInput.value = '';
     if(phaseDescInput) phaseDescInput.value = '';
     if(phaseCriteriaInput) phaseCriteriaInput.value = '';
-    if(phaseCategoriesInput) phaseCategoriesInput.value = '';
+    if(phaseCategoriesInput) phaseCategoriesInput.innerHTML = '';
+    phaseLabelStatus = 'pending';
+    updateToggleButtonUI();
     updateSaveState();
     closePhasePanel();
   });
@@ -1782,6 +1856,9 @@ function bindEvents() {
       phasesList.removeChild(phaseEditingCard);
     }
     phaseEditingCard = null;
+    if(phaseCategoriesInput) phaseCategoriesInput.innerHTML = '';
+    phaseLabelStatus = 'pending';
+    updateToggleButtonUI();
     closePhasePanel();
   });
 
