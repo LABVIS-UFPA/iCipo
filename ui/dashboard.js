@@ -134,6 +134,7 @@ function loadCategories() {
       loadCategories();
     }).catch((e) => {
       console.warn('saveProject failed', e);
+      alert("Não foi possível salvar as categorias. As alterações não foram aplicadas.");
       loadCategories();
     });
   }

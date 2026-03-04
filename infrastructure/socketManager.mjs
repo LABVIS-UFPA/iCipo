@@ -1,12 +1,11 @@
-// Variável global para o supressor saber qual URL ignorar
-let currentConnectingUrl = "";
+
 
 // Registra o ouvinte de erro APENAS UMA VEZ na inicialização do script (Regra do Manifest V3)
 if (typeof globalThis !== 'undefined' && typeof globalThis.addEventListener === 'function') {
   globalThis.addEventListener('error', (ev) => {
     try {
       const msg = ev && (ev.message || (ev.error && ev.error.message)) || '';
-      if (typeof msg === 'string' && msg.includes('WebSocket connection to') && currentConnectingUrl && msg.includes(currentConnectingUrl)) {
+      if (typeof msg === 'string' && msg.includes('WebSocket connection to')) {
         ev.stopImmediatePropagation && ev.stopImmediatePropagation();
         ev.preventDefault && ev.preventDefault();
       }
@@ -27,6 +26,8 @@ class WebsocketManager {
     this.tryAutoConnect();
     this.autoConnectionTime = 100;
     this.responseHandlers = {};
+    // Variável global para o supressor saber qual URL ignorar
+    this.currentConnectingUrl = "";
   }
 
   buildWsUrl(url, port) {
@@ -84,7 +85,7 @@ class WebsocketManager {
     this._closedFinalized = false;
 
     // Atualiza a URL global para o nosso supressor silenciar os erros no console
-    currentConnectingUrl = fullUrl;
+    this.currentConnectingUrl = fullUrl;
 
     
     try {
@@ -94,6 +95,7 @@ class WebsocketManager {
       this.appendLog("Erro ao criar WebSocket: " + (e?.message || e));
       this.socket = null;
       this._closedFinalized = true;
+      this.currentConnectingUrl = ""; // Limpa a URL global em caso de falha na criação do WebSocket
       return;
     }
 
@@ -101,7 +103,7 @@ class WebsocketManager {
       this.setStatus("Conectado");
       this.appendLog("✅ Conectado");
       this.autoConnectionTime = 100;
-      currentConnectingUrl = ""; // Limpa a URL global para não silenciar erros de conexões futuras
+      this.currentConnectingUrl = ""; // Limpa a URL global para não silenciar erros de conexões futuras
       
       // Trigger all registered open listeners
       this.onOpenListeners.forEach(callback => {
@@ -129,12 +131,12 @@ class WebsocketManager {
     this.socket.onerror = () => {
       this.setStatus("Erro");
       this.appendLog("❌ Erro na conexão");
-      currentConnectingUrl = ""; // Limpa a URL global para não silenciar erros de conexões futuras
+      this.currentConnectingUrl = ""; // Limpa a URL global para não silenciar erros de conexões futuras
     };
 
     this.socket.onclose = () => {
       this.finalizeClose("🔌 Conexão encerrada", "Desconectado");
-      currentConnectingUrl = ""; // Limpa a URL global para não silenciar erros de conexões futuras
+      this.currentConnectingUrl = ""; // Limpa a URL global para não silenciar erros de conexões futuras
       setTimeout(() => this.tryAutoConnect(), this.autoConnectionTime);
       this.autoConnectionTime *= 2;
       if (this.autoConnectionTime > 60000) this.autoConnectionTime = 60000;
