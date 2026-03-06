@@ -7,10 +7,9 @@ class Project {
     description: "",
     researchers: [],
     objective: "",
-    criteria: "",
-    categorias: [],
-    criterios: [],
-    fases: [],
+    categories: [],
+    criteria: [],
+    phases: [],
     isCurrent: false,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -28,14 +27,35 @@ class Project {
     }
 
     if (data && typeof data === 'object') {
-      // Create object from JSON for nested structures (papers, categorias, criterios, fases) if present
+      // Create object from JSON for nested structures (papers, categories, criteria, phases) if present
       if(this.papers) this.papers = checkArray(this.papers).map(p => Paper.fromJSON(p));
-      if(this.categorias) this.categorias = checkArray(this.categorias).map(c => Categoria.fromJSON(c));
-      if(this.criterios) this.criterios = checkArray(this.criterios).map(c => Criterio.fromJSON(c));
-      if(this.fases) this.fases = checkArray(this.fases).map(f => Fase.fromJSON(f));
+      if(this.categories) this.categories = checkArray(this.categories).map(c => Category.fromJSON(c));
+      if(this.criteria) this.criteria = checkArray(this.criteria).map(c => Criterion.fromJSON(c));
+      if(this.phases) this.phases = checkArray(this.phases).map(f => Phase.fromJSON(f));
     }
   }
 
+  // --- Category management ---
+  addCategory(categoryData) {
+    if (!categoryData) return;
+    //Categorias devem ter pelo menos título e cor para serem criadas, caso contrário, são ignoradas
+    if (!categoryData.title || !categoryData.color) return;
+
+    const c = categoryData instanceof Category ? categoryData : Category.fromJSON(categoryData);
+    this.categories.push(c);
+    return c;
+  }
+
+  removeCategory(label) {
+    const index = this.categories.findIndex(c => c.label === label);
+    if (index !== -1) {
+      return this.categories.splice(index, 1)[0];
+    }else{
+      return null;
+    }
+  }
+
+  // --- Paper management ---
   addPaper(paperData) {
     const p = paperData instanceof Paper ? paperData : Paper.fromJSON(paperData);
     this.papers.push(p);
@@ -50,9 +70,9 @@ class Project {
     obj.id = this.id;
     obj.projectDir = this.projectDir;
     obj.papers = mapToJSON(this.papers);
-    obj.categorias = mapToJSON(this.categorias);
-    obj.criterios = mapToJSON(this.criterios);
-    obj.fases = mapToJSON(this.fases);
+    obj.categories = mapToJSON(this.categories);
+    obj.criteria = mapToJSON(this.criteria);
+    obj.phases = mapToJSON(this.phases);
     obj.updatedAt = new Date().toISOString();
     return obj;
   }
@@ -178,98 +198,98 @@ class Paper {
 
 
 
-class Categoria {
+class Category {
   constructor(data = {}) {
-    this.titulo = data.titulo || "";
-    this.rotulo = data.rotulo || slugify(this.titulo);
-    this.descricao = data.descricao || "";
-    this.cor = data.cor || null;
-    this.fases = checkArray(data.fases);
-    const criterios = data.criterios && typeof data.criterios === "object" ? data.criterios : {};
-    this.criterios = {
-      pelos_menos_um: checkArray(criterios.pelos_menos_um),
-      todos: checkArray(criterios.todos),
+    this.title = data.title || "";
+    this.label = data.label || slugify(this.title);
+    this.description = data.description || "";
+    this.color = data.color || null;
+    this.phases = checkArray(data.phases);
+    const criteria = data.criteria && typeof data.criteria === "object" ? data.criteria : {};
+    this.criteria = {
+      at_least_one: checkArray(criteria.at_least_one),
+      all: checkArray(criteria.all),
     };
   }
 
   toJSON() {
     return {
-      titulo: this.titulo,
-      rotulo: this.rotulo,
-      descricao: this.descricao,
-      cor: this.cor,
-      fases: this.fases,
-      criterios: {
-        pelos_menos_um: this.criterios.pelos_menos_um,
-        todos: this.criterios.todos,
+      title: this.title,
+      label: this.label,
+      description: this.description,
+      color: this.color,
+      phases: this.phases,
+      criteria: {
+        at_least_one: this.criteria.at_least_one,
+        all: this.criteria.all,
       },
     };
   }
 
   static fromJSON(data = {}) {
-    return new Categoria(data);
+    return new Category(data);
   }
 }
 
-class Criterio {
+class Criterion {
   constructor(data = {}) {
-    this.titulo = data.titulo || "";
-    this.rotulo = data.rotulo || slugify(this.titulo);
-    this.descricao = data.descricao || "";
-    this.fases = checkArray(data.fases);
+    this.title = data.title || "";
+    this.label = data.label || slugify(this.title);
+    this.description = data.description || "";
+    this.phases = checkArray(data.phases);
   }
 
   toJSON() {
     return {
-      titulo: this.titulo,
-      rotulo: this.rotulo,
-      descricao: this.descricao,
-      fases: this.fases,
+      title: this.title,
+      label: this.label,
+      description: this.description,
+      phases: this.phases,
     };
   }
 
   static fromJSON(data = {}) {
-    return new Criterio(data);
+    return new Criterion(data);
   }
 }
 
-class Fase {
+class Phase {
   constructor(data = {}) {
-    this.titulo = data.titulo || "";
-    this.rotulo = data.rotulo || slugify(this.titulo);
-    this.descricao = data.descricao || "";
-    this.concluida = !!data.concluida;
-    this.categorias = checkArray(data.categorias);
-    this.criterios = checkArray(data.criterios);
+    this.title = data.title || "";
+    this.label = data.label || slugify(this.title);
+    this.description = data.description || "";
+    this.completed = !!data.completed;
+    this.categories = checkArray(data.categories);
+    this.criteria = checkArray(data.criteria);
     const papers = data.papers && typeof data.papers === "object" ? data.papers : {};
     this.papers = {
-      herdados: checkArray(papers.herdados),
-      novos: checkArray(papers.novos),
-      removidos: checkArray(papers.removidos),
-      selecionados: checkArray(papers.selecionados),
+      inherited: checkArray(papers.inherited),
+      new: checkArray(papers.new),
+      removed: checkArray(papers.removed),
+      selected: checkArray(papers.selected),
     };
   }
 
   toJSON() {
     return {
-      rotulo: this.rotulo,
-      titulo: this.titulo,
-      descricao: this.descricao,
-      concluida: this.concluida,
-      categorias: this.categorias,
-      criterios: this.criterios,
+      label: this.label,
+      title: this.title,
+      description: this.description,
+      completed: this.completed,
+      categories: this.categories,
+      criteria: this.criteria,
       papers: {
-        herdados: this.papers.herdados,
-        novos: this.papers.novos,
-        removidos: this.papers.removidos,
-        selecionados: this.papers.selecionados,
+        inherited: this.papers.inherited,
+        new: this.papers.new,
+        removed: this.papers.removed,
+        selected: this.papers.selected,
       },
     };
   }
 
   static fromJSON(data = {}) {
-    return new Fase(data);
+    return new Phase(data);
   }
 }
 
-export { Project, Paper, Categoria, Criterio, Fase };
+export { Project, Paper, Category, Criterion, Phase };

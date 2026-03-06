@@ -1,5 +1,6 @@
 import {fmtDate, normalizeStr, jaccard} from '../core/utils.mjs';
 import { storage } from '../infrastructure/storage.mjs';
+// import { Project } from '../core/entities.mjs';
 
 let state = null;
 // Incremental token to guard against out-of-order async renders
@@ -114,91 +115,95 @@ function getLuminanceFromHex(hex) {
 function loadCategories() {
   const categoryList = document.getElementById("categoryList");
   if (!categoryList) return;
-  storage.get("categories").then((data) => {
-    categoryList.innerHTML = "";
-    const categories = (data && data.categories) ? data.categories : {};
-    const names = Object.keys(categories).sort((a, b) => a.localeCompare(b));
 
-    function removeCategory(name) {
-      storage.get("categories").then(d => {
-        const cats = d.categories || {};
-        if (!cats[name]) return;
-        delete cats[name];
-        storage.set({ categories: cats }).then(() => {
-          chrome.runtime.sendMessage({ action: "updateContextMenu" });
-          loadCategories();
-        });
-      });
-    }
+  categoryList.innerHTML = "";
+  const project = state && state.project ? state.project : null;
 
-    for (const category of names) {
-      const color = categories[category];
+  const rawCats = Array.isArray(project?.categories) ? project.categories : [];
+  
+  // Copy to avoid mutating original data during sort, which can cause issues with state management and rendering
+  const items = [...rawCats];
 
-      const li = document.createElement("li");
-      // keep only backgroundColor on the root so the color shows visually
-      li.style.backgroundColor = color;
+  items.sort((a, b) => String(a.title).localeCompare(String(b.title)));
 
-      // left block: pill + title/sub
-      const left = document.createElement("div");
-      left.className = "left";
+  function persistProjectAndReload() {
+    if (!project || !project.id) return;
+    console.log('Persisting project changes...', project);
+    // Save using Project wrapper for compatibility with remote storage
+    storage.saveProject(project).then(() => {
+      loadCategories();
+    }).catch((e) => {
+      console.warn('saveProject failed', e);
+      alert("Não foi possível salvar as categorias. As alterações não foram aplicadas.");
+      loadCategories();
+    });
+  }
 
-      const pill = document.createElement("span");
-      pill.className = "pill";
-      pill.style.backgroundColor = color;
+  for (const cat of items) {
+    const category = cat.title;
+    const categoryLabel = cat.label;
+    const color = cat.color || "#ffffff";
 
-      const textWrap = document.createElement("div");
-      textWrap.style.minWidth = "0";
+    const li = document.createElement("li");
+    li.style.backgroundColor = color;
 
-      const title = document.createElement("span");
-      title.className = "title";
-      title.textContent = category;
+    const left = document.createElement("div");
+    left.className = "left";
 
-      // optional subtext (not used currently)
-      const sub = document.createElement("span");
-      sub.className = "sub";
-      sub.textContent = "";
+    const pill = document.createElement("span");
+    pill.className = "pill";
+    pill.style.backgroundColor = color;
 
-      textWrap.appendChild(title);
-      // only append sub if it has content
-      if (sub.textContent) textWrap.appendChild(sub);
+    const textWrap = document.createElement("div");
+    textWrap.style.minWidth = "0";
 
-      left.appendChild(pill);
-      left.appendChild(textWrap);
+    const title = document.createElement("span");
+    title.className = "title";
+    title.textContent = category;
 
-      // right block: meta + actions
-      const right = document.createElement("div");
-      right.className = "right";
+    const sub = document.createElement("span");
+    sub.className = "sub";
+    sub.textContent = "";
 
-      const meta = document.createElement("span");
-      meta.className = "meta";
-      meta.textContent = color;
-      meta.style.fontFamily = "monospace";
-      meta.style.fontSize = "12px";
+    textWrap.appendChild(title);
+    if (sub.textContent) textWrap.appendChild(sub);
 
-      const btn = document.createElement("button");
-      btn.textContent = "Excluir";
-      btn.addEventListener("click", () => {
-        if (!confirm(`Excluir a categoria "${category}"?`)) return;
-        removeCategory(category);
-      });
+    left.appendChild(pill);
+    left.appendChild(textWrap);
 
-      const textColor = getLuminanceFromHex(color) < 0.5 ? "#fff" : "#000";
-      title.style.color = textColor;
-      meta.style.color = textColor;
-      btn.style.color = textColor;
-      if (textColor === "#000") btn.classList.add("dark");
+    const right = document.createElement("div");
+    right.className = "right";
 
-      right.appendChild(meta);
-      right.appendChild(btn);
+    const meta = document.createElement("span");
+    meta.className = "meta";
+    meta.textContent = color;
+    meta.style.fontFamily = "monospace";
+    meta.style.fontSize = "12px";
 
-      li.appendChild(left);
-      li.appendChild(right);
+    const btn = document.createElement("button");
+    btn.textContent = "Excluir";
+    btn.addEventListener("click", () => {
+      if (!confirm(`Excluir a categoria "${category}"?`)) return;
+      project.removeCategory(categoryLabel);
+      persistProjectAndReload(); // Reload categories after removal
+    });
 
-      categoryList.appendChild(li);
-    }
+    const textColor = getLuminanceFromHex(color) < 0.5 ? "#fff" : "#000";
+    title.style.color = textColor;
+    meta.style.color = textColor;
+    btn.style.color = textColor;
+    if (textColor === "#000") btn.classList.add("dark");
 
-    chrome.runtime.sendMessage({ action: "updateContextMenu" });
-  });
+    right.appendChild(meta);
+    right.appendChild(btn);
+
+    li.appendChild(left);
+    li.appendChild(right);
+
+    categoryList.appendChild(li);
+  }
+
+  chrome.runtime.sendMessage({ action: "updateContextMenu" });
 }
 
 function deleteMarkedLink(urlToDelete, done) {
@@ -1546,9 +1551,33 @@ function bindEvents() {
 
   if (seedDefaultCategoriesButton) {
     seedDefaultCategoriesButton.addEventListener("click", () => {
-      chrome.runtime.sendMessage({ action: "seedDefaultCategories" }, () => {
+      // Merge a lista padrão localmente dentro do projeto ativo
+      const DEFAULT_SNOWBALLING_CATEGORIES = {
+        "Seed": "#4CAF50",
+        "Backward": "#2196F3",
+        "Forward": "#9C27B0",
+        "Included": "#2E7D32",
+        "Excluded": "#D32F2F",
+        "Duplicate": "#757575",
+        "Pending": "#FBC02D",
+      };
+
+      const project = state && state.project ? state.project : null;
+      if (!project || !project.id) return alert('Nenhum projeto ativo.');
+      project.categories = project.categories || [];
+      const existing = new Set((project.categories || []).map(c => c.title));
+      for (const [name, color] of Object.entries(DEFAULT_SNOWBALLING_CATEGORIES)) {
+        if (!existing.has(name)) {
+          project.addCategory({ title: name, color: color });
+        }
+      }
+
+      storage.saveProject(project).then(() => {
         loadCategories();
-        alert("Categorias padrão de Snowballing criadas/mescladas!");
+        alert("Categorias padrão de Snowballing adicionadas ao projeto!");
+      }).catch((e) => {
+        console.warn('seedDefaultCategories saveProject failed', e);
+        alert('Falha ao salvar categorias padrão no projeto.');
       });
     });
   }
@@ -1559,13 +1588,25 @@ function bindEvents() {
       const color = categoryColorInput?.value || "#000000";
       if (!name) return;
 
-      storage.get("categories").then((data) => {
-        const categories = data.categories || {};
-        categories[name] = color;
-        storage.set({ categories }).then(() => {
-          if (categoryNameInput) categoryNameInput.value = "";
-          loadCategories();
-        });
+      const project = state && state.project ? state.project : null;
+      if (!project || !project.id) return alert('Nenhum projeto ativo.');
+
+      project.categories = project.categories || [];
+      // Update if exists
+      const idx = project.categories.findIndex(c => c.title === name);
+      if (idx !== -1) {
+        //TODO: editar pelo CRUD da class Category, que ainda não existe.
+        project.categories[idx].color = color;
+      } else {
+        project.addCategory({ title: name, color: color });
+      }
+
+      storage.saveProject(project).then(() => {
+        if (categoryNameInput) categoryNameInput.value = "";
+        loadCategories();
+      }).catch((e) => {
+        console.warn('saveProject failed', e);
+        alert('Falha ao salvar categoria no projeto.');
       });
     });
   }

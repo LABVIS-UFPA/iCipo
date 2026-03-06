@@ -9,6 +9,7 @@
  */
 
 import { Project, Paper } from '../core/entities.mjs';
+import { wsManager } from './socketManager.mjs';
 
 // ============================================================================
 // STRATEGY PATTERN - Node.js Driver (fs-based)
@@ -80,6 +81,8 @@ class NodeFsStrategy {
 
     // Merge: preserve existing properties, override/add with incoming projectData
     const merged = { ...existing, ...project };
+
+    console.log(`Saving project ${projectID} to disk at ${relPath}...`, merged);
 
     // Write merged project data
     this.writeJson(relPath, merged);
@@ -279,8 +282,7 @@ class WebSocketStrategy {
   }
 
   async init() {
-    const { wsManager: ws } = await import('./socketManager.mjs');
-    this.wsManager = ws;
+    this.wsManager = wsManager;
 
     // Register for reconnection events to sync backup data
     if (this.onOpen) {
