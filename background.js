@@ -2,15 +2,15 @@ import {hashId, inferFromCategory} from './core/utils.mjs';
 import {storage} from './infrastructure/storage.mjs';
 import { wsManager } from './infrastructure/socketManager.mjs';
 
-const DEFAULT_SNOWBALLING_CATEGORIES = {
-  "Seed": "#4CAF50",
-  "Backward": "#2196F3",
-  "Forward": "#9C27B0",
-  "Included": "#2E7D32",
-  "Excluded": "#D32F2F",
-  "Duplicate": "#757575",
-  "Pending": "#FBC02D",
-};
+// const DEFAULT_SNOWBALLING_CATEGORIES = {
+//   "Seed": "#4CAF50",
+//   "Backward": "#2196F3",
+//   "Forward": "#9C27B0",
+//   "Included": "#2E7D32",
+//   "Excluded": "#D32F2F",
+//   "Duplicate": "#757575",
+//   "Pending": "#FBC02D",
+// };
 
 
 
