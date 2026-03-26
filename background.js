@@ -12,47 +12,11 @@ const DEFAULT_SNOWBALLING_CATEGORIES = {
   "Pending": "#FBC02D",
 };
 
-/**
- * Garante que existam categorias padrão de Snowballing.
- * Mantém o formato atual do projeto: categories é um objeto { nome: cor }.
- * Se já existir alguma categoria, apenas adiciona as que estiverem faltando.
- */
-function ensureDefaultCategories(cb) {
-  chrome.storage.local.get(["categories"], (data) => {
-    let categories = (data && typeof data.categories === "object" && data.categories) ? data.categories : {};
 
-    // Se categories vier como array por algum motivo, converte para objeto.
-    if (Array.isArray(categories)) {
-      const converted = {};
-      for (const item of categories) {
-        if (typeof item === "string") converted[item] = DEFAULT_SNOWBALLING_CATEGORIES[item] || "yellow";
-        else if (item && item.name) converted[item.name] = item.color || "yellow";
-      }
-      const mergedFromArray = { ...DEFAULT_SNOWBALLING_CATEGORIES, ...converted };
-      chrome.storage.local.set({ categories: mergedFromArray }, () => cb && cb());
-      return;
-    }
 
-    let changed = false;
-    const merged = { ...categories };
-    for (const [name, color] of Object.entries(DEFAULT_SNOWBALLING_CATEGORIES)) {
-      if (!merged[name]) {
-        merged[name] = color;
-        changed = true;
-      }
-    }
-
-    if (changed) {
-      chrome.storage.local.set({ categories: merged }, () => cb && cb());
-    } else {
-      cb && cb();
-    }
-  });
-}
-
-function createContextMenu() {
+async function createContextMenu() {
   // Remove existing menus and recreate safely (ignore duplicate-id race warnings)
-  chrome.contextMenus.removeAll(() => {
+  chrome.contextMenus.removeAll(async () => {
     const safeCreate = (opts) => {
       try {
         chrome.contextMenus.create(opts, () => {
@@ -72,19 +36,31 @@ function createContextMenu() {
 
     safeCreate({ id: "highlightLink", title: "Marcar link", contexts: ["link"] });
 
-    chrome.storage.local.get(["categories"], (data) => {
-      const categories = data.categories || {};
-      for (const category in categories) {
-        safeCreate({ parentId: "highlightLink", id: `highlight_${category}`, title: category, contexts: ["link"] });
+    try {
+      const projectResult = await storage.getActiveProject();
+      let project = null;
+      if (projectResult && projectResult.data) {
+        project = projectResult.data;
+      } else if (projectResult && projectResult.id) {
+        project = projectResult;
       }
-    });
+      
+      if (project && Array.isArray(project.categories)) {
+        for (const cat of project.categories) {
+          const title = cat.title || cat.label || 'Categoria';
+          safeCreate({ parentId: "highlightLink", id: `highlight_${title}`, title: title, contexts: ["link"] });
+        }
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar categorias para o menu:', e);
+    }
 
     safeCreate({ id: "removeHighlight", title: "Remover marcação", contexts: ["link"] });
   });
 }
 
-chrome.runtime.onInstalled.addListener(() => {
-  ensureDefaultCategories(() => createContextMenu());
+chrome.runtime.onInstalled.addListener(async () => {
+  await createContextMenu();
 });
 
 // Try connect on startup once if configured
@@ -99,8 +75,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
     return;
   }
   if (msg && msg.action === "seedDefaultCategories") {
-    createContextMenu();
-    ensureDefaultCategories(() => createContextMenu());
+    (async () => {
+      await createContextMenu();
+    })();
+    return;
   }
   // Socket control messages from options page
   if (msg && msg.action === "socket_get_state") {
@@ -160,11 +138,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
   }
 });
 
-chrome.storage.onChanged.addListener((changes) => {
-  if (changes.categories) {
-    createContextMenu();
-  }
-});
+// Nota: chrome.storage.onChanged listener removido pois storage.mjs não oferece listener nativo.
+// Para sincronizar mudanças de categorias, use storage.set() e atualize o menu manualmente.
 
 function nowIso() {
   return new Date().toISOString();
@@ -174,89 +149,106 @@ function nowIso() {
 
 
 
-chrome.contextMenus.onClicked.addListener((info, tab) => {
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId.startsWith("highlight_")) {
     const category = info.menuItemId.replace("highlight_", "");
-    chrome.storage.local.get(["categories", "highlightedLinks", "svat_project", "svat_papers"], async (data) => {
-      const categories = data.categories || {};
-      const color = categories[category] || "yellow";
-      let highlightedLinks = data.highlightedLinks || {};
-      let url = (info.linkUrl || "").replace(/[\?|\&]casa\_token=\S+/i, "");
-      highlightedLinks[url] = color;
-      chrome.storage.local.set({ highlightedLinks });
-
-      // Highlight visually
-      chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        function: highlightLink,
-        args: [url, color]
-      });
-
-      // Save SVAT paper (best-effort metadata extraction)
-      const project = data.svat_project || { id: "tcc-001", title: "Meu TCC", researcher: "", createdAt: nowIso(), currentIterationId: "I1" };
-      const papers = Array.isArray(data.svat_papers) ? data.svat_papers : [];
-      const id = hashId(url);
-      const { origin, status } = inferFromCategory(category);
-
-      let meta = { title: url, authorsRaw: "", year: null };
-      try {
-        if (tab?.id) {
-          meta = await chrome.tabs.sendMessage(tab.id, { type: "SVAT_EXTRACT_METADATA", linkUrl: url }).then(r => (r && r.ok ? r.meta : meta)).catch(() => meta);
-        }
-      } catch {}
-
-      const idx = papers.findIndex(p => p.id === id);
-      const prev = idx >= 0 ? (papers[idx].status || "pending") : "new";
-      const base = {
-        id,
-        url,
-        title: meta.title || url,
-        authors: [],
-        authorsRaw: meta.authorsRaw || "",
-        year: meta.year || null,
-        origin,
-        status,
-        iterationId: project.currentIterationId || "I1",
-        criteriaId: null,
-        tags: [category],
-        visited: true,
-        updatedAt: nowIso(),
-      };
-      if (idx >= 0) {
-        const history = Array.isArray(papers[idx].history) ? papers[idx].history : [];
-        history.push({ ts: nowIso(), action: "mark", details: { category, origin, status, prevStatus: prev } });
-        papers[idx] = { ...papers[idx], ...base, history };
-      } else {
-        papers.push({ ...base, createdAt: nowIso(), history: [{ ts: nowIso(), action: "mark", details: { category, origin, status, prevStatus: prev } }] });
+    const data = await storage.get(["highlightedLinks", "svat_project", "svat_papers"]);
+    
+    // Busca a cor da categoria no projeto ativo
+    let color = "yellow";
+    try {
+      const projectResult = await storage.getActiveProject();
+      let project = null;
+      if (projectResult && projectResult.data) {
+        project = projectResult.data;
+      } else if (projectResult && projectResult.id) {
+        project = projectResult;
       }
-      chrome.storage.local.set({ svat_project: project, svat_papers: papers });
+      
+      if (project && Array.isArray(project.categories)) {
+        const cat = project.categories.find(c => c.title === category);
+        if (cat && cat.color) {
+          color = cat.color;
+        }
+      }
+    } catch (e) {
+      console.warn('Erro ao buscar cor da categoria:', e);
+    }
+    let highlightedLinks = data.highlightedLinks || {};
+    let url = (info.linkUrl || "").replace(/[\?|\&]casa\_token=\S+/i, "");
+    highlightedLinks[url] = color;
+    await storage.set({ highlightedLinks });
+
+    // Highlight visually
+    chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      function: highlightLink,
+      args: [url, color]
     });
+
+    // Save SVAT paper (best-effort metadata extraction)
+    const project = data.svat_project || { id: "tcc-001", title: "Meu TCC", researcher: "", createdAt: nowIso(), currentIterationId: "I1" };
+    const papers = Array.isArray(data.svat_papers) ? data.svat_papers : [];
+    const id = hashId(url);
+    const { origin, status } = inferFromCategory(category);
+
+    let meta = { title: url, authorsRaw: "", year: null };
+    try {
+      if (tab?.id) {
+        meta = await chrome.tabs.sendMessage(tab.id, { type: "SVAT_EXTRACT_METADATA", linkUrl: url }).then(r => (r && r.ok ? r.meta : meta)).catch(() => meta);
+      }
+    } catch {}
+
+    const idx = papers.findIndex(p => p.id === id);
+    const prev = idx >= 0 ? (papers[idx].status || "pending") : "new";
+    const base = {
+      id,
+      url,
+      title: meta.title || url,
+      authors: [],
+      authorsRaw: meta.authorsRaw || "",
+      year: meta.year || null,
+      origin,
+      status,
+      iterationId: project.currentIterationId || "I1",
+      criteriaId: null,
+      tags: [category],
+      visited: true,
+      updatedAt: nowIso(),
+    };
+    if (idx >= 0) {
+      const history = Array.isArray(papers[idx].history) ? papers[idx].history : [];
+      history.push({ ts: nowIso(), action: "mark", details: { category, origin, status, prevStatus: prev } });
+      papers[idx] = { ...papers[idx], ...base, history };
+    } else {
+      papers.push({ ...base, createdAt: nowIso(), history: [{ ts: nowIso(), action: "mark", details: { category, origin, status, prevStatus: prev } }] });
+    }
+    await storage.set({ svat_project: project, svat_papers: papers });
   }
 
   if (info.menuItemId === "removeHighlight") {
-    chrome.storage.local.get(["highlightedLinks", "svat_papers"], (data) => {
-      let highlightedLinks = data.highlightedLinks || {};
-      const url = (info.linkUrl || "").replace(/[\?|\&]casa\_token=\S+/i, "");
-      delete highlightedLinks[info.linkUrl];
-      delete highlightedLinks[url];
-      chrome.storage.local.set({ highlightedLinks });
+    const data = await storage.get(["highlightedLinks", "svat_papers"]);
+    let highlightedLinks = data.highlightedLinks || {};
+    const url = (info.linkUrl || "").replace(/[\?|\&]casa\_token=\S+/i, "");
+    delete highlightedLinks[info.linkUrl];
+    delete highlightedLinks[url];
+    await storage.set({ highlightedLinks });
 
-      // Keep the paper in SVAT (audit trail), but set visited=false
-      const papers = Array.isArray(data.svat_papers) ? data.svat_papers : [];
-      const id = hashId(url);
-      const idx = papers.findIndex(p => p.id === id);
-      if (idx >= 0) {
-        const history = Array.isArray(papers[idx].history) ? papers[idx].history : [];
-        history.push({ ts: nowIso(), action: "unmark", details: { visited: false } });
-        papers[idx] = { ...papers[idx], visited: false, updatedAt: nowIso(), history };
-        chrome.storage.local.set({ svat_papers: papers });
-      }
+    // Keep the paper in SVAT (audit trail), but set visited=false
+    const papers = Array.isArray(data.svat_papers) ? data.svat_papers : [];
+    const id = hashId(url);
+    const idx = papers.findIndex(p => p.id === id);
+    if (idx >= 0) {
+      const history = Array.isArray(papers[idx].history) ? papers[idx].history : [];
+      history.push({ ts: nowIso(), action: "unmark", details: { visited: false } });
+      papers[idx] = { ...papers[idx], visited: false, updatedAt: nowIso(), history };
+      await storage.set({ svat_papers: papers });
+    }
 
-      chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        function: removeHighlight,
-        args: [url]
-      });
+    chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      function: removeHighlight,
+      args: [url]
     });
   }
 });
