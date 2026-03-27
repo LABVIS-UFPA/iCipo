@@ -620,13 +620,13 @@ svg .axis line, svg .axis path{stroke: rgba(234,240,255,0.18)}
   display:flex;
   flex-wrap:wrap;
   gap:8px;
-  padding:8px 6px;
+  padding:0;
   margin-top:6px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));
-  border-radius: 10px;
-  border:1px solid rgba(255,255,255,0.03);
-  max-height:160px;
-  overflow:auto;
+  background: transparent;
+  border-radius: 0;
+  border: none;
+  max-height: none;
+  overflow: visible; /* allow the parent .sidePanelBody (.u-scroll-y) to handle scrolling */
 }
 .phaseCategoryItem{
   display:inline-flex;
