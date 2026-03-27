@@ -693,6 +693,37 @@ svg .axis line, svg .axis path{stroke: rgba(234,240,255,0.18)}
 .sidePanelHeader{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .sidePanelBody{display:flex;flex-direction:column;gap:10px;margin-top:12px}
 
+/* Custom textarea resizer for side panel: hide native indicator and add modern handle */
+.sidePanelBody textarea{resize:none;padding-right:28px}
+.sidePanelBody textarea::-webkit-resizer{display:none}
+
+.textarea-resizable{position:relative;display:block}
+.textarea-resizable textarea{width:100%;box-sizing:border-box}
+
+.textarea-resizer{
+  position:absolute;
+  right:10px;
+  bottom:10px;
+  width:18px;
+  height:18px;
+  border-radius:6px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.04));
+  box-shadow: 0 6px 14px rgba(0,0,0,0.18);
+  cursor: ns-resize;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.textarea-resizer::before{
+  content: '';
+  width:10px;
+  height:10px;
+  background: repeating-linear-gradient(135deg, rgba(255,255,255,0.22) 0 2px, transparent 2px 6px);
+  border-radius:2px;
+  opacity:0.95;
+}
+.textarea-resizer:hover{box-shadow: 0 10px 24px rgba(0,0,0,0.26);transform: translateY(-1px)}
+
 /* Overlay that covers page when side panel is open (blocks interaction) */
 .sideOverlay{
   position:fixed;

@@ -1772,6 +1772,8 @@ function bindEvents() {
     phasePanel.setAttribute('aria-hidden', 'false');
     if(sideOverlay) { sideOverlay.classList.add('open'); sideOverlay.setAttribute('aria-hidden','false'); }
     document.body.classList.add('no-scroll');
+    // ensure custom resizers are present and wired
+    enhanceSidePanelTextareas();
     // show delete button when editing an existing card
     if(btnDeletePhase){
       if(isEditing) btnDeletePhase.style.display = '';
@@ -1793,6 +1795,78 @@ function bindEvents() {
     if(phaseDescError){ phaseDescError.classList.remove('visible'); phaseDescError.textContent=''; }
     if(phaseCriteriaError){ phaseCriteriaError.classList.remove('visible'); phaseCriteriaError.textContent=''; }
     if(btnDeletePhase) btnDeletePhase.style.display = 'none';
+  }
+
+  // Enhance side panel textareas: remove native resize UI and add a modern draggable resizer
+  function enhanceSidePanelTextareas(){
+    if(!phasePanel) return;
+    const textareas = phasePanel.querySelectorAll('textarea');
+    textareas.forEach((t) => {
+      if(t.closest('.textarea-resizable')) return; // already enhanced
+      try{
+        t.style.resize = 'none';
+        const wrapper = document.createElement('div');
+        wrapper.className = 'textarea-resizable';
+        t.parentNode.insertBefore(wrapper, t);
+        wrapper.appendChild(t);
+
+        const handle = document.createElement('div');
+        handle.className = 'textarea-resizer';
+        wrapper.appendChild(handle);
+
+        let startY = 0, startH = 0, dragging = false;
+
+        const onMouseMove = (e) => {
+          if(!dragging) return;
+          const dy = e.clientY - startY;
+          const newH = Math.max(40, startH + dy);
+          t.style.height = newH + 'px';
+        };
+        const onMouseUp = () => {
+          if(!dragging) return;
+          dragging = false;
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+          document.body.style.userSelect = '';
+        };
+
+        handle.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          startY = e.clientY;
+          startH = t.offsetHeight;
+          dragging = true;
+          document.addEventListener('mousemove', onMouseMove);
+          document.addEventListener('mouseup', onMouseUp);
+          document.body.style.userSelect = 'none';
+        });
+
+        // touch support
+        const onTouchMove = (e) => {
+          if(!dragging) return;
+          e.preventDefault();
+          const touch = e.touches[0];
+          const dy = touch.clientY - startY;
+          const newH = Math.max(40, startH + dy);
+          t.style.height = newH + 'px';
+        };
+        const onTouchEnd = () => {
+          dragging = false;
+          document.removeEventListener('touchmove', onTouchMove);
+          document.removeEventListener('touchend', onTouchEnd);
+          document.body.style.userSelect = '';
+        };
+        handle.addEventListener('touchstart', (e) => {
+          const touch = e.touches[0];
+          if(!touch) return;
+          startY = touch.clientY;
+          startH = t.offsetHeight;
+          dragging = true;
+          document.addEventListener('touchmove', onTouchMove, { passive: false });
+          document.addEventListener('touchend', onTouchEnd);
+          document.body.style.userSelect = 'none';
+        });
+      }catch(err){console.warn('enhanceSidePanelTextareas error', err)}
+    });
   }
 
   if (btnShowAddPhase && phasePanel) {
