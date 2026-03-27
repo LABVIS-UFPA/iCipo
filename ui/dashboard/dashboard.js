@@ -1628,7 +1628,6 @@ function bindEvents() {
   const phasePanel = document.getElementById('phasePanel');
   const sideOverlay = document.getElementById('sideOverlay');
   const btnClosePhase = document.getElementById('btnClosePhase');
-  const btnCancelPhase = document.getElementById('btnCancelPhase');
   const btnSavePhase = document.getElementById('btnSavePhase');
   const phasesList = document.getElementById('phasesList');
 
@@ -1884,7 +1883,6 @@ function bindEvents() {
     });
   }
   if (btnClosePhase) btnClosePhase.addEventListener('click', closePhasePanel);
-  if (btnCancelPhase) btnCancelPhase.addEventListener('click', closePhasePanel);
   if (sideOverlay) sideOverlay.addEventListener('click', closePhasePanel);
 
   // Disable save until required fields are filled
