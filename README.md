@@ -8,7 +8,7 @@ Plugin para Chrome que auxilia a marcação e organização de links durante o p
 - **Extensão**: `background.js` e `content.js` presentes e tratam mensagens entre UI e background.
 - **Core**: lógica e modelos em [core/entities.mjs](core/entities.mjs) e [core/utils.mjs](core/utils.mjs).
 - **Infraestrutura**: persistência e comunicação em [infrastructure/storage.mjs](infrastructure/storage.mjs) e [infrastructure/socketManager.mjs](infrastructure/socketManager.mjs).
-- **Servidor auxiliar**: `[server.mjs](server.mjs)` disponível para integrações opcionais.
+- **Servidor auxiliar**: [server.mjs](server.mjs) disponível para integrações opcionais.
 - **Observação**: muitas rotas de mensagem (contrato `projects.*`) estão definidas no frontend; alguns handlers ainda funcionam como stubs e aguardam integração completa com o storage/backend.
 
 ---
