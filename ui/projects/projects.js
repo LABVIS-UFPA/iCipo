@@ -114,22 +114,6 @@ document.addEventListener('DOMContentLoaded', () => {
     elements.projectIdStatus.style.color = inUse ? 'crimson' : 'green';
   }
 
-  /**
-   * Garante que o ID seja único adicionando sufixo numérico se necessário
-   * @param {string} base - ID base
-   * @returns {string} ID único
-   */
-  function ensureUniqueId(base) {
-    let id = base;
-    let counter = 1;
-    
-    while (projects.some((p) => p.id === id)) {
-      id = `${base}_${counter++}`;
-    }
-    
-    return id;
-  }
-
   /* ==========================================================================
      SEÇÃO 4: CRIAÇÃO DE ELEMENTOS DE PROJETO
      ========================================================================== */
