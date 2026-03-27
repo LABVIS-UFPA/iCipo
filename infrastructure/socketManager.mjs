@@ -1,3 +1,22 @@
+
+
+// Registra o ouvinte de erro APENAS UMA VEZ na inicialização do script (Regra do Manifest V3)
+if (typeof globalThis !== 'undefined' && typeof globalThis.addEventListener === 'function') {
+  globalThis.addEventListener('error', (ev) => {
+    try {
+      const msg = ev && (ev.message || (ev.error && ev.error.message)) || '';
+      if (typeof msg === 'string' && msg.includes('WebSocket connection to')) {
+        ev.stopImmediatePropagation && ev.stopImmediatePropagation();
+        ev.preventDefault && ev.preventDefault();
+      }
+    } catch (err) {}
+  }, true);
+}
+
+
+
+
+
 // Socket manager: exporta uma instância compartilhada do WebsocketManager
 class WebsocketManager {
   constructor() {
@@ -7,6 +26,8 @@ class WebsocketManager {
     this.tryAutoConnect();
     this.autoConnectionTime = 100;
     this.responseHandlers = {};
+    // Variável global para o supressor saber qual URL ignorar
+    this.currentConnectingUrl = "";
   }
 
   buildWsUrl(url, port) {
@@ -21,15 +42,22 @@ class WebsocketManager {
   }
 
   setStatus(status) {
-    chrome.storage.local.set({ server_status: status });
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      chrome.storage.local.set({ server_status: status });
+    }
   }
 
   appendLog(msg) {
-    chrome.storage.local.get({ server_messages: [] }, (res) => {
-      const msgs = Array.isArray(res.server_messages) ? res.server_messages : [];
-      msgs.push({ time: Date.now(), data: msg });
-      chrome.storage.local.set({ server_messages: msgs.slice(-500) });
-    });
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      chrome.storage.local.get({ server_messages: [] }, (res) => {
+        const msgs = Array.isArray(res.server_messages) ? res.server_messages : [];
+        msgs.push({ time: Date.now(), data: msg });
+        chrome.storage.local.set({ server_messages: msgs.slice(-500) });
+      });
+    } else {
+      // Fallback amigável para quando rodar no Node.js ou testes
+      console.log(`[WS Log]: ${msg}`); 
+    }
   }
 
   finalizeClose(logMsg = "🔌 Conexão encerrada", statusText = "Desconectado") {
@@ -56,36 +84,26 @@ class WebsocketManager {
     this.appendLog("Conectando em " + fullUrl);
     this._closedFinalized = false;
 
-    // Supress specific global error messages that bubble from WebSocket creation
-    const suppressHandler = (ev) => {
-      console.log("suppressHandler invoked for:", ev);
-      try {
-        const msg = ev && (ev.message || (ev.error && ev.error.message)) || '';
-        if (typeof msg === 'string' && msg.includes('WebSocket connection to') && msg.includes(fullUrl)) {
-          ev.stopImmediatePropagation && ev.stopImmediatePropagation();
-          ev.preventDefault && ev.preventDefault();
-        }
-      } catch (err) {}
-    };
+    // Atualiza a URL global para o nosso supressor silenciar os erros no console
+    this.currentConnectingUrl = fullUrl;
 
+    
     try {
-      globalThis.addEventListener('error', suppressHandler, true);
       this.socket = new WebSocket(fullUrl);
     } catch (e) {
       this.setStatus("Erro");
       this.appendLog("Erro ao criar WebSocket: " + (e?.message || e));
       this.socket = null;
       this._closedFinalized = true;
-      try { globalThis.removeEventListener('error', suppressHandler, true); } catch (er) {}
+      this.currentConnectingUrl = ""; // Limpa a URL global em caso de falha na criação do WebSocket
       return;
-    } finally {
-      try { globalThis.removeEventListener('error', suppressHandler, true); } catch (er) {}
     }
 
     this.socket.onopen = () => {
       this.setStatus("Conectado");
       this.appendLog("✅ Conectado");
       this.autoConnectionTime = 100;
+      this.currentConnectingUrl = ""; // Limpa a URL global para não silenciar erros de conexões futuras
       
       // Trigger all registered open listeners
       this.onOpenListeners.forEach(callback => {
@@ -113,10 +131,12 @@ class WebsocketManager {
     this.socket.onerror = () => {
       this.setStatus("Erro");
       this.appendLog("❌ Erro na conexão");
+      this.currentConnectingUrl = ""; // Limpa a URL global para não silenciar erros de conexões futuras
     };
 
     this.socket.onclose = () => {
       this.finalizeClose("🔌 Conexão encerrada", "Desconectado");
+      this.currentConnectingUrl = ""; // Limpa a URL global para não silenciar erros de conexões futuras
       setTimeout(() => this.tryAutoConnect(), this.autoConnectionTime);
       this.autoConnectionTime *= 2;
       if (this.autoConnectionTime > 60000) this.autoConnectionTime = 60000;
@@ -150,16 +170,18 @@ class WebsocketManager {
   }
 
   tryAutoConnect() {
-    chrome.storage.local.get(["server_url", "server_port"], (data) => {
-      if (!data.server_url) {
-        data.server_url = "ws://localhost";
-        data.server_port = "8080";
-        chrome.storage.local.set(data);
-      }
-      const u = data.server_url;
-      const p = data.server_port;
-      if (u) this.connect(u, p);
-    });
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      chrome.storage.local.get(["server_url", "server_port"], (data) => {
+        if (!data.server_url) {
+          data.server_url = "ws://localhost";
+          data.server_port = "8080";
+          chrome.storage.local.set(data);
+        }
+        const u = data.server_url;
+        const p = data.server_port;
+        if (u) this.connect(u, p);
+      });
+    }
   }
 }
 
