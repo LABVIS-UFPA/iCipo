@@ -691,7 +691,7 @@ svg .axis line, svg .axis path{stroke: rgba(234,240,255,0.18)}
 }
 .sidePanel.open{transform: translateX(0)}
 .sidePanelHeader{display:flex;justify-content:space-between;align-items:center;gap:8px}
-.sidePanelBody{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+.sidePanelBody{display:flex;flex-direction:column;gap:10px;margin-top:12px;padding-right: 13px;}
 
 /* Custom textarea resizer for side panel: hide native indicator and add modern handle */
 .sidePanelBody textarea{resize:none;padding-right:28px}
