@@ -512,3 +512,256 @@ svg .axis line, svg .axis path{stroke: rgba(234,240,255,0.18)}
 .u-scroll-y::-webkit-scrollbar-thumb:hover {
   background-color: rgba(255,255,255,0.6); /* Um pouco mais claro no hover */
 }
+
+/* ====== Phases UI ====== */
+.phasesRow{padding:8px 6px}
+.phasesList{
+  display:flex;
+  gap:48px; /* aumentado mais para dar ainda mais espaço entre cards */
+  align-items:flex-start;
+  padding:12px;
+  overflow-x:auto;
+}
+.phaseCard{
+  min-width:220px;
+  max-width:320px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+  border:1px solid rgba(255,255,255,0.04);
+  border-radius:12px;
+  padding:12px 12px 10px 12px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+    /* responsive card: allow variable height but keep a minimum; footer stays fixed
+      and body becomes scrollable if content overflows to avoid deforming layout */
+    box-sizing:border-box;
+    /* fixed card height to prevent growth from long titles; body scrolls if needed */
+    height:220px;
+    display:flex;
+    flex-direction:column;
+}
+.phaseCard{position:relative}
+
+/* Arrow indicator between phase cards (visual progression) */
+.phaseCard:not(:last-child)::after{
+  content: '➜';
+  position:absolute;
+  right:-44px; /* deslocado para acompanhar o gap maior */
+  top:50%;
+  transform:translateY(-50%);
+  background: rgba(255,255,255,0.03);
+  color: var(--muted);
+  border-radius:999px;
+  padding:6px 8px;
+  font-size:13px;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.12);
+  pointer-events:none;
+}
+
+@media (max-width:980px){
+  .phaseCard:not(:last-child)::after{display:none}
+}
+.phaseCardHeader{display:flex;gap:10px;align-items:center}
+.statusDot{width:12px;height:12px;border-radius:50%;background: transparent;border:1px solid rgba(255,255,255,0.06);box-shadow:none}
+.phaseHeadText{display:flex;flex-direction:column}
+.phaseCard .phaseTitle{font-weight:900;font-size:15px;line-height:1.2;margin:0}
+/* prevent long titles from expanding card: clamp to 2 lines with ellipsis */
+.phaseCard .phaseTitle{
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  word-break:break-word;
+}
+/* .phaseLabel removed */
+.phaseCardBody{display:flex;flex-direction:column;gap:10px;flex:1 1 auto;min-height:0;overflow:hidden}
+.phaseCard .phaseDesc{font-size:13px;color:var(--muted);line-height:1.35}
+.phaseMeta{display:flex;gap:12px;flex-wrap:wrap}
+.metaBlock{display:flex;flex-direction:column;gap:6px}
+.metaTitle{font-size:12px;color:var(--muted);font-weight:700}
+.metaValue{font-size:13px}
+.tags{display:flex;gap:6px;flex-wrap:wrap}
+.tag{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.04);padding:4px 8px;border-radius:999px;font-size:12px}
+.papersSection{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);padding:10px;border-radius:8px}
+.papersTitle{font-weight:800;margin-bottom:8px}
+.papersGrid{display:grid;grid-template-columns:1fr 1fr;gap:6px;color:var(--muted);font-size:13px}
+.papersUtil{margin-top:8px;font-size:13px}
+.phaseCardFooter{display:flex;justify-content:space-between;gap:8px;margin-top:6px;flex-shrink:0}
+.btn.small{padding:6px 10px;font-size:13px}
+
+/* Force fixed order: active label on the left, actions (buttons) on the right */
+.phaseCardFooter .activeLabel{order:0; margin-right:auto}
+.phaseCardFooter button{order:1}
+
+/* Actions wrapper inside footer to keep buttons grouped and right-aligned */
+.phaseCardActions{display:flex;gap:8px;align-items:center;margin-left:auto}
+.phaseCardActions button{order:1}
+
+/* Active phase visual state */
+.phaseCard.active{
+  border-color: var(--good);
+  box-shadow: 0 18px 40px rgba(59,225,155,0.08);
+  transform: translateY(-3px);
+}
+.phaseCard.active .statusDot{
+  background: var(--good);
+  border: none;
+  box-shadow: 0 0 0 6px rgba(59,225,155,0.08);
+}
+
+/* active label only visible when card is active */
+.phaseCard .activeLabel{display:none}
+.phaseCard.active .activeLabel{display:inline-flex}
+.activeLabel.pill{background: rgba(59,225,155,0.08);border:1px solid rgba(59,225,155,0.12);color:var(--good);font-weight:800;padding:6px 8px;border-radius:999px;font-size:12px}
+
+/* Phase categories (checkbox chips) inside side panel */
+#phaseCategories{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  padding:0;
+  margin-top:6px;
+  background: transparent;
+  border-radius: 0;
+  border: none;
+  max-height: none;
+  overflow: visible; /* allow the parent .sidePanelBody (.u-scroll-y) to handle scrolling */
+}
+.phaseCategoryItem{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 10px;
+  border-radius:999px;
+  background: rgba(255,255,255,0.02);
+  border:1px solid rgba(255,255,255,0.03);
+  cursor:pointer;
+  transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+  user-select:none;
+  font-weight:800;
+  font-size:13px;
+  color: var(--text);
+}
+.phaseCategoryItem:hover{transform: translateY(-2px); box-shadow: 0 8px 18px rgba(0,0,0,0.28)}
+.phaseCategoryItem input[type=checkbox]{
+  -webkit-appearance: none;
+  appearance: none;
+  width:18px;height:18px;border-radius:6px;border:1px solid rgba(255,255,255,0.08);
+  background: transparent;display:inline-block;flex:0 0 auto;position:relative;cursor:pointer;
+}
+.phaseCategoryItem input[type=checkbox]:after{
+  content:'';position:absolute;left:3px;top:3px;width:10px;height:10px;border-radius:4px;opacity:0;transform:scale(0.6);transition:opacity .12s ease, transform .12s ease;
+}
+.phaseCategoryItem input[type=checkbox]:checked{
+  border-color: transparent; background: linear-gradient(135deg,var(--accent),var(--accent2));
+}
+.phaseCategoryItem input[type=checkbox]:checked:after{opacity:1;transform:scale(1);background: rgba(255,255,255,0.95)}
+.phaseCategoryItem span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}
+
+/* For many categories, show two-column grid on wider panels */
+@media (min-width:700px){
+  #phaseCategories{gap:10px}
+  .phaseCategoryItem{padding:8px 12px;font-size:13px}
+}
+
+/* Phase label status styles */
+.phaseLabelStatus{display:inline-block;padding:6px 10px;border-radius:999px;font-weight:900;font-size:13px}
+.phaseLabelStatus.done{background: rgba(59,225,155,0.10);color: var(--good);border:1px solid rgba(59,225,155,0.12)}
+.phaseLabelStatus.pending{background: rgba(255,209,102,0.08);color: var(--warn);border:1px solid rgba(255,209,102,0.10)}
+
+
+/* Side panel sliding from right (used by phases add/edit) */
+.sidePanel{
+  position:fixed;
+  right:0;
+  top:0;
+  height:100%;
+  width:420px;
+  max-width:96vw;
+  background: rgba(11,15,23,0.96);
+  border-left:1px solid var(--border);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  transform: translateX(110%);
+  transition: transform .28s ease;
+  z-index:60;
+  display:flex;
+  flex-direction:column;
+  padding:16px;
+}
+.sidePanel.open{transform: translateX(0)}
+.sidePanelHeader{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.sidePanelBody{display:flex;flex-direction:column;gap:10px;margin-top:12px;padding-right: 13px;}
+
+/* Custom textarea resizer for side panel: hide native indicator and add modern handle */
+.sidePanelBody textarea{resize:none;padding-right:28px}
+.sidePanelBody textarea::-webkit-resizer{display:none}
+
+.textarea-resizable{position:relative;display:block}
+.textarea-resizable textarea{width:100%;box-sizing:border-box}
+
+.textarea-resizer{
+  position:absolute;
+  right:10px;
+  bottom:10px;
+  width:18px;
+  height:18px;
+  border-radius:6px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.04));
+  box-shadow: 0 6px 14px rgba(0,0,0,0.18);
+  cursor: ns-resize;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.textarea-resizer::before{
+  content: '';
+  width:10px;
+  height:10px;
+  background: repeating-linear-gradient(135deg, rgba(255,255,255,0.22) 0 2px, transparent 2px 6px);
+  border-radius:2px;
+  opacity:0.95;
+}
+.textarea-resizer:hover{box-shadow: 0 10px 24px rgba(0,0,0,0.26);transform: translateY(-1px)}
+
+/* Overlay that covers page when side panel is open (blocks interaction) */
+.sideOverlay{
+  position:fixed;
+  inset:0;
+  background: rgba(0,0,0,0.35);
+  z-index:50; /* below panel (60) */
+  opacity:0;
+  pointer-events:none;
+  transition: opacity .18s ease;
+}
+.sideOverlay.open{opacity:1;pointer-events:auto}
+
+/* Prevent body scroll when panel open */
+body.no-scroll{overflow:hidden}
+
+/* Inline field error messages */
+.fieldError{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  color: #b22222;
+  background: rgba(178,34,34,0.06);
+  border: 1px solid rgba(178,34,34,0.14);
+  padding:6px 10px;
+  margin-top:8px;
+  font-size:13px;
+  font-weight:600;
+  border-radius:8px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+  opacity:0;
+  transform: translateY(-4px);
+  transition: opacity .18s ease, transform .18s ease;
+}
+/* icon removed */
+.fieldError.visible{opacity:1;transform:translateY(0)}
+
+/* Make phases list look fine on small screens */
+@media (max-width: 980px){
+  .phasesList{padding-bottom:40px}
+  .sidePanel{width:100%;}
+}

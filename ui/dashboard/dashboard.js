@@ -1,6 +1,5 @@
-import {fmtDate, normalizeStr, jaccard} from '../core/utils.mjs';
-import { storage } from '../infrastructure/storage.mjs';
-// import { Project } from '../core/entities.mjs';
+import {fmtDate, normalizeStr, jaccard} from '../../core/utils.mjs';
+import { storage } from '../../infrastructure/storage.mjs';
 
 let state = null;
 // Incremental token to guard against out-of-order async renders
@@ -1433,10 +1432,10 @@ function bindEvents() {
   const btnProjects = document.getElementById("btnProjects");
   if (btnProjects) btnProjects.addEventListener("click", () => {
     
-    // Go to the dedicated Projects page (ui/projects.html).
-    // Note: we intentionally *don't* open options/config here.
+    // Go to the dedicated Projects page (ui/projects/projects.html).
+    // Note: we intentionally *don't* open options/config aqui.
     try {
-      window.location.href = "projects.html";
+      window.location.href = "../projects/projects.html";
     } catch {
       alert("Não foi possível abrir a página de Projetos.");
     }
@@ -1623,6 +1622,358 @@ function bindEvents() {
   if (highlightSearch) {
     highlightSearch.addEventListener("input", () => loadHighlightedLinks());
   }
+
+  // --- Phases (UI stub) ---
+  const btnShowAddPhase = document.getElementById('btnShowAddPhase');
+  const phasePanel = document.getElementById('phasePanel');
+  const sideOverlay = document.getElementById('sideOverlay');
+  const btnClosePhase = document.getElementById('btnClosePhase');
+  const btnSavePhase = document.getElementById('btnSavePhase');
+  const phasesList = document.getElementById('phasesList');
+
+  const phaseTitleInput = document.getElementById('phaseTitle');
+  const phaseDescInput = document.getElementById('phaseDesc');
+  const phaseCriteriaInput = document.getElementById('phaseCriteria');
+  const phaseCategoriesInput = document.getElementById('phaseCategories');
+  const btnTogglePhaseStatus = document.getElementById('btnTogglePhaseStatus');
+  const btnDeletePhase = document.getElementById('btnDeletePhase');
+  const phaseTitleError = document.getElementById('phaseTitleError');
+  const phaseDescError = document.getElementById('phaseDescError');
+  const phaseCriteriaError = document.getElementById('phaseCriteriaError');
+  let phaseEditingCard = null; // when set, save updates this card instead of creating new
+  let phaseLabelStatus = 'pending'; // 'pending' | 'done'
+
+  function updateToggleButtonUI(){
+    if(!btnTogglePhaseStatus) return;
+    const s = phaseLabelStatus === 'done' ? 'done' : 'pending';
+    btnTogglePhaseStatus.dataset.status = s;
+    btnTogglePhaseStatus.textContent = s === 'done' ? 'Concluída' : 'Em análise';
+    btnTogglePhaseStatus.classList.toggle('ghost', s === 'pending');
+  }
+
+  if(btnTogglePhaseStatus){
+    btnTogglePhaseStatus.addEventListener('click', (e) => {
+      e.preventDefault();
+      phaseLabelStatus = (phaseLabelStatus === 'done') ? 'pending' : 'done';
+      updateToggleButtonUI();
+    });
+  }
+
+  // Render available categories as checkboxes inside the phase edit panel.
+  function renderPhaseCategories(selected = []){
+    if(!phaseCategoriesInput) return;
+    phaseCategoriesInput.innerHTML = '';
+    storage.get('categories').then((data) => {
+      const cats = (data && data.categories) ? data.categories : {};
+      const names = Object.keys(cats).sort((a,b)=>a.localeCompare(b));
+      for (const name of names){
+        const id = `phase_cat_${cssSafeId(name)}`;
+        const wrap = document.createElement('label');
+        wrap.className = 'phaseCategoryItem';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = name;
+        cb.id = id;
+        if(Array.isArray(selected) && selected.includes(name)) cb.checked = true;
+        // color pill (left)
+        const pill = document.createElement('span');
+        pill.className = 'catPill';
+        pill.style.width = '12px';
+        pill.style.height = '12px';
+        pill.style.borderRadius = '4px';
+        pill.style.flex = '0 0 auto';
+        pill.style.background = cats[name] || 'transparent';
+        pill.style.border = '1px solid rgba(0,0,0,0.12)';
+        const txt = document.createElement('span');
+        txt.textContent = name;
+        wrap.appendChild(cb);
+        wrap.appendChild(pill);
+        wrap.appendChild(txt);
+        phaseCategoriesInput.appendChild(wrap);
+      }
+    }).catch(() => { /* ignore */ });
+  }
+
+  function cssSafeId(s){
+    return String(s||'').replace(/[^a-z0-9_-]+/ig,'_');
+  }
+
+  function createPhaseCard({ title, desc, criteria, categories, stats }) {
+    const el = document.createElement('div');
+    el.className = 'phaseCard';
+
+    const safeTitle = escapeHtml(title || '(sem título)');
+    const s = stats || { inherited:0, added:0, selected:0, removed:0, utilization:0 };
+    const labelStatus = (arguments[0] && arguments[0].labelStatus) ? arguments[0].labelStatus : (s.utilization >= 50 ? 'done' : 'pending');
+
+    el.innerHTML = `
+      <div class="phaseCardHeader">
+        <div class="statusDot" title="Ativa"></div>
+        <div class="phaseHeadText">
+          <div class="phaseTitle">${safeTitle}</div>
+        </div>
+      </div>
+      <div class="phaseCardBody">
+        <div class="papersSection">
+          <div class="papersTitle">📊 Papers</div>
+          <div class="papersGrid">
+            <div><span class="muted">Herdados:</span> <strong>${s.inherited}</strong></div>
+            <div><span class="muted">Novos:</span> <strong>${s.added}</strong></div>
+            <div><span class="muted">Selecionados:</span> <strong>${s.selected}</strong></div>
+            <div><span class="muted">Removidos:</span> <strong>${s.removed}</strong></div>
+          </div>
+          <div class="papersUtil">Rótulo: <strong class="phaseLabelStatus ${labelStatus === 'done' ? 'done' : 'pending'}">${labelStatus === 'done' ? 'Concluída' : 'Em análise'}</strong></div>
+        </div>
+      </div>
+      <div class="phaseCardFooter">
+        <span class="activeLabel pill" aria-hidden="true">Ativo</span>
+        <div class="phaseCardActions">
+          <button class="btn small" data-action="edit">Editar</button>
+        </div>
+      </div>
+    `;
+
+    // wire actions
+    const btnEdit = el.querySelector('button[data-action="edit"]');
+    if(btnEdit) btnEdit.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      // populate fields for editing and open panel in edit mode
+      if(phaseTitleInput) phaseTitleInput.value = title || '';
+      if(phaseDescInput) phaseDescInput.value = desc || '';
+      if(phaseCriteriaInput) phaseCriteriaInput.value = criteria || '';
+      if(phaseCategoriesInput) renderPhaseCategories(categories || []);
+      // set the editing status from the card (fallback to computed labelStatus)
+      phaseLabelStatus = el.dataset.labelStatus || labelStatus || 'pending';
+      updateToggleButtonUI();
+      phaseEditingCard = el;
+      updateSaveState();
+      openPhasePanel(true);
+    });
+
+    // store status on the element for later editing
+    el.dataset.labelStatus = labelStatus;
+
+    // clicking the card marks it active (except when clicking buttons)
+    el.addEventListener('click', (ev) => {
+      // ignore clicks coming from buttons inside the card
+      if(ev.target.closest('button')) return;
+      if(phasesList){
+        Array.from(phasesList.querySelectorAll('.phaseCard.active')).forEach(c => c.classList.remove('active'));
+      }
+      el.classList.add('active');
+    });
+
+    return el;
+  }
+
+  function openPhasePanel(isEditing){
+    phasePanel.classList.add('open');
+    phasePanel.setAttribute('aria-hidden', 'false');
+    if(sideOverlay) { sideOverlay.classList.add('open'); sideOverlay.setAttribute('aria-hidden','false'); }
+    document.body.classList.add('no-scroll');
+    // ensure custom resizers are present and wired
+    enhanceSidePanelTextareas();
+    // show delete button when editing an existing card
+    if(btnDeletePhase){
+      if(isEditing) btnDeletePhase.style.display = '';
+      else btnDeletePhase.style.display = 'none';
+    }
+    setTimeout(() => phaseTitleInput?.focus(), 60);
+  }
+  function closePhasePanel(){
+    phasePanel.classList.remove('open');
+    phasePanel.setAttribute('aria-hidden','true');
+    if(sideOverlay) { sideOverlay.classList.remove('open'); sideOverlay.setAttribute('aria-hidden','true'); }
+    document.body.classList.remove('no-scroll');
+    // clear editing state and any inline errors when closing/cancelling
+    phaseEditingCard = null;
+    if(phaseCategoriesInput) phaseCategoriesInput.innerHTML = '';
+    phaseLabelStatus = 'pending';
+    updateToggleButtonUI();
+    if(phaseTitleError){ phaseTitleError.classList.remove('visible'); phaseTitleError.textContent=''; }
+    if(phaseDescError){ phaseDescError.classList.remove('visible'); phaseDescError.textContent=''; }
+    if(phaseCriteriaError){ phaseCriteriaError.classList.remove('visible'); phaseCriteriaError.textContent=''; }
+    if(btnDeletePhase) btnDeletePhase.style.display = 'none';
+  }
+
+  // Enhance side panel textareas: remove native resize UI and add a modern draggable resizer
+  function enhanceSidePanelTextareas(){
+    if(!phasePanel) return;
+    const textareas = phasePanel.querySelectorAll('textarea');
+    textareas.forEach((t) => {
+      if(t.closest('.textarea-resizable')) return; // already enhanced
+      try{
+        t.style.resize = 'none';
+        const wrapper = document.createElement('div');
+        wrapper.className = 'textarea-resizable';
+        t.parentNode.insertBefore(wrapper, t);
+        wrapper.appendChild(t);
+
+        const handle = document.createElement('div');
+        handle.className = 'textarea-resizer';
+        wrapper.appendChild(handle);
+
+        let startY = 0, startH = 0, dragging = false;
+
+        const onMouseMove = (e) => {
+          if(!dragging) return;
+          const dy = e.clientY - startY;
+          const newH = Math.max(40, startH + dy);
+          t.style.height = newH + 'px';
+        };
+        const onMouseUp = () => {
+          if(!dragging) return;
+          dragging = false;
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+          document.body.style.userSelect = '';
+        };
+
+        handle.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          startY = e.clientY;
+          startH = t.offsetHeight;
+          dragging = true;
+          document.addEventListener('mousemove', onMouseMove);
+          document.addEventListener('mouseup', onMouseUp);
+          document.body.style.userSelect = 'none';
+        });
+
+        // touch support
+        const onTouchMove = (e) => {
+          if(!dragging) return;
+          e.preventDefault();
+          const touch = e.touches[0];
+          const dy = touch.clientY - startY;
+          const newH = Math.max(40, startH + dy);
+          t.style.height = newH + 'px';
+        };
+        const onTouchEnd = () => {
+          dragging = false;
+          document.removeEventListener('touchmove', onTouchMove);
+          document.removeEventListener('touchend', onTouchEnd);
+          document.body.style.userSelect = '';
+        };
+        handle.addEventListener('touchstart', (e) => {
+          const touch = e.touches[0];
+          if(!touch) return;
+          startY = touch.clientY;
+          startH = t.offsetHeight;
+          dragging = true;
+          document.addEventListener('touchmove', onTouchMove, { passive: false });
+          document.addEventListener('touchend', onTouchEnd);
+          document.body.style.userSelect = 'none';
+        });
+      }catch(err){console.warn('enhanceSidePanelTextareas error', err)}
+    });
+  }
+
+  if (btnShowAddPhase && phasePanel) {
+    btnShowAddPhase.addEventListener('click', () => {
+      // ensure fresh empty form when adding
+      phaseEditingCard = null;
+      if(phaseTitleInput) phaseTitleInput.value = '';
+      if(phaseDescInput) phaseDescInput.value = '';
+      if(phaseCriteriaInput) phaseCriteriaInput.value = '';
+      if(phaseCategoriesInput) renderPhaseCategories([]);
+      phaseLabelStatus = 'pending';
+      updateToggleButtonUI();
+      updateSaveState();
+      openPhasePanel(false);
+    });
+  }
+  if (btnClosePhase) btnClosePhase.addEventListener('click', closePhasePanel);
+  if (sideOverlay) sideOverlay.addEventListener('click', closePhasePanel);
+
+  // Disable save until required fields are filled
+  function updateSaveState(){
+    const ok = (phaseTitleInput?.value || '').trim() && (phaseDescInput?.value || '').trim() && (phaseCriteriaInput?.value || '').trim();
+    if(btnSavePhase) {
+      if(ok) btnSavePhase.classList.add('ready'); else btnSavePhase.classList.remove('ready');
+    }
+  }
+  // Init
+  // keep button enabled so user can attempt save and see validation messages
+  updateSaveState();
+  [phaseTitleInput, phaseDescInput, phaseCriteriaInput].forEach(inp => {
+    if(!inp) return;
+    inp.addEventListener('input', (e) => {
+      updateSaveState();
+      // clear inline error for this field when user types
+      if(!e?.target) return;
+      const id = e.target.id;
+      if(id === 'phaseTitle' && phaseTitleError){ phaseTitleError.classList.remove('visible'); phaseTitleError.textContent=''; }
+      if(id === 'phaseDesc' && phaseDescError){ phaseDescError.classList.remove('visible'); phaseDescError.textContent=''; }
+      if(id === 'phaseCriteria' && phaseCriteriaError){ phaseCriteriaError.classList.remove('visible'); phaseCriteriaError.textContent=''; }
+    });
+  });
+  if (btnSavePhase) btnSavePhase.addEventListener('click', (e) => {
+    const title = (phaseTitleInput?.value || '').trim();
+    const desc = (phaseDescInput?.value || '').trim();
+    const criteria = (phaseCriteriaInput?.value || '').trim();
+    // clear previous errors
+    if(phaseTitleError){ phaseTitleError.classList.remove('visible'); phaseTitleError.textContent=''; }
+    if(phaseDescError){ phaseDescError.classList.remove('visible'); phaseDescError.textContent=''; }
+    if(phaseCriteriaError){ phaseCriteriaError.classList.remove('visible'); phaseCriteriaError.textContent=''; }
+    // validate and show inline messages
+    const emptyFields = [];
+    if(!title) emptyFields.push('title');
+    if(!desc) emptyFields.push('desc');
+    if(!criteria) emptyFields.push('criteria');
+    if(emptyFields.length){
+      if(emptyFields.includes('title') && phaseTitleError){ phaseTitleError.textContent = 'Preencha o título da fase.'; phaseTitleError.classList.add('visible'); }
+      if(emptyFields.includes('desc') && phaseDescError){ phaseDescError.textContent = 'Preencha a descrição da fase.'; phaseDescError.classList.add('visible'); }
+      if(emptyFields.includes('criteria') && phaseCriteriaError){ phaseCriteriaError.textContent = 'Preencha os critérios da fase.'; phaseCriteriaError.classList.add('visible'); }
+      // focus first empty field
+      if(emptyFields[0] === 'title') phaseTitleInput?.focus();
+      else if(emptyFields[0] === 'desc') phaseDescInput?.focus();
+      else if(emptyFields[0] === 'criteria') phaseCriteriaInput?.focus();
+      return;
+    }
+    // parse categories from checkboxes into array
+    let categories = [];
+    if(phaseCategoriesInput){
+      const checked = Array.from(phaseCategoriesInput.querySelectorAll('input[type=checkbox]:checked'));
+      categories = checked.map(c => (c.value || '').trim()).filter(Boolean);
+    }
+
+    const cardData = { title, desc, criteria, categories, labelStatus: phaseLabelStatus };
+    if(phaseEditingCard){
+      // replace existing card with updated one
+      const newCard = createPhaseCard(cardData);
+      if(phasesList && phaseEditingCard.parentNode === phasesList){
+        phasesList.replaceChild(newCard, phaseEditingCard);
+      }
+      phaseEditingCard = null;
+    } else {
+      const card = createPhaseCard(cardData);
+      if (phasesList) phasesList.appendChild(card);
+    }
+    // Clear & close (UI-only, no persistence)
+    if(phaseTitleInput) phaseTitleInput.value = '';
+    if(phaseDescInput) phaseDescInput.value = '';
+    if(phaseCriteriaInput) phaseCriteriaInput.value = '';
+    if(phaseCategoriesInput) phaseCategoriesInput.innerHTML = '';
+    phaseLabelStatus = 'pending';
+    updateToggleButtonUI();
+    updateSaveState();
+    closePhasePanel();
+  });
+
+  // Delete handler (UI-only)
+  if(btnDeletePhase) btnDeletePhase.addEventListener('click', () => {
+    if(!phaseEditingCard) return;
+    if(!confirm('Excluir esta fase?')) return;
+    if(phasesList && phaseEditingCard.parentNode === phasesList){
+      phasesList.removeChild(phaseEditingCard);
+    }
+    phaseEditingCard = null;
+    if(phaseCategoriesInput) phaseCategoriesInput.innerHTML = '';
+    phaseLabelStatus = 'pending';
+    updateToggleButtonUI();
+    closePhasePanel();
+  });
+
 
   // Citations
   $("#btnAddCitation").addEventListener("click", async () => {

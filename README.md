@@ -1,41 +1,66 @@
 # Marcalink Snowballing
-Plugin do Chrome para marcação de links — auxilia no processo de snowballing de artigos no Google Acadêmico.
+Plugin para Chrome que auxilia a marcação e organização de links durante o processo de snowballing em pesquisas acadêmicas.
 
 ---
 
-## Novidades (atualização)
-- ✅ **Página de _Meus projetos_ separada**: a interface de projetos foi movida para uma página dedicada:
-  - `projects.html`, `projects.js` (apenas frontend + callbacks placeholder)
-  - **Removido** o painel/entrada `Meus projetos` das `Configurações` (`options.html`).
-- ✅ **Dashboard**: o link **Abrir Dashboard** foi removido das `Configurações` e permanece disponível apenas no **popup**.
-
-> Nota: todas as alterações feitas foram apenas no frontend; os callbacks disparam mensagens via `chrome.runtime.sendMessage` e aguardam integração com o storage/backend.
-
----
-
-## Mensagens (API frontend — stubs)
-Os handlers em `projects.js` emitem as seguintes ações (implemente no background/storage):
-
-- `projects.list` — responde `{ projects: [...] }`
-- `projects.create` — payload `{ project: { id, name, ... } }`
-- `projects.rename` — payload `{ id, name }`
-- `projects.remove` — payload `{ id }`
-- `projects.setCurrent` — payload `{ id }`
+## Status atual (28/02/2026)
+- **Frontend**: interfaces principais implementadas (`ui/popup/popup.html`, `ui/options/options.html`, `ui/projects/projects.html`, `ui/dashboard/dashboard.html`) com scripts de interação (`ui/*/*.js`).
+- **Extensão**: `background.js` e `content.js` presentes e tratam mensagens entre UI e background.
+- **Core**: lógica e modelos em [core/entities.mjs](core/entities.mjs) e [core/utils.mjs](core/utils.mjs).
+- **Infraestrutura**: persistência e comunicação em [infrastructure/storage.mjs](infrastructure/storage.mjs) e [infrastructure/socketManager.mjs](infrastructure/socketManager.mjs).
+- **Servidor auxiliar**: [server.mjs](server.mjs) disponível para integrações opcionais.
+- **Observação**: muitas rotas de mensagem (contrato `projects.*`) estão definidas no frontend; alguns handlers ainda funcionam como stubs e aguardam integração completa com o storage/backend.
 
 ---
 
-## Como testar rapidamente
-1. Recarregue a extensão em `chrome://extensions` (modo desenvolvedor).  
-2. Abra o popup e clique em **Meus projetos** — deve abrir a aba `projects.html`.  
-3. Na página `projects.html` teste: criar / renomear / remover / marcar como atual — observe mensagens no console da extensão.
+## Funcionalidades implementadas
+- UI para gerenciar projetos (criar, renomear, remover, definir projeto atual) — lógica frontend implementada em `ui/projects/projects.js`.
+- Popup e página de opções com navegação para Dashboard e Projetos.
+- Contrato de mensagens básico entre frontend e background (ex.: `projects.list`, `projects.create`, `projects.rename`, `projects.remove`, `projects.setCurrent`).
 
 ---
 
-## Próximos passos sugeridos
-- Integrar os stubs ao storage (`infrastructure/storage.mjs`).  
-- Sincronizar lista entre `options.html` e `projects.html` via eventos/storage listeners.  
-- Adicionar testes para o fluxo de projetos (unit + e2e).
+## Como executar e testar localmente
+1. Instale dependências e rode o servidor (opcional):
+```bash
+npm install
+node server.mjs
+```
+2. Carregue a extensão no Chrome/Edge:
+  - Acesse `chrome://extensions`, ative "Modo do desenvolvedor" e clique em "Carregar sem compactação";
+  - Selecione a pasta do repositório.
+3. Testes rápidos:
+  - Abra o popup da extensão e navegue para "Meus projetos";
+  - Abra `ui/projects/projects.html` e realize operações (criar/renomear/remover/definir atual) observando o console da extensão;
+  - Verifique mensagens entre UI e `background.js` no DevTools da extensão.
 
 ---
 
-Licença: veja o arquivo `LICENSE`.
+## Arquivos-chave
+- [background.js](background.js)
+- [content.js](content.js)
+- [server.mjs](server.mjs)
+- [core/entities.mjs](core/entities.mjs)
+- [core/utils.mjs](core/utils.mjs)
+- [infrastructure/storage.mjs](infrastructure/storage.mjs)
+- [infrastructure/socketManager.mjs](infrastructure/socketManager.mjs)
+- UI: [ui/projects/projects.html](ui/projects/projects.html), [ui/projects/projects.js](ui/projects/projects.js), [ui/options/options.html](ui/options/options.html), [ui/popup/popup.html](ui/popup/popup.html), [ui/dashboard/dashboard.html](ui/dashboard/dashboard.html)
+
+---
+
+## Próximos passos recomendados
+- Implementar os handlers de persistência em [infrastructure/storage.mjs](infrastructure/storage.mjs) para as ações `projects.*`.
+- Sincronizar o estado entre abas/popup usando listeners de storage ou mensagens.
+- Melhorar testes (unitários e E2E) para o fluxo de projetos.
+- Documentar contrato de mensagens e APIs internas.
+
+---
+
+## Contribuição
+- Abra issues com descrição clara de bugs ou melhorias.
+- Envie PRs com escopo pequeno, descrição e testes quando aplicável.
+
+---
+
+## Licença
+Veja o arquivo [LICENSE](LICENSE).

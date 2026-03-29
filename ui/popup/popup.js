@@ -17,7 +17,7 @@ async function refresh() {
 }
 
 document.getElementById("openDashboard").addEventListener("click", () => {
-  chrome.tabs.create({ url: chrome.runtime.getURL("ui/dashboard.html") });
+  chrome.tabs.create({ url: chrome.runtime.getURL("ui/dashboard/dashboard.html") });
 });
 
 document.getElementById("openOptions").addEventListener("click", () => {
@@ -25,11 +25,11 @@ document.getElementById("openOptions").addEventListener("click", () => {
 });
 
 document.getElementById("openProjects").addEventListener("click", () => {
-  chrome.tabs.create({ url: chrome.runtime.getURL("ui/projects.html") });
+  chrome.tabs.create({ url: chrome.runtime.getURL("ui/projects/projects.html") });
 });
 
 
 
-// File import removed — no file input in popup.html per user request.
+// File import removed — no file input in ui/popup/popup.html per user request.
 
 refresh();

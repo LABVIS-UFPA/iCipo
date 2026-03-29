@@ -35,6 +35,7 @@
 
         <nav class="nav u-flex-fill-col u-scroll-y">
           <button class="navBtn active" data-view="overview">📌 Visão geral</button>
+          <button class="navBtn" data-view="phases">🧭 Fases</button>
           <button class="navBtn" data-view="categories">🎨 Categorias</button>
           <button class="navBtn" data-view="papers">📚 Artigos</button>
           <button class="navBtn" data-view="iterations">🔁 Iterações</button>
@@ -332,6 +333,28 @@
           </div>
         </section>
 
+        <!-- PHASES -->
+        <section class="view hidden u-flex-fill-col" id="view_phases">
+          <div class="panelHeader">
+            <h2>Fases</h2>
+            <p>Gerencie as fases do seu processo (IU apenas, demo stub).</p>
+          </div>
+
+          <div class="toolbar">
+            <div style="display:flex;gap:8px;align-items:center">
+              <button id="btnShowAddPhase" class="btn">Adicionar nova fase</button>
+              <div class="muted">As fases são exibidas como blocos lado a lado para visualizar a progressão.</div>
+            </div>
+          </div>
+
+          <div class="card u-flex-fill-col" style="margin-top:12px">
+            <div class="cardTitle">Progressão de fases</div>
+            <div class="phasesRow">
+              <div id="phasesList" class="phasesList u-scroll-y" aria-live="polite"></div>
+            </div>
+          </div>
+        </section>
+
         <!-- Documents merged into Artigos view -->
 
         <!-- HISTORY MODAL (fallback) -->
@@ -350,16 +373,53 @@
           </div>
         </div>
 
+        <!-- SIDE PANEL: Add / Edit Phase (UI stub) -->
+        <div id="sideOverlay" class="sideOverlay" aria-hidden="true"></div>
+        <div id="phasePanel" class="sidePanel" aria-hidden="true">
+          <div class="sidePanelHeader">
+            <div style="font-weight:900">Nova fase</div>
+            <button id="btnClosePhase" class="btn">Fechar</button>
+          </div>
+          <div class="sidePanelBody u-scroll-y">
+            <label class="visually-hidden" for="phaseTitle">Título</label>
+            <input id="phaseTitle" class="input" placeholder="Título da fase" />
+            <div id="phaseTitleError" class="fieldError" aria-live="polite"></div>
+
+            <label class="visually-hidden" for="phaseDesc">Descrição</label>
+            <textarea id="phaseDesc" class="input" style="min-height:120px" placeholder="Descrição da fase"></textarea>
+            <div id="phaseDescError" class="fieldError" aria-live="polite"></div>
+
+            <label class="visually-hidden" for="phaseCriteria">Critérios</label>
+            <textarea id="phaseCriteria" class="input" style="min-height:120px" placeholder="Critérios (texto livre)"></textarea>
+            <div id="phaseCriteriaError" class="fieldError" aria-live="polite"></div>
+
+            <!-- rótulo removido -->
+
+            <label class="visually-hidden" for="phaseCategories">Categorias</label>
+            <div id="phaseCategories" class="categoriesList" aria-live="polite"></div>
+
+            <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+              <span class="muted">Rótulo:</span>
+              <button id="btnTogglePhaseStatus" class="btn ghost small" data-status="pending">Em análise</button>
+            </div>
+
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <button id="btnSavePhase" class="btn">Salvar (demo)</button>
+              <button id="btnDeletePhase" class="btn danger" style="display:none">Excluir fase</button>
+            </div>
+          </div>
+        </div>
+
         <!-- (removed duplicate INSIGHTS + modal) -->
       </main>
 
       <div id="noActiveProjectNotice" class="floatingNotice hidden" role="status" aria-live="polite">
             <div class="title">Nenhum projeto ativo</div>
-            <div>Abra um projeto para carregar o dashboard. <a href="projects.html">Ir para projetos</a>.</div>
+            <div>Abra um projeto para carregar o dashboard. <a href="../projects/projects.html">Ir para projetos</a>.</div>
       </div>
       <div id="serverOfflineNotice" class="floatingNotice danger hidden" role="status" aria-live="polite">
         <div class="title">Sem conexão com o servidor</div>
-        <div>Certifique-se de que o servidor está rodando ou verique a conexão em <a href="options.html">configurações</a>.</div>
+        <div>Certifique-se de que o servidor está rodando ou verique a conexão em <a href="../options/options.html">configurações</a>.</div>
       </div>
     </div>
 
