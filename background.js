@@ -158,8 +158,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
   }
 });
 
-// Nota: chrome.storage.onChanged listener removido pois storage.mjs não oferece listener nativo.
-// Para sincronizar mudanças de categorias, use storage.set() e atualize o menu manualmente.
 
 function nowIso() {
   return new Date().toISOString();
@@ -206,7 +204,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       args: [url, color]
     });
 
-    //TODO: Refatorar toda essa lógica depois.
+    //TODO: Refatorar toda essa lógica depois. Pois foi feito com IA temos que validar todo o código abaixo.
     // Save SVAT paper (best-effort metadata extraction)
     const project = data.svat_project || { id: "tcc-001", title: "Meu TCC", researcher: "", createdAt: nowIso(), currentIterationId: "I1" };
     const papers = Array.isArray(data.svat_papers) ? data.svat_papers : [];
