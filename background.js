@@ -16,47 +16,67 @@ import { wsManager } from './infrastructure/socketManager.mjs';
 
 async function createContextMenu() {
   // Remove existing menus and recreate safely (ignore duplicate-id race warnings)
-  chrome.contextMenus.removeAll(async () => {
-    const safeCreate = (opts) => {
+  await new Promise((resolve) => {
+    chrome.contextMenus.removeAll(() => {
+      if (chrome.runtime.lastError) {
+        console.warn('contextMenus.removeAll error', chrome.runtime.lastError);
+      }
+      resolve();
+    });
+  });
+
+  const safeCreate = (opts) => {
+    return new Promise((resolve) => {
       try {
         chrome.contextMenus.create(opts, () => {
           if (chrome.runtime.lastError) {
             const msg = String(chrome.runtime.lastError.message || "").toLowerCase();
             if (msg.includes('duplicate id') || msg.includes('cannot create item with duplicate id')) {
               // ignore duplicate menu creation race
+              resolve();
               return;
             }
             console.error('contextMenus.create error', chrome.runtime.lastError);
           }
+          resolve();
         });
       } catch (e) {
         console.warn('safeCreate failed', e);
+        resolve();
       }
-    };
+    });
+  };
 
-    safeCreate({ id: "highlightLink", title: "Marcar link", contexts: ["link"] });
+  await safeCreate({ id: "highlightLink", title: "Marcar link", contexts: ["link"] });
 
-    try {
-      const projectResult = await storage.getActiveProject();
-      let project = null;
-      if (projectResult && projectResult.data) {
-        project = projectResult.data;
-      } else if (projectResult && projectResult.id) {
-        project = projectResult;
-      }
-      
-      if (project && Array.isArray(project.categories)) {
-        for (const cat of project.categories) {
-          const title = cat.title || cat.label || 'Categoria';
-          safeCreate({ parentId: "highlightLink", id: `highlight_${title}`, title: title, contexts: ["link"] });
-        }
-      }
-    } catch (e) {
-      console.warn('Erro ao carregar categorias para o menu:', e);
+  try {
+    const projectResult = await storage.getActiveProject();
+    let project = null;
+    if (projectResult && projectResult.data) {
+      project = projectResult.data;
+    } else if (projectResult && projectResult.id) {
+      project = projectResult;
     }
+    
+    if (project && Array.isArray(project.categories)) {
+      for (const cat of project.categories) {
+        const title = cat.title || cat.label || 'Categoria';
+        await safeCreate({ parentId: "highlightLink", id: `highlight_${title}`, title: title, contexts: ["link"] });
+      }
+    }else{
+      // fallback default categories if project or categories not found
+      await safeCreate({
+        parentId: "highlightLink",
+        id: "activateProjectFromMenu",
+        title: "Nenhum projeto ativo - Ativar projeto",
+        contexts: ["link"]
+      });
+    }
+  } catch (e) {
+    console.warn('Erro ao carregar categorias para o menu:', e);
+  }
 
-    safeCreate({ id: "removeHighlight", title: "Remover marcação", contexts: ["link"] });
-  });
+  await safeCreate({ id: "removeHighlight", title: "Remover marcação", contexts: ["link"] });
 }
 
 chrome.runtime.onInstalled.addListener(async () => {
@@ -224,9 +244,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       papers.push({ ...base, createdAt: nowIso(), history: [{ ts: nowIso(), action: "mark", details: { category, origin, status, prevStatus: prev } }] });
     }
     await storage.set({ svat_project: project, svat_papers: papers });
-  }
-
-  if (info.menuItemId === "removeHighlight") {
+  
+  
+  } else if (info.menuItemId === "removeHighlight") {
     const data = await storage.get(["highlightedLinks", "svat_papers"]);
     let highlightedLinks = data.highlightedLinks || {};
     const url = (info.linkUrl || "").replace(/[\?|\&]casa\_token=\S+/i, "");
@@ -250,6 +270,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       function: removeHighlight,
       args: [url]
     });
+  
+  
+  } else if (info.menuItemId === "activateProjectFromMenu") {
+    // Abre a página ui/projects.html para ativar um projeto, já que não foi possível carregar projetos ativos para o menu
+    chrome.tabs.create({ url: chrome.runtime.getURL("ui/projects.html") });
   }
 });
 
