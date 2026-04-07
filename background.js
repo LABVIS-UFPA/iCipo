@@ -60,8 +60,8 @@ async function createContextMenu() {
     
     if (project && Array.isArray(project.categories)) {
       for (const cat of project.categories) {
-        const title = cat.title || cat.label || 'Categoria';
-        await safeCreate({ parentId: "highlightLink", id: `highlight_${title}`, title: title, contexts: ["link"] });
+        const title = cat.title ||'Categoria';
+        await safeCreate({ parentId: "highlightLink", id: `highlight_${cat.label}`, title: title, contexts: ["link"] });
       }
     }else{
       // fallback default categories if project or categories not found
@@ -171,7 +171,7 @@ function nowIso() {
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId.startsWith("highlight_")) {
-    const category = info.menuItemId.replace("highlight_", "");
+    const category_label = info.menuItemId.replace("highlight_", "");
     const data = await storage.get(["highlightedLinks", "svat_project", "svat_papers"]);
     
     // Busca a cor da categoria no projeto ativo
@@ -186,7 +186,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       }
       
       if (project && Array.isArray(project.categories)) {
-        const cat = project.categories.find(c => c.title === category);
+        const cat = project.categories.find(c => c.label === category_label);
         if (cat && cat.color) {
           color = cat.color;
         }
@@ -206,11 +206,12 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       args: [url, color]
     });
 
+    //TODO: Refatorar toda essa lógica depois.
     // Save SVAT paper (best-effort metadata extraction)
     const project = data.svat_project || { id: "tcc-001", title: "Meu TCC", researcher: "", createdAt: nowIso(), currentIterationId: "I1" };
     const papers = Array.isArray(data.svat_papers) ? data.svat_papers : [];
     const id = hashId(url);
-    const { origin, status } = inferFromCategory(category);
+    const { origin, status } = inferFromCategory(category_label);
 
     let meta = { title: url, authorsRaw: "", year: null };
     try {
@@ -232,16 +233,16 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       status,
       iterationId: project.currentIterationId || "I1",
       criteriaId: null,
-      tags: [category],
+      tags: [category_label],
       visited: true,
       updatedAt: nowIso(),
     };
     if (idx >= 0) {
       const history = Array.isArray(papers[idx].history) ? papers[idx].history : [];
-      history.push({ ts: nowIso(), action: "mark", details: { category, origin, status, prevStatus: prev } });
+      history.push({ ts: nowIso(), action: "mark", details: { category: category_label, origin, status, prevStatus: prev } });
       papers[idx] = { ...papers[idx], ...base, history };
     } else {
-      papers.push({ ...base, createdAt: nowIso(), history: [{ ts: nowIso(), action: "mark", details: { category, origin, status, prevStatus: prev } }] });
+      papers.push({ ...base, createdAt: nowIso(), history: [{ ts: nowIso(), action: "mark", details: { category: category_label, origin, status, prevStatus: prev } }] });
     }
     await storage.set({ svat_project: project, svat_papers: papers });
   
