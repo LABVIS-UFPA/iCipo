@@ -263,6 +263,7 @@ class Phase {
     this.criteria = checkArray(data.criteria);
     const papers = data.papers && typeof data.papers === "object" ? data.papers : {};
     this.papers = {
+      inheritedAccumulated: checkArray(papers.inheritedAccumulated),
       inherited: checkArray(papers.inherited),
       new: checkArray(papers.new),
       removed: checkArray(papers.removed),
@@ -280,6 +281,7 @@ class Phase {
       criteria: this.criteria,
       papers: {
         inherited: this.papers.inherited,
+        inheritedAccumulated: this.papers.inheritedAccumulated,
         new: this.papers.new,
         removed: this.papers.removed,
         selected: this.papers.selected,
