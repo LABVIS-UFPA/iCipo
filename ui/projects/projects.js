@@ -53,13 +53,13 @@ document.addEventListener('DOMContentLoaded', () => {
   /**
    * Exibe mensagem de placeholder quando não há projetos
    */
-  function showPlaceholder() {
+  function showPlaceholder(connectionIssue = false) {
     if (!elements.projectList) return;
     
     elements.projectList.innerHTML = '';
     const li = document.createElement('li');
     li.style.opacity = '0.8';
-    li.innerHTML = '<div class="left"><div class="title">Nenhum projeto encontrado</div></div>';
+    li.innerHTML = `<div class="left"><div class="title">${connectionIssue ? 'Erro de conexão com o servidor. Verifique se o servidor está rodando.' : 'Nenhum projeto encontrado'}</div></div>`;
     elements.projectList.appendChild(li);
   }
 
@@ -216,7 +216,7 @@ document.addEventListener('DOMContentLoaded', () => {
         await storage.openProject(project.id);
         window.location.href = '../dashboard/dashboard.html';
       } catch (e) {
-        console.warn('openProject failed', e);
+        console.log('openProject failed', e);
         alert('Falha ao abrir o projeto. Veja console.');
       }
     });
@@ -242,7 +242,7 @@ document.addEventListener('DOMContentLoaded', () => {
       try { 
         await storage.archiveProject(project.id); 
       } catch (e) { 
-        console.warn('archiveProject failed', e); 
+        console.log('archiveProject failed', e); 
       }
       
       li.remove();
@@ -365,7 +365,7 @@ document.addEventListener('DOMContentLoaded', () => {
       closeSidenav();
       await loadProjectsFromStorage();
     } catch (e) {
-      console.warn('saveProject failed', e);
+      console.log('saveProject failed', e);
       alert('Falha ao salvar o projeto. Veja console.');
     }
   }
@@ -424,7 +424,8 @@ document.addEventListener('DOMContentLoaded', () => {
       projects = await storage.listProjects();
       renderProjects(elements.filterInput?.value || '');
     } catch (e) {
-      console.warn('Failed to load projects from storage', e);
+      showPlaceholder(true);
+      console.log('Failed to load projects from storage', e);
     }
   }
 
@@ -478,12 +479,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Carrega projetos
     await loadProjectsFromStorage();
     
-    // Placeholder de segurança (caso o carregamento falhe)
-    setTimeout(() => {
-      if (!projects.length && elements.projectList) {
-        showPlaceholder();
-      }
-    }, 6000);
   }
 
   // Inicia a aplicação

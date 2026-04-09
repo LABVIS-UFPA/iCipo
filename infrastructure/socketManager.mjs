@@ -73,13 +73,44 @@ class WebsocketManager {
     this.finalizeClose("🔌 Desconectado", "Desconectado");
   }
 
-  connect(url, port) {
+  buildProbeUrl(wsUrl) {
+    return wsUrl.replace(/^wss?:\/\//i, (m) => m.toLowerCase().startsWith("wss") ? "https://" : "http://");
+  }
+
+  async isServerAvailable(wsUrl, timeoutMs = 1500) {
+    const probeUrl = this.buildProbeUrl(wsUrl);
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      // Qualquer resposta HTTP — inclusive 426 Upgrade Required de servidor WS-only —
+      // confirma que a porta está ativa. Só cai em catch quando há falha de rede.
+      await fetch(probeUrl, { method: "HEAD", cache: "no-store", signal: ctrl.signal });
+      return true;
+    } catch {
+      return false; // ERR_CONNECTION_REFUSED, timeout, etc.
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async connect(url, port) {
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       this.appendLog("Já está conectado.");
       return;
     }
 
     const fullUrl = this.buildWsUrl(url, port);
+
+    const up = await this.isServerAvailable(fullUrl);
+    if (!up) {
+      this.setStatus("Desconectado");
+      this.appendLog("Servidor indisponível em " + fullUrl + ". Tentando novamente em breve...");
+      setTimeout(() => this.tryAutoConnect(), this.autoConnectionTime);
+      this.autoConnectionTime *= 2;
+      if (this.autoConnectionTime > 60000) this.autoConnectionTime = 60000;
+      return;
+    }
+
     this.setStatus("Conectando...");
     this.appendLog("Conectando em " + fullUrl);
     this._closedFinalized = false;
@@ -87,7 +118,6 @@ class WebsocketManager {
     // Atualiza a URL global para o nosso supressor silenciar os erros no console
     this.currentConnectingUrl = fullUrl;
 
-    
     try {
       this.socket = new WebSocket(fullUrl);
     } catch (e) {
