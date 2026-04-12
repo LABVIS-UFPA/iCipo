@@ -6,8 +6,20 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.mjs",
-    "dev:ui": "vite --config vite.config.mjs",
-    "build:ui": "vite build --config vite.config.mjs"
+
+    "dev:projects": "set UI_TARGET=projects&& vite --config vite.config.mjs",
+    "build:projects": "set UI_TARGET=projects&& vite build --config vite.config.mjs",
+
+    "dev:popup": "set UI_TARGET=popup&& vite --config vite.config.mjs",
+    "build:popup": "set UI_TARGET=popup&& vite build --config vite.config.mjs",
+
+    "dev:options": "set UI_TARGET=options&& vite --config vite.config.mjs",
+    "build:options": "set UI_TARGET=options&& vite build --config vite.config.mjs",
+
+    "dev:dashboard": "set UI_TARGET=dashboard&& vite --config vite.config.mjs",
+    "build:dashboard": "set UI_TARGET=dashboard&& vite build --config vite.config.mjs",
+
+    "build:ui": "npm run build:projects"
   },
   "repository": {
     "type": "git",

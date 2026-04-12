@@ -2,3 +2,6 @@
 ./user_data/*
 /node_modules
 /user_data
+# builds
+ui/**/dist
+dist
