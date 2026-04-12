@@ -5,18 +5,20 @@ import path from 'node:path';
 export default defineConfig({
   plugins: [svelte()],
   build: {
-    outDir: path.resolve('ui/projects/dist'),
+    outDir: path.resolve('dist'),
     emptyOutDir: true,
     rollupOptions: {
-      input: path.resolve('ui/projects/src/main.js'),
+      input: {
+        projects: path.resolve('ui/projects/projects.html'),
+        // Ativar os htmls abaixo após migrar cada tela:
+        // popup: path.resolve('ui/popup/popup.html'),
+        // options: path.resolve('ui/options/options.html'),
+        // dashboard: path.resolve('ui/dashboard/dashboard.html')
+      },
       output: {
-        entryFileNames: 'projects.js',
-        assetFileNames: (assetInfo) => {
-          if (assetInfo.name && assetInfo.name.endsWith('.css')) {
-            return 'projects.css';
-          }
-          return 'assets/[name]-[hash][extname]';
-        }
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash][extname]'
       }
     }
   }

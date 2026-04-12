@@ -6,8 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.mjs",
-    "dev:projects": "vite --config vite.config.mjs",
-    "build:projects": "vite build --config vite.config.mjs"
+    "dev:ui": "vite --config vite.config.mjs",
+    "build:ui": "vite build --config vite.config.mjs"
   },
   "repository": {
     "type": "git",
