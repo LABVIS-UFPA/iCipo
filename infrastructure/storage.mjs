@@ -305,7 +305,7 @@ class WebSocketStrategy {
       const timer = setTimeout(() => {
         if (!isResolved) {
           isResolved = true;
-          console.warn("Timeout aguardando WebSocket.");
+          console.log("Timeout aguardando WebSocket.");
           resolve(false); 
         }
       }, timeoutMs);
