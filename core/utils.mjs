@@ -23,6 +23,18 @@ export function mapToJSON(arr) {
     return a.map(x => x && typeof x.toJSON === 'function' ? x.toJSON() : x);
 }
 
+export function uniqueStrings(values) {
+    return [...new Set(checkArray(values).filter(Boolean))];
+}
+
+export function replaceArrayItem(values, oldValue, newValue) {
+    return uniqueStrings(checkArray(values).map(value => value === oldValue ? newValue : value));
+}
+
+export function removeArrayItem(values, targetValue) {
+    return checkArray(values).filter(value => value !== targetValue);
+}
+
 export function tokenSet(title) {
     return new Set(normalizeStr(title)
         .replace(/[^a-z0-9\s]/g, " ")

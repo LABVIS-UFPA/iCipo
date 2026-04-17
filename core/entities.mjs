@@ -1,4 +1,4 @@
-import { checkArray, slugify, mapToJSON } from "./utils.mjs";
+import { checkArray, slugify, mapToJSON, uniqueStrings, replaceArrayItem, removeArrayItem } from "./utils.mjs";
 
 class Project {
   // Default project schema (matches ui/projects/projects.html form)
@@ -53,6 +53,210 @@ class Project {
     }else{
       return null;
     }
+  }
+
+  _touch() {
+    this.updatedAt = new Date().toISOString();
+  }
+
+  _assertUniqueLabel(collection, label, currentLabel = null, entityName = "item") {
+    if (!label) {
+      throw new Error(`O label de ${entityName} é obrigatório.`);
+    }
+
+    const duplicated = collection.find(item => item.label === label && item.label !== currentLabel);
+    if (duplicated) {
+      throw new Error(`${entityName} com label \"${label}\" já existe.`);
+    }
+  }
+
+  _assertCriteriaExist(labels) {
+    const missing = uniqueStrings(labels).filter(label => !this.criteria.some(criterion => criterion.label === label));
+    if (missing.length) {
+      throw new Error(`Critérios inexistentes: ${missing.join(", ")}.`);
+    }
+  }
+
+  _assertCategoriesExist(labels) {
+    const missing = uniqueStrings(labels).filter(label => !this.categories.some(category => category.label === label));
+    if (missing.length) {
+      throw new Error(`Categorias inexistentes: ${missing.join(", ")}.`);
+    }
+  }
+
+  _renameCriterionReferences(oldLabel, newLabel) {
+    if (!oldLabel || oldLabel === newLabel) return;
+
+    for (const phase of this.phases) {
+      phase.criteria = replaceArrayItem(phase.criteria, oldLabel, newLabel);
+    }
+
+    for (const category of this.categories) {
+      category.criteria.all = replaceArrayItem(category.criteria.all, oldLabel, newLabel);
+      category.criteria.at_least_one = replaceArrayItem(category.criteria.at_least_one, oldLabel, newLabel);
+    }
+  }
+
+  _removeCriterionReferences(label) {
+    for (const phase of this.phases) {
+      phase.criteria = removeArrayItem(phase.criteria, label);
+    }
+
+    for (const category of this.categories) {
+      category.criteria.all = removeArrayItem(category.criteria.all, label);
+      category.criteria.at_least_one = removeArrayItem(category.criteria.at_least_one, label);
+    }
+  }
+
+  _renamePhaseReferences(oldLabel, newLabel) {
+    if (!oldLabel || oldLabel === newLabel) return;
+
+    for (const category of this.categories) {
+      category.phases = replaceArrayItem(category.phases, oldLabel, newLabel);
+    }
+  }
+
+  _removePhaseReferences(label) {
+    for (const category of this.categories) {
+      category.phases = removeArrayItem(category.phases, label);
+    }
+  }
+
+  // --- Criterion management ---
+  getCriterionByLabel(label) {
+    return this.criteria.find(criterion => criterion.label === label) || null;
+  }
+
+  addCriterion(criterionData) {
+    const rawCriterion = criterionData instanceof Criterion ? criterionData.toJSON() : (criterionData || {});
+    const criterion = Criterion.fromJSON(rawCriterion);
+    this._assertUniqueLabel(this.criteria, criterion.label, null, "criterion");
+
+    this.criteria.push(criterion);
+    this._touch();
+    return criterion;
+  }
+
+  updateCriterion(label, criterionData) {
+    const criterionIndex = this.criteria.findIndex(criterion => criterion.label === label);
+    if (criterionIndex === -1) return null;
+
+    const previousCriterion = this.criteria[criterionIndex];
+    const rawCriterion = criterionData instanceof Criterion ? criterionData.toJSON() : (criterionData || {});
+    const nextCriterion = Criterion.fromJSON({
+      ...previousCriterion.toJSON(),
+      ...rawCriterion,
+    });
+    this._assertUniqueLabel(this.criteria, nextCriterion.label, previousCriterion.label, "criterion");
+
+    this.criteria[criterionIndex] = nextCriterion;
+    this._renameCriterionReferences(previousCriterion.label, nextCriterion.label);
+    this._touch();
+    return nextCriterion;
+  }
+
+  removeCriterion(label) {
+    const criterionIndex = this.criteria.findIndex(criterion => criterion.label === label);
+    if (criterionIndex === -1) return null;
+
+    const removedCriterion = this.criteria.splice(criterionIndex, 1)[0];
+    this._removeCriterionReferences(removedCriterion.label);
+    this._touch();
+    return removedCriterion;
+  }
+
+  // --- Phase management ---
+  getPhaseByLabel(label) {
+    return this.phases.find(phase => phase.label === label) || null;
+  }
+
+  addPhase(phaseData) {
+    const rawPhase = phaseData instanceof Phase ? phaseData.toJSON() : (phaseData || {});
+    const phase = Phase.fromJSON(rawPhase);
+    phase.categories = uniqueStrings(phase.categories);
+    phase.criteria = uniqueStrings(phase.criteria);
+    this._assertUniqueLabel(this.phases, phase.label, null, "phase");
+    this._assertCriteriaExist(phase.criteria);
+    this._assertCategoriesExist(phase.categories);
+
+    this.phases.push(phase);
+    this._touch();
+    return phase;
+  }
+
+  updatePhase(label, phaseData) {
+    const phaseIndex = this.phases.findIndex(phase => phase.label === label);
+    if (phaseIndex === -1) return null;
+
+    const previousPhase = this.phases[phaseIndex];
+    const rawPhase = phaseData instanceof Phase ? phaseData.toJSON() : (phaseData || {});
+    const nextPhase = Phase.fromJSON({
+      ...previousPhase.toJSON(),
+      ...rawPhase,
+    });
+    nextPhase.categories = uniqueStrings(nextPhase.categories);
+    nextPhase.criteria = uniqueStrings(nextPhase.criteria);
+    this._assertUniqueLabel(this.phases, nextPhase.label, previousPhase.label, "phase");
+    this._assertCriteriaExist(nextPhase.criteria);
+    this._assertCategoriesExist(nextPhase.categories);
+
+    this.phases[phaseIndex] = nextPhase;
+    this._renamePhaseReferences(previousPhase.label, nextPhase.label);
+    this._touch();
+    return nextPhase;
+  }
+
+  canRemovePhase(label) {
+    const phase = this.getPhaseByLabel(label);
+    return !!phase && !phase.completed;
+  }
+
+  removePhase(label) {
+    const phaseIndex = this.phases.findIndex(phase => phase.label === label);
+    if (phaseIndex === -1) return null;
+
+    const phase = this.phases[phaseIndex];
+    if (phase.completed) {
+      throw new Error(`A phase \"${label}\" já foi concluída e não pode ser removida.`);
+    }
+
+    const removedPhase = this.phases.splice(phaseIndex, 1)[0];
+    this._removePhaseReferences(removedPhase.label);
+    this._touch();
+    return removedPhase;
+  }
+
+  getActivePhase() {
+    return this.phases.find(phase => !phase.completed) || null;
+  }
+
+  canFinalizePhase(label) {
+    const phase = this.getPhaseByLabel(label);
+    const activePhase = this.getActivePhase();
+    return !!phase && !phase.completed && !!activePhase && activePhase.label === label;
+  }
+
+  finalizePhase(label) {
+    const phaseIndex = this.phases.findIndex(phase => phase.label === label);
+    if (phaseIndex === -1) return null;
+
+    const phase = this.phases[phaseIndex];
+    if (phase.completed) {
+      throw new Error(`A phase \"${label}\" já está concluída.`);
+    }
+
+    const activePhase = this.getActivePhase();
+    if (!activePhase || activePhase.label !== label) {
+      throw new Error(`A phase \"${label}\" não é a fase ativa atual.`);
+    }
+
+    phase.completed = true;
+    this._touch();
+
+    return {
+      completedPhase: phase,
+      nextActivePhase: this.getActivePhase(),
+    };
   }
 
   // --- Paper management ---
@@ -236,7 +440,6 @@ class Criterion {
     this.title = data.title || "";
     this.label = data.label || slugify(this.title);
     this.description = data.description || "";
-    this.phases = checkArray(data.phases);
   }
 
   toJSON() {
@@ -244,7 +447,6 @@ class Criterion {
       title: this.title,
       label: this.label,
       description: this.description,
-      phases: this.phases,
     };
   }
 
@@ -263,6 +465,7 @@ class Phase {
     this.criteria = checkArray(data.criteria);
     const papers = data.papers && typeof data.papers === "object" ? data.papers : {};
     this.papers = {
+      inheritedAccumulated: checkArray(papers.inheritedAccumulated),
       inherited: checkArray(papers.inherited),
       new: checkArray(papers.new),
       removed: checkArray(papers.removed),
@@ -280,6 +483,7 @@ class Phase {
       criteria: this.criteria,
       papers: {
         inherited: this.papers.inherited,
+        inheritedAccumulated: this.papers.inheritedAccumulated,
         new: this.papers.new,
         removed: this.papers.removed,
         selected: this.papers.selected,
