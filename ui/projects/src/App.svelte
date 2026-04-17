@@ -19,6 +19,7 @@
   let projectIdPreview = '';
   let projectIdStatus = '';
   let projectIdStatusColor = 'inherit';
+  let connectionIssue = false;
 
   $: filteredProjects = projects.filter((p) => {
     const query = filter.trim().toLowerCase();
@@ -84,6 +85,10 @@
     openSidenav();
   }
 
+  function showPlaceholder(connectionError = false) {
+    connectionIssue = connectionError;
+  }
+
   function openEditSidenav(project) {
     editMode = true;
     editingProjectID = project.id;
@@ -102,7 +107,9 @@
   async function loadProjectsFromStorage() {
     try {
       projects = await storage.listProjects();
+      connectionIssue = false;
     } catch (e) {
+      showPlaceholder(true);
       console.warn('Failed to load projects from storage', e);
       projects = [];
     }
@@ -216,12 +223,6 @@
 
   onMount(async () => {
     await loadProjectsFromStorage();
-
-    setTimeout(() => {
-      if (!projects.length) {
-        projects = [];
-      }
-    }, 6000);
   });
 </script>
 
@@ -288,7 +289,11 @@
             {#if filteredProjects.length === 0}
               <li class="placeholderItem">
                 <div class="left">
-                  <div class="title">Nenhum projeto encontrado</div>
+                  <div class="title">
+                    {connectionIssue
+                      ? 'Erro de conexão com o servidor. Verifique se o servidor está rodando.'
+                      : 'Nenhum projeto encontrado'}
+                  </div>
                 </div>
               </li>
             {:else}
