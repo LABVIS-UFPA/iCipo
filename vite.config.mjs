@@ -5,6 +5,7 @@ import path from 'node:path';
 function pageConfig(name, input, outDir) {
   return {
     plugins: [svelte()],
+    base: './',
     build: {
       outDir,
       emptyOutDir: true,
@@ -30,38 +31,13 @@ function pageConfig(name, input, outDir) {
 export default defineConfig(() => {
   const target = process.env.UI_TARGET;
 
-  switch (target) {
-    case 'projects':
-      return pageConfig(
-        'projects',
-        path.resolve('ui/projects/src/main.js'),
-        path.resolve('ui/projects/dist')
-      );
-
-    case 'popup':
-      return pageConfig(
-        'popup',
-        path.resolve('ui/popup/src/main.js'),
-        path.resolve('ui/popup/dist')
-      );
-
-    case 'options':
-      return pageConfig(
-        'options',
-        path.resolve('ui/options/src/main.js'),
-        path.resolve('ui/options/dist')
-      );
-
-    case 'dashboard':
-      return pageConfig(
-        'dashboard',
-        path.resolve('ui/dashboard/src/main.js'),
-        path.resolve('ui/dashboard/dist')
-      );
-
-    default:
-      throw new Error(
-        'Defina UI_TARGET como projects, popup, options ou dashboard.'
-      );
+  if (target !== 'projects') {
+    throw new Error('Defina UI_TARGET como projects.');
   }
+
+  return pageConfig(
+    'projects',
+    path.resolve('ui/projects/src/main.js'),
+    path.resolve('ui/projects/dist')
+  );
 });

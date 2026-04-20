@@ -31,7 +31,13 @@
     );
   });
 
-  $: updateIdPreview();
+  $: {
+    projectName;
+    projects;
+    editMode;
+    editingProjectID;
+    updateIdPreview();
+  }
 
   function updateIdPreview() {
     const name = projectName.trim();
@@ -116,14 +122,21 @@
   }
 
   async function handleEdit(projectId) {
-    try {
-      const projectData = await storage.loadProject(projectId);
-      openEditSidenav(projectData);
-    } catch (e) {
-      console.warn('loadProject failed', e);
-      alert('Falha ao carregar o projeto. Veja console.');
+  try {
+    const projectData = await storage.loadProject(projectId);
+
+    if (!projectData) {
+      console.warn(`Projeto com id "${projectId}" não encontrado`);
+      alert('Projeto não encontrado.');
+      return;
     }
+
+    openEditSidenav(projectData);
+  } catch (e) {
+    console.warn('loadProject failed', e);
+    alert('Falha ao carregar o projeto. Veja console.');
   }
+}
 
   async function handleOpenProject(project) {
     try {
