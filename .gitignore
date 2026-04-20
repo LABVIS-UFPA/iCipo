@@ -1,7 +1,8 @@
-*/node_modules/*
-./user_data/*
-/node_modules
-/user_data
-# builds
-ui/**/dist
-dist
+# dependencies
+node_modules/
+
+# local data
+user_data/
+
+# build outputs
+dist/
