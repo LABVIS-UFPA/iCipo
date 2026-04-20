@@ -1,4 +1,4 @@
-## 🧪 Como testar (branch: 48-migrar-projects-para-o-svelte)
+## 🧪 Como testar
 
 ### Passos
 
@@ -26,7 +26,3 @@ npm run build:ui
 5. Acessar a tela de projetos pela extensão
 
 ---
-
-## 🔥 Observação
-
-⚠️ Esta branch contém a migração da tela de projects para Svelte + Vite.
