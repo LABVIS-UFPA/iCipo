@@ -248,7 +248,7 @@
   </header>
 
   <div class="main">
-    <main class="workarea noLeftMargin" class:shiftRight={sidenavOpen}>
+    <main class="workarea noLeftMargin">
       <section class="panel active fullHeight" id="panel-projects-dedicated">
         <div class="panelHeader">
           <div>
@@ -472,9 +472,6 @@
     width: 380px;
     display: flex;
     transform: scale(1, 1);
-  }
-
-  .shiftRight {
   }
 
   .projectsSidenav .formRowStack {
