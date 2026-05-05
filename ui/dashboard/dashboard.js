@@ -1769,7 +1769,9 @@ function bindEvents() {
   function openPhasePanel(isEditing){
     phasePanel.classList.add('open');
     phasePanel.setAttribute('aria-hidden', 'false');
+    phasePanel.removeAttribute('inert');
     if(sideOverlay) { sideOverlay.classList.add('open'); sideOverlay.setAttribute('aria-hidden','false'); }
+    if(sideOverlay) { sideOverlay.removeAttribute('inert'); }
     document.body.classList.add('no-scroll');
     // ensure custom resizers are present and wired
     enhanceSidePanelTextareas();
@@ -1783,7 +1785,9 @@ function bindEvents() {
   function closePhasePanel(){
     phasePanel.classList.remove('open');
     phasePanel.setAttribute('aria-hidden','true');
+    phasePanel.setAttribute('inert', '');
     if(sideOverlay) { sideOverlay.classList.remove('open'); sideOverlay.setAttribute('aria-hidden','true'); }
+    if(sideOverlay) { sideOverlay.setAttribute('inert', ''); }
     document.body.classList.remove('no-scroll');
     // clear editing state and any inline errors when closing/cancelling
     phaseEditingCard = null;
