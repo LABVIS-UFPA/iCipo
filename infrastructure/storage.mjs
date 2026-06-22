@@ -265,6 +265,147 @@ class NodeFsStrategy {
     return { status: "ok", message: "Data saved." };
   }
 
+  normalizePhase(phaseData = {}, existing = {}) {
+    const title = (phaseData.title ?? existing.title ?? '').toString().trim();
+    const labelSource = (phaseData.label ?? existing.label ?? title).toString().trim();
+    const label = labelSource
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9._-]+/g, '_')
+      .replace(/^_+|_+$/g, '') || `fase_${Date.now().toString(36)}`;
+
+    const criteria = Array.isArray(phaseData.criteria)
+      ? phaseData.criteria
+      : typeof phaseData.criteria === 'string'
+        ? phaseData.criteria.split(/\r?\n|,/).map((v) => v.trim()).filter(Boolean)
+        : Array.isArray(existing.criteria) ? existing.criteria : [];
+
+    return {
+      label,
+      title,
+      description: phaseData.description ?? existing.description ?? '',
+      completed: typeof phaseData.completed === 'boolean' ? phaseData.completed : !!existing.completed,
+      categories: Array.isArray(phaseData.categories) ? phaseData.categories : (Array.isArray(existing.categories) ? existing.categories : []),
+      criteria,
+      papers: {
+        inheritedAccumulated: existing?.papers?.inheritedAccumulated || [],
+        inherited: existing?.papers?.inherited || [],
+        new: existing?.papers?.new || [],
+        removed: existing?.papers?.removed || [],
+        selected: existing?.papers?.selected || []
+      }
+    };
+  }
+
+  async savePhase(projectID, phaseData) {
+    const relPath = this.path.join(projectID, 'project.json');
+    const project = this.readJson(relPath);
+
+    console.log('🧭 NodeFsStrategy.savePhase', { projectID, phaseData, relPath });
+
+    if (!project) {
+      return { status: 'error', message: 'Projeto não encontrado.' };
+    }
+
+    if (!Array.isArray(project.phases)) project.phases = [];
+
+    const phase = this.normalizePhase(phaseData);
+    if (project.phases.some((p) => p.label === phase.label)) {
+      return { status: 'error', message: `Já existe uma fase com o rótulo "${phase.label}".` };
+    }
+
+    project.phases.push(phase);
+    if (!project.activePhaseLabel) project.activePhaseLabel = phase.label;
+    project.updatedAt = new Date().toISOString();
+
+    this.writeJson(relPath, project);
+    if (this.activeProjectID === projectID) this.activeProjectData = project;
+
+    console.log('✅ Fase salva no project.json:', phase);
+    return { status: 'ok', message: 'Fase salva com sucesso.', data: phase };
+  }
+
+  async updatePhase(projectID, phaseLabel, phaseData) {
+    const relPath = this.path.join(projectID, 'project.json');
+    const project = this.readJson(relPath);
+
+    console.log('🧭 NodeFsStrategy.updatePhase', { projectID, phaseLabel, phaseData, relPath });
+
+    if (!project) return { status: 'error', message: 'Projeto não encontrado.' };
+    if (!Array.isArray(project.phases)) project.phases = [];
+
+    const idx = project.phases.findIndex((p) => p.label === phaseLabel);
+    if (idx === -1) return { status: 'error', message: 'Fase não encontrada.' };
+
+    const current = project.phases[idx];
+    const phase = this.normalizePhase(phaseData, current);
+
+    const duplicate = project.phases.some((p, i) => i !== idx && p.label === phase.label);
+    if (duplicate) return { status: 'error', message: `Já existe uma fase com o rótulo "${phase.label}".` };
+
+    project.phases[idx] = phase;
+    if (project.activePhaseLabel === phaseLabel) project.activePhaseLabel = phase.label;
+    project.updatedAt = new Date().toISOString();
+
+    this.writeJson(relPath, project);
+    if (this.activeProjectID === projectID) this.activeProjectData = project;
+
+    console.log('✅ Fase atualizada no project.json:', phase);
+    return { status: 'ok', message: 'Fase atualizada com sucesso.', data: phase };
+  }
+
+  async deletePhase(projectID, phaseLabel) {
+    const relPath = this.path.join(projectID, 'project.json');
+    const project = this.readJson(relPath);
+
+    console.log('🧭 NodeFsStrategy.deletePhase', { projectID, phaseLabel, relPath });
+
+    if (!project) return { status: 'error', message: 'Projeto não encontrado.' };
+    if (!Array.isArray(project.phases)) project.phases = [];
+
+    const before = project.phases.length;
+    project.phases = project.phases.filter((p) => p.label !== phaseLabel);
+
+    if (project.phases.length === before) return { status: 'error', message: 'Fase não encontrada.' };
+
+    if (project.activePhaseLabel === phaseLabel) {
+      project.activePhaseLabel = project.phases[0]?.label || null;
+    }
+
+    project.updatedAt = new Date().toISOString();
+    this.writeJson(relPath, project);
+    if (this.activeProjectID === projectID) this.activeProjectData = project;
+
+    console.log('✅ Fase removida do project.json:', phaseLabel);
+    return { status: 'ok', message: 'Fase removida com sucesso.', data: { activePhaseLabel: project.activePhaseLabel || null } };
+  }
+
+  async setActivePhase(projectID, phaseLabel) {
+    const relPath = this.path.join(projectID, 'project.json');
+    const project = this.readJson(relPath);
+
+    console.log('🟢 NodeFsStrategy.setActivePhase', { projectID, phaseLabel, relPath });
+
+    if (!project) return { status: 'error', message: 'Projeto não encontrado.' };
+    if (!Array.isArray(project.phases)) project.phases = [];
+
+    const phaseExists = project.phases.some((p) => p.label === phaseLabel);
+    if (!phaseExists) return { status: 'error', message: 'Fase não encontrada.' };
+
+    project.activePhaseLabel = phaseLabel;
+    project.updatedAt = new Date().toISOString();
+
+    this.writeJson(relPath, project);
+    if (this.activeProjectID === projectID) this.activeProjectData = project;
+
+    return {
+      status: 'ok',
+      message: 'Fase ativa atualizada.',
+      data: { activePhaseLabel: phaseLabel }
+    };
+  }
+
   // Check if this strategy is active and ready
   isActive() {
     return this.fs !== null && this.path !== null && this.baseDir !== null;
@@ -387,13 +528,19 @@ class WebSocketStrategy {
     return this.send('list_projects', {});
   }
 
-  // Accepts a `Paper` instance and returns the server response
+  // Accepts a `Paper` instance or a plain paper object and returns the server response
   async savePaper(paper) {
-    if(paper && paper instanceof Paper){
-      const data = paper.toJSON();
-      return this.send('save_paper', { paperId: data.id, data });
+    if (!paper) {
+      return Promise.reject(new Error("O artigo a salvar não pode ser vazio."));
     }
-    return Promise.reject(new Error("O objeto a salvar deve ser uma instância de Paper."));;
+
+    const data = paper instanceof Paper ? paper.toJSON() : paper;
+
+    if (!data.id && !(data.id === 0)) {
+      return Promise.reject(new Error("Paper JSON must include an id."));
+    }
+
+    return this.send('save_paper', { paperId: data.id, data });
   }
 
   // Returns a `Paper` instance (or null)
@@ -411,6 +558,22 @@ class WebSocketStrategy {
 
   async deletePaper(paperId) {
     return this.send('delete_paper', { paperId });
+  }
+
+  async savePhase(projectID, phaseData) {
+    return this.send('save_phase', { projectID, data: phaseData });
+  }
+
+  async updatePhase(projectID, phaseLabel, phaseData) {
+    return this.send('update_phase', { projectID, phaseLabel, data: phaseData });
+  }
+
+  async deletePhase(projectID, phaseLabel) {
+    return this.send('delete_phase', { projectID, phaseLabel });
+  }
+
+  async setActivePhase(projectID, phaseLabel) {
+    return this.send('set_active_phase', { projectID, phaseLabel });
   }
 
   // Returns array of `Paper` instances
@@ -682,6 +845,28 @@ class StorageService {
   async listPapers() {
     if (!this.initialized) await this.init();
     return this.strategy.listPapers();
+  }
+
+  // ========== Phase CRUD ==========
+
+  async savePhase(projectID, phaseData) {
+    if (!this.initialized) await this.init();
+    return this.strategy.savePhase(projectID, phaseData);
+  }
+
+  async updatePhase(projectID, phaseLabel, phaseData) {
+    if (!this.initialized) await this.init();
+    return this.strategy.updatePhase(projectID, phaseLabel, phaseData);
+  }
+
+  async deletePhase(projectID, phaseLabel) {
+    if (!this.initialized) await this.init();
+    return this.strategy.deletePhase(projectID, phaseLabel);
+  }
+
+  async setActivePhase(projectID, phaseLabel) {
+    if (!this.initialized) await this.init();
+    return this.strategy.setActivePhase(projectID, phaseLabel);
   }
 
   
