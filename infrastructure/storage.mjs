@@ -316,6 +316,7 @@ class NodeFsStrategy {
     }
 
     project.phases.push(phase);
+    if (!project.activePhaseLabel) project.activePhaseLabel = phase.label;
     project.updatedAt = new Date().toISOString();
 
     this.writeJson(relPath, project);
@@ -344,6 +345,7 @@ class NodeFsStrategy {
     if (duplicate) return { status: 'error', message: `Já existe uma fase com o rótulo "${phase.label}".` };
 
     project.phases[idx] = phase;
+    if (project.activePhaseLabel === phaseLabel) project.activePhaseLabel = phase.label;
     project.updatedAt = new Date().toISOString();
 
     this.writeJson(relPath, project);
@@ -367,12 +369,41 @@ class NodeFsStrategy {
 
     if (project.phases.length === before) return { status: 'error', message: 'Fase não encontrada.' };
 
+    if (project.activePhaseLabel === phaseLabel) {
+      project.activePhaseLabel = project.phases[0]?.label || null;
+    }
+
     project.updatedAt = new Date().toISOString();
     this.writeJson(relPath, project);
     if (this.activeProjectID === projectID) this.activeProjectData = project;
 
     console.log('✅ Fase removida do project.json:', phaseLabel);
-    return { status: 'ok', message: 'Fase removida com sucesso.' };
+    return { status: 'ok', message: 'Fase removida com sucesso.', data: { activePhaseLabel: project.activePhaseLabel || null } };
+  }
+
+  async setActivePhase(projectID, phaseLabel) {
+    const relPath = this.path.join(projectID, 'project.json');
+    const project = this.readJson(relPath);
+
+    console.log('🟢 NodeFsStrategy.setActivePhase', { projectID, phaseLabel, relPath });
+
+    if (!project) return { status: 'error', message: 'Projeto não encontrado.' };
+    if (!Array.isArray(project.phases)) project.phases = [];
+
+    const phaseExists = project.phases.some((p) => p.label === phaseLabel);
+    if (!phaseExists) return { status: 'error', message: 'Fase não encontrada.' };
+
+    project.activePhaseLabel = phaseLabel;
+    project.updatedAt = new Date().toISOString();
+
+    this.writeJson(relPath, project);
+    if (this.activeProjectID === projectID) this.activeProjectData = project;
+
+    return {
+      status: 'ok',
+      message: 'Fase ativa atualizada.',
+      data: { activePhaseLabel: phaseLabel }
+    };
   }
 
   // Check if this strategy is active and ready
@@ -533,6 +564,10 @@ class WebSocketStrategy {
 
   async deletePhase(projectID, phaseLabel) {
     return this.send('delete_phase', { projectID, phaseLabel });
+  }
+
+  async setActivePhase(projectID, phaseLabel) {
+    return this.send('set_active_phase', { projectID, phaseLabel });
   }
 
   // Returns array of `Paper` instances
@@ -821,6 +856,11 @@ class StorageService {
   async deletePhase(projectID, phaseLabel) {
     if (!this.initialized) await this.init();
     return this.strategy.deletePhase(projectID, phaseLabel);
+  }
+
+  async setActivePhase(projectID, phaseLabel) {
+    if (!this.initialized) await this.init();
+    return this.strategy.setActivePhase(projectID, phaseLabel);
   }
 
   

@@ -132,6 +132,10 @@ const messageHandler = {
     console.log("🧭 delete_phase recebido:", payload);
     return verifyProjectID(payload) || await storage.deletePhase(payload.projectID, payload.phaseLabel);
   },
+  "set_active_phase": async (payload) => {
+    console.log("🟢 set_active_phase recebido:", payload);
+    return verifyProjectID(payload) || await storage.setActivePhase(payload.projectID, payload.phaseLabel);
+  },
 };
 
 function verifyNameSanitized(projectName) {

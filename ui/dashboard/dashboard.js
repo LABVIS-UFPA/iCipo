@@ -1755,6 +1755,7 @@ function bindEvents() {
 
     const el = document.createElement('div');
     el.className = 'phaseCard';
+    if (state?.project?.activePhaseLabel === label) el.classList.add('active');
     el.dataset.label = label;
     el.dataset.labelStatus = labelStatus;
     el.dataset.desc = desc;
@@ -1806,12 +1807,26 @@ function bindEvents() {
       openPhasePanel(true);
     });
 
-    el.addEventListener('click', (ev) => {
+    el.addEventListener('click', async (ev) => {
       if(ev.target.closest('button')) return;
-      if(phasesList){
-        Array.from(phasesList.querySelectorAll('.phaseCard.active')).forEach(c => c.classList.remove('active'));
+      if(!state?.project?.id){
+        alert('Abra um projeto antes de ativar uma fase.');
+        return;
       }
-      el.classList.add('active');
+
+      try {
+        console.log('🟢 Enviando set_active_phase para WS', { projectID: state.project.id, phaseLabel: label });
+        await storage.setActivePhase(state.project.id, label);
+        state.project.activePhaseLabel = label;
+
+        if(phasesList){
+          Array.from(phasesList.querySelectorAll('.phaseCard.active')).forEach(c => c.classList.remove('active'));
+        }
+        el.classList.add('active');
+      } catch (err) {
+        console.warn('setActivePhase failed', err);
+        alert(err?.message || 'Falha ao ativar fase. Veja o console.');
+      }
     });
 
     return el;
@@ -1821,6 +1836,9 @@ function bindEvents() {
     if(!phasesList) return;
     phasesList.innerHTML = '';
     const phases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
+    if (phases.length && !state.project.activePhaseLabel) {
+      state.project.activePhaseLabel = phases[0].label;
+    }
     phases.forEach((phase) => phasesList.appendChild(createPhaseCard(phase)));
   }
 
