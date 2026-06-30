@@ -528,13 +528,19 @@ class WebSocketStrategy {
     return this.send('list_projects', {});
   }
 
-  // Accepts a `Paper` instance and returns the server response
+  // Accepts a `Paper` instance or a plain paper object and returns the server response
   async savePaper(paper) {
-    if(paper && paper instanceof Paper){
-      const data = paper.toJSON();
-      return this.send('save_paper', { paperId: data.id, data });
+    if (!paper) {
+      return Promise.reject(new Error("O artigo a salvar não pode ser vazio."));
     }
-    return Promise.reject(new Error("O objeto a salvar deve ser uma instância de Paper."));;
+
+    const data = paper instanceof Paper ? paper.toJSON() : paper;
+
+    if (!data.id && !(data.id === 0)) {
+      return Promise.reject(new Error("Paper JSON must include an id."));
+    }
+
+    return this.send('save_paper', { paperId: data.id, data });
   }
 
   // Returns a `Paper` instance (or null)

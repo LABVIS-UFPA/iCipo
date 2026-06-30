@@ -112,22 +112,32 @@ document.addEventListener("DOMContentLoaded", () => {
   // =====================
   // Links
   // =====================
-  function deleteMarkedLink(urlToDelete, done) {
+  async function deleteMarkedLink(urlToDelete, done) {
     const target = normalizeUrl(urlToDelete);
-    chrome.storage.local.get(["highlightedLinks", "svat_papers"], (data) => {
-      const highlightedLinks = data.highlightedLinks || {};
-      for (const k of Object.keys(highlightedLinks)) {
-        const nk = normalizeUrl(k);
-        if (k === urlToDelete || nk === target || nk.startsWith(target) || target.startsWith(nk)) {
-          delete highlightedLinks[k];
-        }
+    const data = await storage.get(["highlightedLinks", "svat_papers"]);
+    const highlightedLinks = data.highlightedLinks || {};
+
+    for (const k of Object.keys(highlightedLinks)) {
+      const nk = normalizeUrl(k);
+      if (k === urlToDelete || nk === target || nk.startsWith(target) || target.startsWith(nk)) {
+        delete highlightedLinks[k];
       }
+    }
 
-      const papers = Array.isArray(data.svat_papers) ? data.svat_papers : [];
-      const filteredPapers = papers.filter((p) => normalizeUrl(p?.url) !== target);
+    const papers = Array.isArray(data.svat_papers) ? data.svat_papers : [];
+    const papersToDelete = papers
+      .filter((paper) => normalizeUrl(paper?.url) === target)
+      .map((paper) => paper.id)
+      .filter(Boolean);
 
-      storage.set({ highlightedLinks, svat_papers: filteredPapers }).then(() => { done && done(); });
-    });
+    const filteredPapers = papers.filter((p) => normalizeUrl(p?.url) !== target);
+
+    for (const paperId of [...new Set(papersToDelete)]) {
+      await storage.deletePaper(paperId).catch((e) => console.warn('deletePaper failed:', e));
+    }
+
+    await storage.set({ highlightedLinks, svat_papers: filteredPapers });
+    done && done();
   }
 
   function loadHighlightedLinks() {

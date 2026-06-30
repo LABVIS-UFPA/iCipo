@@ -205,24 +205,35 @@ function loadCategories() {
   chrome.runtime.sendMessage({ action: "updateContextMenu" });
 }
 
-function deleteMarkedLink(urlToDelete, done) {
+async function deleteMarkedLink(urlToDelete, done) {
   const target = normalizeUrl(urlToDelete);
-  storage.get(["highlightedLinks", "svat_papers"]).then((data) => {
-    const highlightedLinks = (data && data.highlightedLinks) ? data.highlightedLinks : {};
-    for (const k of Object.keys(highlightedLinks)) {
-      const nk = normalizeUrl(k);
-      if (k === urlToDelete || nk === target || nk.startsWith(target) || target.startsWith(nk)) {
-        delete highlightedLinks[k];
-      }
+  const data = await storage.get(["highlightedLinks", "svat_papers"]);
+  const highlightedLinks = (data && data.highlightedLinks) ? data.highlightedLinks : {};
+
+  for (const k of Object.keys(highlightedLinks)) {
+    const nk = normalizeUrl(k);
+    if (k === urlToDelete || nk === target || nk.startsWith(target) || target.startsWith(nk)) {
+      delete highlightedLinks[k];
     }
+  }
 
-    const papers = Array.isArray(data && data.svat_papers) ? data.svat_papers : [];
-    const filteredPapers = papers.filter((p) => normalizeUrl(p?.url) !== target);
+  const papers = Array.isArray(data && data.svat_papers) ? data.svat_papers : [];
+  const papersToDelete = [
+    ...papers.filter((p) => normalizeUrl(p?.url) === target).map((p) => p.id),
+    ...(state?.papers || []).filter((p) => normalizeUrl(p?.url) === target).map((p) => p.id),
+  ].filter(Boolean);
 
-    chrome.storage.local.set({ highlightedLinks, svat_papers: filteredPapers }, () => {
-      if (done) done();
-    });
-  });
+  const filteredPapers = papers.filter((p) => normalizeUrl(p?.url) !== target);
+
+  for (const paperId of [...new Set(papersToDelete)]) {
+    await storage.deletePaper(paperId).catch((e) => console.warn('deletePaper failed:', e));
+  }
+
+  await storage.set({ highlightedLinks, svat_papers: filteredPapers });
+  if (state && Array.isArray(state.papers)) {
+    state.papers = state.papers.filter((p) => normalizeUrl(p?.url) !== target);
+  }
+  if (done) done();
 }
 
 function loadHighlightedLinks() {
@@ -1094,18 +1105,33 @@ async function bulkDeleteMarkedSelected() {
     alert("Selecione pelo menos 1 artigo.");
     return;
   }
-  const targets = ids.filter(id => id && id.startsWith("marked:")).map(id => id.slice(7));
-  if (!targets.length) {
-    alert("Nenhum artigo marcado selecionado.");
-    return;
-  }
-  if (!confirm(`Remover ${targets.length} link(s) marcado(s)?`)) return;
+
+  if (!confirm(`Remover/excluir ${ids.length} artigo(s) selecionado(s)?`)) return;
 
   const d = await storage.get(["highlightedLinks", "svat_papers"]);
   const highlightedLinks = (d && d.highlightedLinks) ? d.highlightedLinks : {};
   const svat_papers = Array.isArray(d && d.svat_papers) ? d.svat_papers : [];
 
-  for (const t of targets) {
+  const selectedUrls = new Set();
+  const paperIdsToDelete = new Set();
+
+  for (const id of ids) {
+    if (id && id.startsWith("marked:")) {
+      selectedUrls.add(id.slice(7));
+      continue;
+    }
+
+    paperIdsToDelete.add(id);
+    const paper = (state.papers || []).find((p) => p.id === id);
+    if (paper?.url) selectedUrls.add(normalizeStr(paper.url));
+  }
+
+  for (const p of svat_papers) {
+    const nu = normalizeStr(p?.url || "");
+    if (selectedUrls.has(nu) && p?.id) paperIdsToDelete.add(p.id);
+  }
+
+  for (const t of selectedUrls) {
     for (const k of Object.keys(highlightedLinks)) {
       try {
         if (normalizeStr(k) === t || normalizeUrl(k) === t || normalizeStr(normalizeUrl(k)) === t) {
@@ -1117,14 +1143,21 @@ async function bulkDeleteMarkedSelected() {
     }
   }
 
-  const filteredPapers = svat_papers.filter(p => {
+  const filteredPapers = svat_papers.filter((p) => {
     const nu = normalizeStr(p?.url || "");
-    return !targets.includes(nu);
+    return !selectedUrls.has(nu) && !paperIdsToDelete.has(p?.id);
   });
 
+  for (const paperId of paperIdsToDelete) {
+    await storage.deletePaper(paperId).catch((e) => console.warn('deletePaper failed:', e));
+  }
+
   await storage.set({ highlightedLinks, svat_papers: filteredPapers });
+
+  state.papers = (state.papers || []).filter((p) => !paperIdsToDelete.has(p.id));
+  await loadState();
   loadHighlightedLinks();
-  renderPapersTable();
+  renderAll();
 }
 
 function renderIterations() {
@@ -1407,8 +1440,13 @@ function renderGraph() {
 }
 
 async function persist() {
-  //TODO: migrar para usar o infrastructure/storage.mjs
-  // await svatSetAll(state);
+  if (!state || !Array.isArray(state.papers)) return;
+
+  for (const paper of state.papers) {
+    if (!paper || (!paper.id && !(paper.id === 0))) continue;
+    paper.updatedAt = new Date().toISOString();
+    await storage.savePaper(paper);
+  }
 }
 
 function renderAll() {
