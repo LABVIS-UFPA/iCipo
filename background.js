@@ -14,6 +14,25 @@ import { wsManager } from './infrastructure/socketManager.mjs';
 
 
 
+async function syncHighlightsFromConfig() {
+  try {
+    const response = await fetch(chrome.runtime.getURL("user_data/config.json"));
+    if (!response.ok) {
+      return null;
+    }
+
+    const config = await response.json();
+    const highlightedLinks = config.highlightedLinks || {};
+    const active = config.active !== false;
+
+    await chrome.storage.local.set({ highlightedLinks, active });
+    return { highlightedLinks, active };
+  } catch (error) {
+    console.warn("iCipo: não foi possível sincronizar highlights do config.json", error);
+    return null;
+  }
+}
+
 async function createContextMenu() {
   // Remove existing menus and recreate safely (ignore duplicate-id race warnings)
   await new Promise((resolve) => {
@@ -80,11 +99,13 @@ async function createContextMenu() {
 }
 
 chrome.runtime.onInstalled.addListener(async () => {
+  await syncHighlightsFromConfig();
   await createContextMenu();
 });
 
 // Try connect on startup once if configured
-chrome.runtime.onStartup.addListener(() => {
+chrome.runtime.onStartup.addListener(async () => {
+  await syncHighlightsFromConfig();
   wsManager.tryAutoConnect();
 });
 
@@ -99,6 +120,20 @@ chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
       await createContextMenu();
     })();
     return;
+  }
+  if (msg && msg.action === "getConfigHighlights") {
+    (async () => {
+      const result = await syncHighlightsFromConfig();
+      _sendResponse && _sendResponse({ ok: true, ...(result || {}) });
+    })();
+    return true;
+  }
+  if (msg && msg.action === "syncHighlightsFromConfig") {
+    (async () => {
+      const result = await syncHighlightsFromConfig();
+      _sendResponse && _sendResponse({ ok: true, result });
+    })();
+    return true;
   }
   // Socket control messages from options page
   if (msg && msg.action === "socket_get_state") {

@@ -1,21 +1,76 @@
 function applyHighlights() {
+  const run = async () => {
+    try {
+      const stored = await chrome.storage.local.get(["highlightedLinks", "active"]);
+      const storageActive = stored.active !== false;
 
+      let configHighlights = {};
+      let configActive = true;
 
-    chrome.storage.local.get(["highlightedLinks", "active"], (data) => {
-      if(!data.active) return;
-      
-      const highlightedLinks = data.highlightedLinks || {};
-      for (const linkUrl in highlightedLinks) {
-        document.querySelectorAll(`a[href^="${linkUrl}"]`).forEach(link => {
-          console.log("link", linkUrl);
-          link.style.backgroundColor = highlightedLinks[linkUrl];
+      try {
+        const response = await chrome.runtime.sendMessage({ action: "getConfigHighlights" });
+        if (response?.ok) {
+          configHighlights = response.highlightedLinks || {};
+          configActive = response.active !== false;
+        }
+      } catch (error) {
+        console.warn("iCipo: não foi possível carregar os highlights do background", error);
+      }
+
+      const mergedHighlights = {
+        ...(configHighlights || {}),
+        ...((stored.highlightedLinks && typeof stored.highlightedLinks === "object") ? stored.highlightedLinks : {})
+      };
+
+      const isActive = storageActive && configActive;
+      if (!isActive || !mergedHighlights || Object.keys(mergedHighlights).length === 0) {
+        return;
+      }
+
+      for (const linkUrl of Object.keys(mergedHighlights)) {
+        document.querySelectorAll(`a[href^="${linkUrl}"]`).forEach((link) => {
+          link.style.backgroundColor = mergedHighlights[linkUrl];
         });
       }
-    });
-  }
-  
-  document.addEventListener("DOMContentLoaded", applyHighlights);
-  window.addEventListener("load", applyHighlights);
+
+      if (Object.keys(configHighlights).length > 0) {
+        chrome.storage.local.set({ highlightedLinks: mergedHighlights, active: configActive }).catch(() => {});
+      }
+    } catch (error) {
+      console.warn("iCipo: erro ao aplicar highlights", error);
+    }
+  };
+
+  run();
+}
+
+let highlightObserver = null;
+function watchForChanges() {
+  if (highlightObserver || typeof MutationObserver === "undefined") return;
+
+  highlightObserver = new MutationObserver(() => {
+    applyHighlights();
+  });
+
+  highlightObserver.observe(document.documentElement || document.body, {
+    childList: true,
+    subtree: true
+  });
+}
+
+  document.addEventListener("DOMContentLoaded", () => {
+    applyHighlights();
+    watchForChanges();
+  });
+  window.addEventListener("load", () => {
+    applyHighlights();
+    watchForChanges();
+  });
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === "local" && (changes.highlightedLinks || changes.active)) {
+      applyHighlights();
+    }
+  });
 
 // Extract best-effort metadata for a given linkUrl on the current page.
 // This focuses on Google Scholar's common DOM structure, but degrades gracefully.
