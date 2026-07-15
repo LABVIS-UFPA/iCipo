@@ -128,6 +128,7 @@ class NodeFsStrategy {
     const data = this.readJson(relPath) || {};
     this.activeProjectID = projectID;
     this.activeProjectData = data;
+    this.migrateLegacyScopedData();
     return { status: 'ok', data };
   }
 
@@ -235,20 +236,53 @@ class NodeFsStrategy {
   }
 
   // Storage-like get/set methods (chrome.storage.local-like behavior)
+  get scopedStorageKeys() {
+    return new Set(['highlightedLinks', 'svat_papers', 'svat_project']);
+  }
+
+  getScopedStoragePath() {
+    if (!this.activeProjectID) return null;
+    const phaseLabel = this.activeProjectData?.activePhaseLabel || '_sem_fase';
+    return this.path.join(this.activeProjectID, 'phases', phaseLabel, 'storage.json');
+  }
+
+  migrateLegacyScopedData() {
+    const relPath = this.getScopedStoragePath();
+    if (!relPath || this.readJson(relPath)) return;
+
+    const config = this.readJson('config.json') || {};
+    const legacy = {};
+    for (const key of this.scopedStorageKeys) {
+      if (key in config) {
+        legacy[key] = config[key];
+        delete config[key];
+      }
+    }
+
+    if (Object.keys(legacy).length > 0) {
+      this.writeJson(relPath, legacy);
+      this.writeJson('config.json', config);
+    }
+  }
+
   async get(keys) {
     const config = this.readJson("config.json") || {};
+    const scoped = this.getScopedStoragePath()
+      ? (this.readJson(this.getScopedStoragePath()) || {})
+      : {};
     const result = {};
 
     if (!keys || keys.length === 0) {
-      return config;
+      return { ...config, ...scoped };
     }
 
     // If keys is a string, wrap in array
     const keyArray = typeof keys === 'string' ? [keys] : Array.isArray(keys) ? keys : [];
     
     for (const key of keyArray) {
-      if (key in config) {
-        result[key] = config[key];
+      const source = this.scopedStorageKeys.has(key) ? scoped : config;
+      if (key in source) {
+        result[key] = source[key];
       }
     }
 
@@ -259,8 +293,24 @@ class NodeFsStrategy {
     if (!items || typeof items !== 'object') return;
 
     const config = this.readJson("config.json") || {};
-    const updated = { ...config, ...items };
-    this.writeJson("config.json", updated);
+    const scopedItems = {};
+    const globalItems = {};
+    for (const [key, value] of Object.entries(items)) {
+      (this.scopedStorageKeys.has(key) ? scopedItems : globalItems)[key] = value;
+    }
+
+    if (Object.keys(globalItems).length > 0) {
+      this.writeJson("config.json", { ...config, ...globalItems });
+    }
+
+    if (Object.keys(scopedItems).length > 0) {
+      const relPath = this.getScopedStoragePath();
+      if (!relPath) {
+        return { status: "error", message: "Abra um projeto antes de salvar links." };
+      }
+      const scoped = this.readJson(relPath) || {};
+      this.writeJson(relPath, { ...scoped, ...scopedItems });
+    }
 
     return { status: "ok", message: "Data saved." };
   }
@@ -508,7 +558,9 @@ class WebSocketStrategy {
   }
 
   async openProject(projectID) {
-    return this.send('open_project', { projectID });
+    const result = await this.send('open_project', { projectID });
+    await this.syncActiveScopeToChrome();
+    return result;
   }
 
   async getActiveProject(){
@@ -573,7 +625,22 @@ class WebSocketStrategy {
   }
 
   async setActivePhase(projectID, phaseLabel) {
-    return this.send('set_active_phase', { projectID, phaseLabel });
+    const result = await this.send('set_active_phase', { projectID, phaseLabel });
+    await this.syncActiveScopeToChrome();
+    return result;
+  }
+
+  async syncActiveScopeToChrome() {
+    if (typeof chrome === 'undefined' || !chrome.storage) return;
+    const data = await this.send('storage_get', {
+      keys: ['highlightedLinks', 'svat_papers', 'svat_project']
+    }).catch(() => ({}));
+    const scoped = data?.data || data || {};
+    await new Promise((resolve) => chrome.storage.local.set({
+      highlightedLinks: scoped.highlightedLinks || {},
+      svat_papers: Array.isArray(scoped.svat_papers) ? scoped.svat_papers : [],
+      svat_project: scoped.svat_project || null
+    }, resolve));
   }
 
   // Returns array of `Paper` instances

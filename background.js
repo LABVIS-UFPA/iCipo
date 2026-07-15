@@ -16,14 +16,9 @@ import { wsManager } from './infrastructure/socketManager.mjs';
 
 async function syncHighlightsFromConfig() {
   try {
-    const response = await fetch(chrome.runtime.getURL("user_data/config.json"));
-    if (!response.ok) {
-      return null;
-    }
-
-    const config = await response.json();
-    const highlightedLinks = config.highlightedLinks || {};
-    const active = config.active !== false;
+    const config = await storage.get(["highlightedLinks", "active"]);
+    const highlightedLinks = config?.highlightedLinks || {};
+    const active = config?.active !== false;
 
     await chrome.storage.local.set({ highlightedLinks, active });
     return { highlightedLinks, active };

@@ -1,3 +1,5 @@
+const appliedHighlightUrls = new Set();
+
 function applyHighlights() {
   const run = async () => {
     try {
@@ -23,6 +25,13 @@ function applyHighlights() {
       };
 
       const isActive = storageActive && configActive;
+      for (const linkUrl of appliedHighlightUrls) {
+        document.querySelectorAll(`a[href^="${linkUrl}"]`).forEach((link) => {
+          link.style.backgroundColor = "";
+        });
+      }
+      appliedHighlightUrls.clear();
+
       if (!isActive || !mergedHighlights || Object.keys(mergedHighlights).length === 0) {
         return;
       }
@@ -31,6 +40,7 @@ function applyHighlights() {
         document.querySelectorAll(`a[href^="${linkUrl}"]`).forEach((link) => {
           link.style.backgroundColor = mergedHighlights[linkUrl];
         });
+        appliedHighlightUrls.add(linkUrl);
       }
 
       if (Object.keys(configHighlights).length > 0) {
@@ -113,4 +123,3 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 });
-  

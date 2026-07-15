@@ -1857,6 +1857,9 @@ function bindEvents() {
         await storage.setActivePhase(state.project.id, label);
         state.project.activePhaseLabel = label;
 
+        loadHighlightedLinks();
+        await renderPapersTable();
+
         if(phasesList){
           Array.from(phasesList.querySelectorAll('.phaseCard.active')).forEach(c => c.classList.remove('active'));
         }
