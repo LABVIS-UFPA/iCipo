@@ -129,6 +129,7 @@ class NodeFsStrategy {
     this.activeProjectID = projectID;
     this.activeProjectData = data;
     this.migrateLegacyScopedData();
+
     return { status: 'ok', data };
   }
 
@@ -270,22 +271,20 @@ class NodeFsStrategy {
     const scoped = this.getScopedStoragePath()
       ? (this.readJson(this.getScopedStoragePath()) || {})
       : {};
-    const result = {};
 
     if (!keys || keys.length === 0) {
       return { ...config, ...scoped };
     }
 
-    // If keys is a string, wrap in array
+    const result = {};
     const keyArray = typeof keys === 'string' ? [keys] : Array.isArray(keys) ? keys : [];
-    
+
     for (const key of keyArray) {
       const source = this.scopedStorageKeys.has(key) ? scoped : config;
       if (key in source) {
         result[key] = source[key];
       }
     }
-
     return result;
   }
 
@@ -313,6 +312,44 @@ class NodeFsStrategy {
     }
 
     return { status: "ok", message: "Data saved." };
+  }
+
+  async getAllHighlightedLinksForActiveProject() {
+    if (!this.activeProjectID) {
+      return { status: 'error', message: 'Nenhum projeto ativo.', data: {} };
+    }
+
+    const allHighlightedLinks = {};
+    const phasesDir = this.path.join(this.baseDir, this.activeProjectID, 'phases');
+
+    if (this.fs.existsSync(phasesDir)) {
+      const phaseDirs = this.fs.readdirSync(phasesDir, { withFileTypes: true })
+        .filter(dirent => dirent.isDirectory())
+        .map(dirent => dirent.name);
+
+      phaseDirs.sort(); // Consistent merge order
+
+      for (const phaseDir of phaseDirs) {
+        const storagePath = this.path.join(this.activeProjectID, 'phases', phaseDir, 'storage.json');
+        const phaseScopedData = this.readJson(storagePath);
+        if (phaseScopedData && typeof phaseScopedData.highlightedLinks === 'object') {
+          Object.assign(allHighlightedLinks, phaseScopedData.highlightedLinks);
+        }
+      }
+    }
+    
+    // Also get scoped data from active phase
+    const scoped = this.getScopedStoragePath()
+      ? (this.readJson(this.getScopedStoragePath()) || {})
+      : {};
+    
+    const data = {
+        highlightedLinks: allHighlightedLinks,
+        svat_papers: scoped.svat_papers || [],
+        svat_project: scoped.svat_project || null
+    };
+    
+    return { status: 'ok', data: data };
   }
 
   normalizePhase(phaseData = {}, existing = {}) {
@@ -558,8 +595,27 @@ class WebSocketStrategy {
   }
 
   async openProject(projectID) {
+    // 1. Limpa o estado local para remover dados do projeto antigo.
+    //    Isso garante que, ao trocar de projeto, os links antigos desapareçam imediatamente.
+    //    Também desativa a extensão temporariamente para forçar a atualização do estado.
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      await new Promise((resolve) => {
+        chrome.storage.local.set({
+          highlightedLinks: {},
+          svat_papers: [],
+          svat_project: null,
+          active: false
+        }, resolve);
+      });
+    }
+
+    // 2. Avisa o servidor para trocar o projeto ativo.
     const result = await this.send('open_project', { projectID });
-    await this.syncActiveScopeToChrome();
+
+    // 3. Ativa a extensão e dispara a sincronização dos dados do NOVO projeto.
+    // O método `set` já cuida de chamar `syncActiveScopeToChrome` quando `active` é `true`.
+    await this.set({ active: true });
+
     return result;
   }
 
@@ -632,14 +688,13 @@ class WebSocketStrategy {
 
   async syncActiveScopeToChrome() {
     if (typeof chrome === 'undefined' || !chrome.storage) return;
-    const data = await this.send('storage_get', {
-      keys: ['highlightedLinks', 'svat_papers', 'svat_project']
-    }).catch(() => ({}));
-    const scoped = data?.data || data || {};
+
+    const data = await this.send('get_all_highlights', {}).catch(() => ({}));
+
     await new Promise((resolve) => chrome.storage.local.set({
-      highlightedLinks: scoped.highlightedLinks || {},
-      svat_papers: Array.isArray(scoped.svat_papers) ? scoped.svat_papers : [],
-      svat_project: scoped.svat_project || null
+      highlightedLinks: data?.highlightedLinks || {},
+      svat_papers: Array.isArray(data?.svat_papers) ? data.svat_papers : [],
+      svat_project: data?.svat_project || null
     }, resolve));
   }
 
@@ -662,11 +717,27 @@ class WebSocketStrategy {
     });
   }
 
+  async getAllHighlightedLinksForActiveProject() {
+    return this.send('get_all_highlights', {});
+  }
+
   async set(items) {
-    // If WebSocket is active, send normally
+    // Se o WebSocket estiver ativo, atualiza o storage local para efeito imediato E envia para o servidor para persistência.
+    // Isso corrige o bug onde o toggle 'active' não funcionava em tempo real.
     if (this.isActive()) {
+      if (typeof chrome !== 'undefined' && chrome.storage) {
+        await new Promise(resolve => chrome.storage.local.set(items, resolve));
+      }
+
+      // Se a extensão estiver sendo ativada, aciona uma sincronização completa dos links.
+      if (items && items.active === true) {
+        await this.syncActiveScopeToChrome();
+      }
+
       return this.send('storage_set', { items });
     }
+
+    // If WebSocket is active, send normally
 
     // If WebSocket is inactive, backup to chrome.storage
     return this.backupToChrome(items);
@@ -888,6 +959,20 @@ class StorageService {
   async getActiveProject() {
     if (!this.initialized) await this.init();
     return this.strategy.getActiveProject();
+  }
+
+  // Expose strategy's sync function to be triggered from background script
+  async syncActiveScopeToChrome() {
+    if (!this.initialized) await this.init();
+    if (this.strategy && typeof this.strategy.syncActiveScopeToChrome === 'function') {
+      return this.strategy.syncActiveScopeToChrome();
+    }
+    return Promise.resolve();
+  }
+
+  async getAllHighlightedLinksForActiveProject() {
+    if (!this.initialized) await this.init();
+    return this.strategy.getAllHighlightedLinksForActiveProject();
   }
 
   // ========== Paper CRUD ==========

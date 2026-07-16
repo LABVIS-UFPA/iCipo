@@ -1,51 +1,33 @@
-const appliedHighlightUrls = new Set();
+// O cache `appliedHighlightUrls` não é mais necessário com a limpeza baseada em classe, tornando o processo mais robusto.
 
 function applyHighlights() {
   const run = async () => {
     try {
+      // Simplificado: A única fonte da verdade para o content script é o chrome.storage.local.
+      // Ele é populado pelo storage.mjs com os dados corretos (todos os links do projeto).
       const stored = await chrome.storage.local.get(["highlightedLinks", "active"]);
-      const storageActive = stored.active !== false;
+      const isActive = stored.active !== false;
+      const highlights = (stored.highlightedLinks && typeof stored.highlightedLinks === 'object') ? stored.highlightedLinks : {};
 
-      let configHighlights = {};
-      let configActive = true;
-
-      try {
-        const response = await chrome.runtime.sendMessage({ action: "getConfigHighlights" });
-        if (response?.ok) {
-          configHighlights = response.highlightedLinks || {};
-          configActive = response.active !== false;
-        }
-      } catch (error) {
-        console.warn("iCipo: não foi possível carregar os highlights do background", error);
-      }
-
-      const mergedHighlights = {
-        ...(configHighlights || {}),
-        ...((stored.highlightedLinks && typeof stored.highlightedLinks === "object") ? stored.highlightedLinks : {})
-      };
-
-      const isActive = storageActive && configActive;
-      for (const linkUrl of appliedHighlightUrls) {
-        document.querySelectorAll(`a[href^="${linkUrl}"]`).forEach((link) => {
-          link.style.backgroundColor = "";
-        });
-      }
-      appliedHighlightUrls.clear();
-
-      if (!isActive || !mergedHighlights || Object.keys(mergedHighlights).length === 0) {
+      // Limpa as marcações antigas para evitar "sujeira" visual.
+      // Usando uma classe marcadora para uma limpeza mais robusta e independente de estado.
+      document.querySelectorAll('a.ic-highlighted-link').forEach((link) => {
+        link.style.backgroundColor = '';
+        link.classList.remove('ic-highlighted-link');
+      });
+      
+      if (!isActive || !highlights || Object.keys(highlights).length === 0) {
         return;
       }
 
-      for (const linkUrl of Object.keys(mergedHighlights)) {
+      // Aplica as novas marcações a partir dos dados do storage.
+      for (const linkUrl of Object.keys(highlights)) {
         document.querySelectorAll(`a[href^="${linkUrl}"]`).forEach((link) => {
-          link.style.backgroundColor = mergedHighlights[linkUrl];
+          link.classList.add('ic-highlighted-link');
+          link.style.backgroundColor = highlights[linkUrl];
         });
-        appliedHighlightUrls.add(linkUrl);
       }
 
-      if (Object.keys(configHighlights).length > 0) {
-        chrome.storage.local.set({ highlightedLinks: mergedHighlights, active: configActive }).catch(() => {});
-      }
     } catch (error) {
       console.warn("iCipo: erro ao aplicar highlights", error);
     }

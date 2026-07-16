@@ -120,6 +120,9 @@ const messageHandler = {
   "storage_set": async (payload) => {
     return await storage.set(payload.items);
   },
+  "get_all_highlights": async () => {
+    return await storage.getAllHighlightedLinksForActiveProject();
+  },
   "save_phase": async (payload) => {
     console.log("🧭 save_phase recebido:", payload);
     return verifyProjectID(payload) || await storage.savePhase(payload.projectID, payload.data);

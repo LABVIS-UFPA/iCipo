@@ -2,6 +2,18 @@ import {hashId, inferFromCategory} from './core/utils.mjs';
 import {storage} from './infrastructure/storage.mjs';
 import { wsManager } from './infrastructure/socketManager.mjs';
 
+// Adiciona um listener para sincronizar os dados sempre que a conexão com o servidor for (re)estabelecida.
+// Isso garante que, ao iniciar o navegador ou reconectar, os links marcados sejam atualizados.
+wsManager.addOnOpenListener(async () => {
+  console.log('iCipo: Conexão estabelecida, sincronizando dados com o chrome.storage...');
+  try {
+    await storage.syncActiveScopeToChrome(); 
+    console.log('iCipo: Sincronização de links concluída.');
+  } catch (error) {
+    console.warn('iCipo: Falha ao sincronizar links após a conexão.', error);
+  }
+});
+
 // const DEFAULT_SNOWBALLING_CATEGORIES = {
 //   "Seed": "#4CAF50",
 //   "Backward": "#2196F3",
@@ -11,22 +23,6 @@ import { wsManager } from './infrastructure/socketManager.mjs';
 //   "Duplicate": "#757575",
 //   "Pending": "#FBC02D",
 // };
-
-
-
-async function syncHighlightsFromConfig() {
-  try {
-    const config = await storage.get(["highlightedLinks", "active"]);
-    const highlightedLinks = config?.highlightedLinks || {};
-    const active = config?.active !== false;
-
-    await chrome.storage.local.set({ highlightedLinks, active });
-    return { highlightedLinks, active };
-  } catch (error) {
-    console.warn("iCipo: não foi possível sincronizar highlights do config.json", error);
-    return null;
-  }
-}
 
 async function createContextMenu() {
   // Remove existing menus and recreate safely (ignore duplicate-id race warnings)
@@ -94,13 +90,11 @@ async function createContextMenu() {
 }
 
 chrome.runtime.onInstalled.addListener(async () => {
-  await syncHighlightsFromConfig();
   await createContextMenu();
 });
 
 // Try connect on startup once if configured
 chrome.runtime.onStartup.addListener(async () => {
-  await syncHighlightsFromConfig();
   wsManager.tryAutoConnect();
 });
 
@@ -115,20 +109,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
       await createContextMenu();
     })();
     return;
-  }
-  if (msg && msg.action === "getConfigHighlights") {
-    (async () => {
-      const result = await syncHighlightsFromConfig();
-      _sendResponse && _sendResponse({ ok: true, ...(result || {}) });
-    })();
-    return true;
-  }
-  if (msg && msg.action === "syncHighlightsFromConfig") {
-    (async () => {
-      const result = await syncHighlightsFromConfig();
-      _sendResponse && _sendResponse({ ok: true, result });
-    })();
-    return true;
   }
   // Socket control messages from options page
   if (msg && msg.action === "socket_get_state") {
