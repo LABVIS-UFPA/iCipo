@@ -420,9 +420,35 @@ async function loadState() {
   
 }
 
-function setActiveView(view) {
-  $$(".navBtn").forEach(btn => btn.classList.toggle("active", btn.dataset.view === view));
-  $$(".view").forEach(v => v.classList.toggle("hidden", v.id !== `view_${view}`));
+const ACTIVE_VIEW_STORAGE_KEY = "icipo.dashboard.activeView";
+
+function getAvailableView(view) {
+  const requested = String(view || "");
+  return document.getElementById(`view_${requested}`) ? requested : "overview";
+}
+
+function setActiveView(view, { persist = true } = {}) {
+  const activeView = getAvailableView(view);
+  $$(".navBtn").forEach(btn => btn.classList.toggle("active", btn.dataset.view === activeView));
+  $$(".view").forEach(v => v.classList.toggle("hidden", v.id !== `view_${activeView}`));
+
+  if (persist) {
+    try {
+      localStorage.setItem(ACTIVE_VIEW_STORAGE_KEY, activeView);
+    } catch (error) {
+      console.warn("Não foi possível guardar a aba ativa.", error);
+    }
+  }
+}
+
+function restoreActiveView() {
+  let savedView = "overview";
+  try {
+    savedView = localStorage.getItem(ACTIVE_VIEW_STORAGE_KEY) || "overview";
+  } catch (error) {
+    console.warn("Não foi possível recuperar a aba ativa.", error);
+  }
+  setActiveView(savedView, { persist: false });
 }
 
 function computeCounts() {
@@ -1722,10 +1748,25 @@ function bindEvents() {
     try {
       if (editingCategoryLabel) project.updateCategory(editingCategoryLabel, data);
       else project.addCategory(data);
-      await storage.saveProject(project);
+
+      // Atualização otimista: mostra a categoria imediatamente, sem depender
+      // do tempo de resposta do armazenamento/WebSocket.
       loadCategories();
       renderPhaseCategories?.([]);
       closeCategoryPanel();
+
+      await storage.saveProject(project);
+
+      // Sincroniza o estado em memória com o projeto persistido e renderiza
+      // novamente para garantir que IDs/labels normalizados pelo servidor apareçam.
+      try {
+        const freshProject = await storage.getActiveProject();
+        if (freshProject) state.project = freshProject;
+      } catch (reloadError) {
+        console.warn("Não foi possível recarregar o projeto após salvar a categoria.", reloadError);
+      }
+      loadCategories();
+      renderPhaseCategories?.([]);
       chrome.runtime.sendMessage({ action: "updateContextMenu" });
     } catch (error) {
       console.warn("category save failed", error);
@@ -2270,7 +2311,7 @@ async function init() {
   // Load moved features
   loadCategories();
   loadHighlightedLinks();
-  setActiveView("overview");
+  restoreActiveView();
 }
 
 init();
