@@ -1595,7 +1595,6 @@ function bindEvents() {
 
   // Categories CRUD
   const btnShowAddCategory = document.getElementById("btnShowAddCategory");
-  const seedDefaultCategoriesButton = document.getElementById("seedDefaultCategories");
   const categoryPanel = document.getElementById("categoryPanel");
   const categoryPanelTitle = document.getElementById("categoryPanelTitle");
   const btnCloseCategory = document.getElementById("btnCloseCategory");
@@ -1749,27 +1748,6 @@ function bindEvents() {
       alert(error?.message || "Não foi possível excluir a categoria.");
     }
   });
-
-  if (seedDefaultCategoriesButton) {
-    seedDefaultCategoriesButton.addEventListener("click", async () => {
-      const defaults = {
-        Seed: "#4CAF50", Backward: "#2196F3", Forward: "#9C27B0",
-        Included: "#2E7D32", Excluded: "#D32F2F", Duplicate: "#757575", Pending: "#FBC02D",
-      };
-      const project = state?.project;
-      if (!project?.id) return alert("Nenhum projeto ativo.");
-      try {
-        const existing = new Set((project.categories || []).map(category => category.title));
-        for (const [title, color] of Object.entries(defaults)) {
-          if (!existing.has(title)) project.addCategory({ title, color });
-        }
-        await storage.saveProject(project);
-        loadCategories();
-      } catch (error) {
-        alert(error?.message || "Falha ao salvar categorias padrão.");
-      }
-    });
-  }
 
   if (removeLinks) {
     removeLinks.addEventListener("click", () => {
