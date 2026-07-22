@@ -36,23 +36,71 @@ class Project {
   }
 
   // --- Category management ---
-  addCategory(categoryData) {
-    if (!categoryData) return;
-    //Categorias devem ter pelo menos título e cor para serem criadas, caso contrário, são ignoradas
-    if (!categoryData.title || !categoryData.color) return;
+  getCategoryByLabel(label) {
+    return this.categories.find(category => category.label === label) || null;
+  }
 
-    const c = categoryData instanceof Category ? categoryData : Category.fromJSON(categoryData);
-    this.categories.push(c);
-    return c;
+  addCategory(categoryData) {
+    const rawCategory = categoryData instanceof Category ? categoryData.toJSON() : (categoryData || {});
+    const category = Category.fromJSON(rawCategory);
+    if (!category.title || !category.color) {
+      throw new Error("Título e cor da categoria são obrigatórios.");
+    }
+
+    category.phases = uniqueStrings(category.phases);
+    category.criteria.at_least_one = uniqueStrings(category.criteria.at_least_one);
+    category.criteria.all = uniqueStrings(category.criteria.all);
+    this._assertUniqueLabel(this.categories, category.label, null, "categoria");
+    this._assertCriteriaExist([...category.criteria.at_least_one, ...category.criteria.all]);
+
+    const missingPhases = category.phases.filter(label => !this.phases.some(phase => phase.label === label));
+    if (missingPhases.length) throw new Error(`Fases inexistentes: ${missingPhases.join(", ")}.`);
+
+    this.categories.push(category);
+    this._touch();
+    return category;
+  }
+
+  updateCategory(label, categoryData) {
+    const categoryIndex = this.categories.findIndex(category => category.label === label);
+    if (categoryIndex === -1) return null;
+
+    const previousCategory = this.categories[categoryIndex];
+    const rawCategory = categoryData instanceof Category ? categoryData.toJSON() : (categoryData || {});
+    const nextCategory = Category.fromJSON({ ...previousCategory.toJSON(), ...rawCategory });
+    if (!nextCategory.title || !nextCategory.color) {
+      throw new Error("Título e cor da categoria são obrigatórios.");
+    }
+
+    nextCategory.phases = uniqueStrings(nextCategory.phases);
+    nextCategory.criteria.at_least_one = uniqueStrings(nextCategory.criteria.at_least_one);
+    nextCategory.criteria.all = uniqueStrings(nextCategory.criteria.all);
+    this._assertUniqueLabel(this.categories, nextCategory.label, previousCategory.label, "categoria");
+    this._assertCriteriaExist([...nextCategory.criteria.at_least_one, ...nextCategory.criteria.all]);
+
+    const missingPhases = nextCategory.phases.filter(phaseLabel => !this.phases.some(phase => phase.label === phaseLabel));
+    if (missingPhases.length) throw new Error(`Fases inexistentes: ${missingPhases.join(", ")}.`);
+
+    this.categories[categoryIndex] = nextCategory;
+    if (previousCategory.label !== nextCategory.label) {
+      for (const phase of this.phases) {
+        phase.categories = replaceArrayItem(phase.categories, previousCategory.label, nextCategory.label);
+      }
+    }
+    this._touch();
+    return nextCategory;
   }
 
   removeCategory(label) {
-    const index = this.categories.findIndex(c => c.label === label);
-    if (index !== -1) {
-      return this.categories.splice(index, 1)[0];
-    }else{
-      return null;
+    const index = this.categories.findIndex(category => category.label === label);
+    if (index === -1) return null;
+
+    const removed = this.categories.splice(index, 1)[0];
+    for (const phase of this.phases) {
+      phase.categories = removeArrayItem(phase.categories, removed.label);
     }
+    this._touch();
+    return removed;
   }
 
   _touch() {

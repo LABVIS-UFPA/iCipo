@@ -313,13 +313,10 @@
           </div>
 
           <div class="toolbar">
-            <label for="categoryName" class="visually-hidden">Nome da categoria</label>
-            <input type="text" id="categoryName" class="input" placeholder="Ex.: Seed" />
-            <label for="categoryColor" class="visually-hidden">Cor da categoria</label>
-            <input type="color" id="categoryColor" class="input" style="max-width:120px" />
-            <div class="menu" style="margin-left:auto;display:flex;gap:8px">
-              <button id="addCategory" class="btn">Adicionar</button>
-              <button id="seedDefaultCategories" class="btn">Categorias padrão</button>
+            <div style="display:flex;gap:8px;align-items:center;width:100%">
+              <button id="btnShowAddCategory" class="btn">Criar categoria</button>
+              <button id="seedDefaultCategories" class="btn ghost">Categorias padrão</button>
+              <div class="muted">As categorias continuam sendo exibidas com a mesma geometria após a criação.</div>
             </div>
           </div>
 
@@ -375,6 +372,49 @@
 
         <!-- SIDE PANEL: Add / Edit Phase -->
         <div id="sideOverlay" class="sideOverlay" aria-hidden="true"></div>
+
+        <!-- SIDE PANEL: Add / Edit Category -->
+        <div id="categoryPanel" class="sidePanel" aria-hidden="true" inert>
+          <div class="sidePanelHeader">
+            <div id="categoryPanelTitle" style="font-weight:900">Nova categoria</div>
+            <button id="btnCloseCategory" class="btn">Fechar</button>
+          </div>
+          <div class="sidePanelBody u-scroll-y">
+            <label for="categoryTitle">Título da categoria</label>
+            <input id="categoryTitle" class="input" placeholder="Ex.: Incluído" />
+            <div id="categoryTitleError" class="fieldError" aria-live="polite"></div>
+
+            <label for="categoryDescription">Descrição</label>
+            <textarea id="categoryDescription" class="input" style="min-height:110px" placeholder="Explique quando esta categoria deve ser utilizada"></textarea>
+
+            <label for="categoryColor">Cor</label>
+            <div class="categoryColorRow">
+              <input type="color" id="categoryColor" class="input categoryColorInput" value="#4CAF50" />
+              <span id="categoryColorValue" class="categoryColorValue">#4CAF50</span>
+            </div>
+
+            <fieldset class="categoryFieldset">
+              <legend>Fases em que a categoria pode ser usada</legend>
+              <div id="categoryPhases" class="categoriesList categoryRequirementsList" aria-live="polite"></div>
+            </fieldset>
+
+            <fieldset class="categoryFieldset">
+              <legend>Critérios obrigatórios (todos)</legend>
+              <div id="categoryCriteriaAll" class="categoriesList categoryRequirementsList" aria-live="polite"></div>
+            </fieldset>
+
+            <fieldset class="categoryFieldset">
+              <legend>Critérios alternativos (pelo menos um)</legend>
+              <div id="categoryCriteriaAny" class="categoriesList categoryRequirementsList" aria-live="polite"></div>
+            </fieldset>
+
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <button id="btnSaveCategory" class="btn">Salvar categoria</button>
+              <button id="btnDeleteCategory" class="btn danger" style="display:none">Excluir categoria</button>
+            </div>
+          </div>
+        </div>
+
         <div id="phasePanel" class="sidePanel" aria-hidden="true">
           <div class="sidePanelHeader">
             <div style="font-weight:900">Nova fase</div>

@@ -162,7 +162,7 @@ function loadCategories() {
 
     const sub = document.createElement("span");
     sub.className = "sub";
-    sub.textContent = "";
+    sub.textContent = cat.description || "";
 
     textWrap.appendChild(title);
     if (sub.textContent) textWrap.appendChild(sub);
@@ -179,21 +179,36 @@ function loadCategories() {
     meta.style.fontFamily = "monospace";
     meta.style.fontSize = "12px";
 
+    const editBtn = document.createElement("button");
+    editBtn.textContent = "Editar";
+    editBtn.addEventListener("click", () => {
+      window.dispatchEvent(new CustomEvent("icipo:edit-category", { detail: { label: categoryLabel } }));
+    });
+
     const btn = document.createElement("button");
     btn.textContent = "Excluir";
     btn.addEventListener("click", () => {
       if (!confirm(`Excluir a categoria "${category}"?`)) return;
-      project.removeCategory(categoryLabel);
-      persistProjectAndReload(); // Reload categories after removal
+      try {
+        project.removeCategory(categoryLabel);
+        persistProjectAndReload();
+      } catch (error) {
+        alert(error?.message || "Não foi possível excluir a categoria.");
+      }
     });
 
     const textColor = getLuminanceFromHex(color) < 0.5 ? "#fff" : "#000";
     title.style.color = textColor;
     meta.style.color = textColor;
+    editBtn.style.color = textColor;
     btn.style.color = textColor;
-    if (textColor === "#000") btn.classList.add("dark");
+    if (textColor === "#000") {
+      editBtn.classList.add("dark");
+      btn.classList.add("dark");
+    }
 
     right.appendChild(meta);
+    right.appendChild(editBtn);
     right.appendChild(btn);
 
     li.appendChild(left);
@@ -1578,88 +1593,193 @@ function bindEvents() {
     renderAll();
   });
 
-  // Categories & Links (moved from options)
-  const addCategoryButton = document.getElementById("addCategory");
-  const categoryNameInput = document.getElementById("categoryName");
-  const categoryColorInput = document.getElementById("categoryColor");
+  // Categories CRUD
+  const btnShowAddCategory = document.getElementById("btnShowAddCategory");
   const seedDefaultCategoriesButton = document.getElementById("seedDefaultCategories");
+  const categoryPanel = document.getElementById("categoryPanel");
+  const categoryPanelTitle = document.getElementById("categoryPanelTitle");
+  const btnCloseCategory = document.getElementById("btnCloseCategory");
+  const btnSaveCategory = document.getElementById("btnSaveCategory");
+  const btnDeleteCategory = document.getElementById("btnDeleteCategory");
+  const categoryTitleInput = document.getElementById("categoryTitle");
+  const categoryDescriptionInput = document.getElementById("categoryDescription");
+  const categoryColorInput = document.getElementById("categoryColor");
+  const categoryColorValue = document.getElementById("categoryColorValue");
+  const categoryPhasesInput = document.getElementById("categoryPhases");
+  const categoryCriteriaAllInput = document.getElementById("categoryCriteriaAll");
+  const categoryCriteriaAnyInput = document.getElementById("categoryCriteriaAny");
+  const categoryTitleError = document.getElementById("categoryTitleError");
   const highlightSearch = document.getElementById("highlightSearch");
   const removeLinks = document.getElementById("removeLinks");
+  let editingCategoryLabel = null;
 
-  if (seedDefaultCategoriesButton) {
-    seedDefaultCategoriesButton.addEventListener("click", () => {
-      // Merge a lista padrão localmente dentro do projeto ativo
-      const DEFAULT_SNOWBALLING_CATEGORIES = {
-        "Seed": "#4CAF50",
-        "Backward": "#2196F3",
-        "Forward": "#9C27B0",
-        "Included": "#2E7D32",
-        "Excluded": "#D32F2F",
-        "Duplicate": "#757575",
-        "Pending": "#FBC02D",
-      };
+  const makeLabel = (value) => String(value || "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
-      const project = state && state.project ? state.project : null;
-      if (!project || !project.id) return alert('Nenhum projeto ativo.');
-      project.categories = project.categories || [];
-      const existing = new Set((project.categories || []).map(c => c.title));
-      for (const [name, color] of Object.entries(DEFAULT_SNOWBALLING_CATEGORIES)) {
-        if (!existing.has(name)) {
-          project.addCategory({ title: name, color: color });
-        }
-      }
+  function renderCategoryRequirementOptions(container, items, selected = []) {
+    if (!container) return;
+    container.innerHTML = "";
+    if (!items.length) {
+      const empty = document.createElement("div");
+      empty.className = "muted categoryEmptyRequirements";
+      empty.textContent = "Nenhum item cadastrado.";
+      container.appendChild(empty);
+      return;
+    }
 
-      storage.saveProject(project).then(() => {
-        loadCategories();
-        alert("Categorias padrão de Snowballing adicionadas ao projeto!");
-      }).catch((e) => {
-        console.warn('seedDefaultCategories saveProject failed', e);
-        alert('Falha ao salvar categorias padrão no projeto.');
-      });
-    });
+    for (const item of items) {
+      const label = item.label || makeLabel(item.title);
+      const wrapper = document.createElement("label");
+      wrapper.className = "phaseCategoryItem";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = label;
+      checkbox.checked = selected.includes(label);
+      const text = document.createElement("span");
+      text.textContent = item.title || label;
+      wrapper.append(checkbox, text);
+      container.appendChild(wrapper);
+    }
   }
 
-  if (addCategoryButton) {
-    addCategoryButton.addEventListener("click", () => {
-      const name = (categoryNameInput?.value || "").trim();
-      const color = categoryColorInput?.value || "#000000";
-      if (!name) return;
+  function selectedValues(container) {
+    return Array.from(container?.querySelectorAll('input[type="checkbox"]:checked') || []).map(input => input.value);
+  }
 
-      const project = state && state.project ? state.project : null;
-      if (!project || !project.id) return alert('Nenhum projeto ativo.');
+  function openCategoryPanel(category = null) {
+    if (!categoryPanel) return;
+    editingCategoryLabel = category?.label || null;
+    categoryPanelTitle.textContent = category ? "Editar categoria" : "Nova categoria";
+    categoryTitleInput.value = category?.title || "";
+    categoryDescriptionInput.value = category?.description || "";
+    categoryColorInput.value = category?.color || "#4CAF50";
+    categoryColorValue.textContent = categoryColorInput.value.toUpperCase();
+    categoryTitleError.classList.remove("visible");
+    categoryTitleError.textContent = "";
 
-      project.categories = project.categories || [];
-      // Update if exists
-      const idx = project.categories.findIndex(c => c.title === name);
-      if (idx !== -1) {
-        //TODO: editar pelo CRUD da class Category, que ainda não existe.
-        project.categories[idx].color = color;
-      } else {
-        project.addCategory({ title: name, color: color });
-      }
+    const project = state?.project;
+    renderCategoryRequirementOptions(categoryPhasesInput, project?.phases || [], category?.phases || []);
+    renderCategoryRequirementOptions(categoryCriteriaAllInput, project?.criteria || [], category?.criteria?.all || []);
+    renderCategoryRequirementOptions(categoryCriteriaAnyInput, project?.criteria || [], category?.criteria?.at_least_one || []);
 
-      storage.saveProject(project).then(() => {
-        if (categoryNameInput) categoryNameInput.value = "";
+    btnDeleteCategory.style.display = category ? "" : "none";
+    categoryPanel.classList.add("open");
+    categoryPanel.setAttribute("aria-hidden", "false");
+    categoryPanel.removeAttribute("inert");
+    sideOverlay?.classList.add("open");
+    sideOverlay?.setAttribute("aria-hidden", "false");
+    document.body.classList.add("no-scroll");
+    setTimeout(() => categoryTitleInput?.focus(), 60);
+  }
+
+  function closeCategoryPanel() {
+    if (!categoryPanel) return;
+    categoryPanel.classList.remove("open");
+    categoryPanel.setAttribute("aria-hidden", "true");
+    categoryPanel.setAttribute("inert", "");
+    if (!document.getElementById("phasePanel")?.classList.contains("open")) {
+      sideOverlay?.classList.remove("open");
+      sideOverlay?.setAttribute("aria-hidden", "true");
+      document.body.classList.remove("no-scroll");
+    }
+    editingCategoryLabel = null;
+  }
+
+  btnShowAddCategory?.addEventListener("click", () => openCategoryPanel());
+  btnCloseCategory?.addEventListener("click", closeCategoryPanel);
+  categoryColorInput?.addEventListener("input", () => {
+    categoryColorValue.textContent = categoryColorInput.value.toUpperCase();
+  });
+  window.addEventListener("icipo:edit-category", event => {
+    const category = state?.project?.getCategoryByLabel?.(event.detail?.label)
+      || state?.project?.categories?.find(item => item.label === event.detail?.label);
+    if (category) openCategoryPanel(category);
+  });
+
+  btnSaveCategory?.addEventListener("click", async () => {
+    const project = state?.project;
+    if (!project?.id) return alert("Nenhum projeto ativo.");
+    const title = categoryTitleInput.value.trim();
+    if (!title) {
+      categoryTitleError.textContent = "Preencha o título da categoria.";
+      categoryTitleError.classList.add("visible");
+      categoryTitleInput.focus();
+      return;
+    }
+
+    const data = {
+      title,
+      label: makeLabel(title),
+      description: categoryDescriptionInput.value.trim(),
+      color: categoryColorInput.value,
+      phases: selectedValues(categoryPhasesInput),
+      criteria: {
+        all: selectedValues(categoryCriteriaAllInput),
+        at_least_one: selectedValues(categoryCriteriaAnyInput),
+      },
+    };
+
+    try {
+      if (editingCategoryLabel) project.updateCategory(editingCategoryLabel, data);
+      else project.addCategory(data);
+      await storage.saveProject(project);
+      loadCategories();
+      renderPhaseCategories?.([]);
+      closeCategoryPanel();
+      chrome.runtime.sendMessage({ action: "updateContextMenu" });
+    } catch (error) {
+      console.warn("category save failed", error);
+      categoryTitleError.textContent = error?.message || "Não foi possível salvar a categoria.";
+      categoryTitleError.classList.add("visible");
+    }
+  });
+
+  btnDeleteCategory?.addEventListener("click", async () => {
+    const project = state?.project;
+    const category = project?.categories?.find(item => item.label === editingCategoryLabel);
+    if (!category || !confirm(`Excluir a categoria "${category.title}"?`)) return;
+    try {
+      project.removeCategory(editingCategoryLabel);
+      await storage.saveProject(project);
+      loadCategories();
+      closeCategoryPanel();
+      chrome.runtime.sendMessage({ action: "updateContextMenu" });
+    } catch (error) {
+      alert(error?.message || "Não foi possível excluir a categoria.");
+    }
+  });
+
+  if (seedDefaultCategoriesButton) {
+    seedDefaultCategoriesButton.addEventListener("click", async () => {
+      const defaults = {
+        Seed: "#4CAF50", Backward: "#2196F3", Forward: "#9C27B0",
+        Included: "#2E7D32", Excluded: "#D32F2F", Duplicate: "#757575", Pending: "#FBC02D",
+      };
+      const project = state?.project;
+      if (!project?.id) return alert("Nenhum projeto ativo.");
+      try {
+        const existing = new Set((project.categories || []).map(category => category.title));
+        for (const [title, color] of Object.entries(defaults)) {
+          if (!existing.has(title)) project.addCategory({ title, color });
+        }
+        await storage.saveProject(project);
         loadCategories();
-      }).catch((e) => {
-        console.warn('saveProject failed', e);
-        alert('Falha ao salvar categoria no projeto.');
-      });
+      } catch (error) {
+        alert(error?.message || "Falha ao salvar categorias padrão.");
+      }
     });
   }
 
   if (removeLinks) {
     removeLinks.addEventListener("click", () => {
       if (!confirm("Tem certeza que deseja remover TODOS os links marcados?")) return;
-      storage.set({ highlightedLinks: {}, svat_papers: [] }).then(() => {
-        loadHighlightedLinks();
-      }).catch((e) => { console.warn('removeLinks set failed', e); });
+      storage.set({ highlightedLinks: {}, svat_papers: [] }).then(loadHighlightedLinks)
+        .catch((e) => console.warn("removeLinks set failed", e));
     });
   }
 
-  if (highlightSearch) {
-    highlightSearch.addEventListener("input", () => loadHighlightedLinks());
-  }
+  highlightSearch?.addEventListener("input", loadHighlightedLinks);
 
   // --- Phases (persistidas no project.json via WebSocket) ---
   const btnShowAddPhase = document.getElementById('btnShowAddPhase');

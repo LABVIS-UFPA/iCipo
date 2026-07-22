@@ -765,3 +765,14 @@ body.no-scroll{overflow:hidden}
   .phasesList{padding-bottom:40px}
   .sidePanel{width:100%;}
 }
+
+/* ===== Category CRUD side panel ===== */
+.categoryColorRow{display:flex;gap:10px;align-items:center}
+.categoryColorInput{width:74px;min-width:74px;height:44px;padding:4px;cursor:pointer}
+.categoryColorValue{font-family:monospace;font-weight:800;color:var(--muted)}
+.categoryFieldset{border:1px solid var(--border);border-radius:10px;padding:12px;margin:4px 0 0}
+.categoryFieldset legend{padding:0 6px;font-size:13px;font-weight:800;color:var(--muted)}
+.categoryRequirementsList{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.categoryEmptyRequirements{padding:4px 0;font-size:12px}
+.categoryList .sub{display:block;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:420px}
+@media (max-width:720px){.categoryList .sub{max-width:180px}}
