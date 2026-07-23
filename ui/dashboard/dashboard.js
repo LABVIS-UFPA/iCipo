@@ -1501,6 +1501,55 @@ function renderAll() {
   renderGraph();
 }
 
+let externalPaperRefreshTimer = null;
+
+async function syncPapersAddedOutsideDashboard() {
+  if (!state) return;
+
+  try {
+    const data = await storage.get(["svat_papers"]);
+    const externalPapers = Array.isArray(data?.svat_papers) ? data.svat_papers : [];
+    const currentById = new Map((state.papers || []).map(paper => [String(paper.id), paper]));
+    const currentByUrl = new Map((state.papers || []).map(paper => [normalizeStr(paper.url || ""), paper]));
+
+    for (const externalPaper of externalPapers) {
+      if (!externalPaper) continue;
+      const existing = currentById.get(String(externalPaper.id))
+        || currentByUrl.get(normalizeStr(externalPaper.url || ""));
+
+      if (existing) Object.assign(existing, externalPaper);
+      else state.papers.push({ ...externalPaper });
+    }
+
+    renderOverview();
+    renderInsights();
+    await renderPapersTable();
+    renderCriteria();
+    renderGraph();
+  } catch (error) {
+    console.warn("Não foi possível atualizar os artigos automaticamente.", error);
+  }
+}
+
+function scheduleExternalPaperRefresh() {
+  clearTimeout(externalPaperRefreshTimer);
+  externalPaperRefreshTimer = setTimeout(syncPapersAddedOutsideDashboard, 80);
+}
+
+function bindExternalPaperUpdates() {
+  if (!globalThis.chrome?.storage?.onChanged) return;
+
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== "local") return;
+    if (changes.svat_papers || changes.highlightedLinks) scheduleExternalPaperRefresh();
+  });
+
+  window.addEventListener("focus", scheduleExternalPaperRefresh);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) scheduleExternalPaperRefresh();
+  });
+}
+
 function bindEvents() {
   // Navigation
   $$(".navBtn").forEach(btn => btn.addEventListener("click", () => setActiveView(btn.dataset.view)));
@@ -2307,6 +2356,7 @@ function bindEvents() {
 async function init() {
   await loadState();
   bindEvents();
+  bindExternalPaperUpdates();
   renderAll();
   // Load moved features
   loadCategories();
