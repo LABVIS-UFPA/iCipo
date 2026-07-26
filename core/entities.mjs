@@ -48,10 +48,8 @@ class Project {
     }
 
     category.phases = uniqueStrings(category.phases);
-    category.criteria.at_least_one = uniqueStrings(category.criteria.at_least_one);
-    category.criteria.all = uniqueStrings(category.criteria.all);
+    category.criteria = normalizeCategoryCriteria(category.criteria);
     this._assertUniqueLabel(this.categories, category.label, null, "categoria");
-    this._assertCriteriaExist([...category.criteria.at_least_one, ...category.criteria.all]);
 
     const missingPhases = category.phases.filter(label => !this.phases.some(phase => phase.label === label));
     if (missingPhases.length) throw new Error(`Fases inexistentes: ${missingPhases.join(", ")}.`);
@@ -73,10 +71,8 @@ class Project {
     }
 
     nextCategory.phases = uniqueStrings(nextCategory.phases);
-    nextCategory.criteria.at_least_one = uniqueStrings(nextCategory.criteria.at_least_one);
-    nextCategory.criteria.all = uniqueStrings(nextCategory.criteria.all);
+    nextCategory.criteria = normalizeCategoryCriteria(nextCategory.criteria);
     this._assertUniqueLabel(this.categories, nextCategory.label, previousCategory.label, "categoria");
-    this._assertCriteriaExist([...nextCategory.criteria.at_least_one, ...nextCategory.criteria.all]);
 
     const missingPhases = nextCategory.phases.filter(phaseLabel => !this.phases.some(phase => phase.label === phaseLabel));
     if (missingPhases.length) throw new Error(`Fases inexistentes: ${missingPhases.join(", ")}.`);
@@ -139,10 +135,7 @@ class Project {
       phase.criteria = replaceArrayItem(phase.criteria, oldLabel, newLabel);
     }
 
-    for (const category of this.categories) {
-      category.criteria.all = replaceArrayItem(category.criteria.all, oldLabel, newLabel);
-      category.criteria.at_least_one = replaceArrayItem(category.criteria.at_least_one, oldLabel, newLabel);
-    }
+    // Critérios das categorias são locais e não referenciam os critérios globais do projeto.
   }
 
   _removeCriterionReferences(label) {
@@ -150,10 +143,7 @@ class Project {
       phase.criteria = removeArrayItem(phase.criteria, label);
     }
 
-    for (const category of this.categories) {
-      category.criteria.all = removeArrayItem(category.criteria.all, label);
-      category.criteria.at_least_one = removeArrayItem(category.criteria.at_least_one, label);
-    }
+    // Critérios das categorias são locais e não referenciam os critérios globais do projeto.
   }
 
   _renamePhaseReferences(oldLabel, newLabel) {
@@ -450,6 +440,20 @@ class Paper {
 
 
 
+function normalizeCategoryCriteria(value) {
+  // Formato atual: lista de textos pertencentes exclusivamente à categoria.
+  if (Array.isArray(value)) {
+    return uniqueStrings(value.map(item => typeof item === "string" ? item.trim() : item?.title?.trim()).filter(Boolean));
+  }
+
+  // Compatibilidade com projetos criados pelo formato antigo.
+  if (value && typeof value === "object") {
+    return uniqueStrings([...(checkArray(value.all)), ...(checkArray(value.at_least_one))]);
+  }
+
+  return [];
+}
+
 class Category {
   constructor(data = {}) {
     this.title = data.title || "";
@@ -457,11 +461,7 @@ class Category {
     this.description = data.description || "";
     this.color = data.color || null;
     this.phases = checkArray(data.phases);
-    const criteria = data.criteria && typeof data.criteria === "object" ? data.criteria : {};
-    this.criteria = {
-      at_least_one: checkArray(criteria.at_least_one),
-      all: checkArray(criteria.all),
-    };
+    this.criteria = normalizeCategoryCriteria(data.criteria);
   }
 
   toJSON() {
@@ -471,10 +471,7 @@ class Category {
       description: this.description,
       color: this.color,
       phases: this.phases,
-      criteria: {
-        at_least_one: this.criteria.at_least_one,
-        all: this.criteria.all,
-      },
+      criteria: this.criteria,
     };
   }
 

@@ -398,13 +398,12 @@
             </fieldset>
 
             <fieldset class="categoryFieldset">
-              <legend>Critérios obrigatórios (todos)</legend>
-              <div id="categoryCriteriaAll" class="categoriesList categoryRequirementsList" aria-live="polite"></div>
-            </fieldset>
-
-            <fieldset class="categoryFieldset">
-              <legend>Critérios alternativos (pelo menos um)</legend>
-              <div id="categoryCriteriaAny" class="categoriesList categoryRequirementsList" aria-live="polite"></div>
+              <legend>Critérios da categoria</legend>
+              <div class="categoryCriterionComposer">
+                <input id="categoryCriterionNew" class="input" placeholder="Digite um novo critério" />
+                <button id="btnAddCategoryCriterion" type="button" class="btn">Adicionar</button>
+              </div>
+              <div id="categoryCriteria" class="categoriesList categoryRequirementsList" aria-live="polite"></div>
             </fieldset>
 
             <div style="display:flex;gap:8px;margin-top:12px">

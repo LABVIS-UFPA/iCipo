@@ -776,3 +776,16 @@ body.no-scroll{overflow:hidden}
 .categoryEmptyRequirements{padding:4px 0;font-size:12px}
 .categoryList .sub{display:block;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:420px}
 @media (max-width:720px){.categoryList .sub{max-width:180px}}
+
+/* Category criteria CRUD */
+.categoryCriterionComposer{display:flex;gap:8px;align-items:center;margin:4px 0 10px}
+.categoryCriterionComposer .input{min-width:0;flex:1}
+.categoryCriterionComposer .btn{flex:0 0 auto}
+.categoryCriterionItem{display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05)}
+.categoryCriterionItem .phaseCategoryItem{flex:1;min-width:0}
+.categoryCriterionActions{display:flex;gap:4px;flex:0 0 auto}
+.categoryCriterionActions button{width:30px;height:30px;padding:0;border:0;border-radius:8px;background:rgba(255,255,255,.07);color:var(--text);cursor:pointer;font-weight:900}
+.categoryCriterionActions button:hover{filter:brightness(1.15)}
+.categoryCriterionActions button.danger{color:#ff8d8d}
+
+.categoryCriterionText{flex:1;min-width:0;overflow-wrap:anywhere;font-weight:700}

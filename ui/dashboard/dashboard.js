@@ -1605,12 +1605,14 @@ function bindEvents() {
   const categoryColorInput = document.getElementById("categoryColor");
   const categoryColorValue = document.getElementById("categoryColorValue");
   const categoryPhasesInput = document.getElementById("categoryPhases");
-  const categoryCriteriaAllInput = document.getElementById("categoryCriteriaAll");
-  const categoryCriteriaAnyInput = document.getElementById("categoryCriteriaAny");
+  const categoryCriteriaInput = document.getElementById("categoryCriteria");
+  const categoryCriterionNewInput = document.getElementById("categoryCriterionNew");
+  const btnAddCategoryCriterion = document.getElementById("btnAddCategoryCriterion");
   const categoryTitleError = document.getElementById("categoryTitleError");
   const highlightSearch = document.getElementById("highlightSearch");
   const removeLinks = document.getElementById("removeLinks");
   let editingCategoryLabel = null;
+  let categoryDraftCriteria = [];
 
   const makeLabel = (value) => String(value || "")
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -1642,6 +1644,70 @@ function bindEvents() {
     }
   }
 
+  function renderCategoryCriteria() {
+    if (!categoryCriteriaInput) return;
+    categoryCriteriaInput.innerHTML = "";
+
+    if (!categoryDraftCriteria.length) {
+      const empty = document.createElement("div");
+      empty.className = "muted categoryEmptyRequirements";
+      empty.textContent = "Nenhum critério cadastrado.";
+      categoryCriteriaInput.appendChild(empty);
+      return;
+    }
+
+    categoryDraftCriteria.forEach((criterion, index) => {
+      const row = document.createElement("div");
+      row.className = "categoryCriterionItem";
+
+      const text = document.createElement("span");
+      text.className = "categoryCriterionText";
+      text.textContent = criterion;
+
+      const actions = document.createElement("div");
+      actions.className = "categoryCriterionActions";
+
+      const editButton = document.createElement("button");
+      editButton.type = "button";
+      editButton.title = "Editar critério";
+      editButton.textContent = "✎";
+      editButton.addEventListener("click", () => {
+        const nextValue = prompt("Editar critério:", criterion)?.trim();
+        if (!nextValue || nextValue === criterion) return;
+        const duplicated = categoryDraftCriteria.some((item, itemIndex) => itemIndex !== index && item.toLowerCase() === nextValue.toLowerCase());
+        if (duplicated) return alert("Este critério já foi adicionado à categoria.");
+        categoryDraftCriteria[index] = nextValue;
+        renderCategoryCriteria();
+      });
+
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "danger";
+      deleteButton.title = "Excluir critério";
+      deleteButton.textContent = "×";
+      deleteButton.addEventListener("click", () => {
+        categoryDraftCriteria.splice(index, 1);
+        renderCategoryCriteria();
+      });
+
+      actions.append(editButton, deleteButton);
+      row.append(text, actions);
+      categoryCriteriaInput.appendChild(row);
+    });
+  }
+
+  function addCategoryCriterion() {
+    const title = categoryCriterionNewInput?.value?.trim();
+    if (!title) return;
+    if (categoryDraftCriteria.some(item => item.toLowerCase() === title.toLowerCase())) {
+      return alert("Este critério já foi adicionado à categoria.");
+    }
+    categoryDraftCriteria.push(title);
+    renderCategoryCriteria();
+    categoryCriterionNewInput.value = "";
+    categoryCriterionNewInput.focus();
+  }
+
   function selectedValues(container) {
     return Array.from(container?.querySelectorAll('input[type="checkbox"]:checked') || []).map(input => input.value);
   }
@@ -1659,8 +1725,9 @@ function bindEvents() {
 
     const project = state?.project;
     renderCategoryRequirementOptions(categoryPhasesInput, project?.phases || [], category?.phases || []);
-    renderCategoryRequirementOptions(categoryCriteriaAllInput, project?.criteria || [], category?.criteria?.all || []);
-    renderCategoryRequirementOptions(categoryCriteriaAnyInput, project?.criteria || [], category?.criteria?.at_least_one || []);
+    categoryDraftCriteria = Array.isArray(category?.criteria) ? [...category.criteria] : [];
+    renderCategoryCriteria();
+    if (categoryCriterionNewInput) categoryCriterionNewInput.value = "";
 
     btnDeleteCategory.style.display = category ? "" : "none";
     categoryPanel.classList.add("open");
@@ -1687,6 +1754,10 @@ function bindEvents() {
 
   btnShowAddCategory?.addEventListener("click", () => openCategoryPanel());
   btnCloseCategory?.addEventListener("click", closeCategoryPanel);
+  btnAddCategoryCriterion?.addEventListener("click", addCategoryCriterion);
+  categoryCriterionNewInput?.addEventListener("keydown", event => {
+    if (event.key === "Enter") { event.preventDefault(); addCategoryCriterion(); }
+  });
   categoryColorInput?.addEventListener("input", () => {
     categoryColorValue.textContent = categoryColorInput.value.toUpperCase();
   });
@@ -1713,10 +1784,7 @@ function bindEvents() {
       description: categoryDescriptionInput.value.trim(),
       color: categoryColorInput.value,
       phases: selectedValues(categoryPhasesInput),
-      criteria: {
-        all: selectedValues(categoryCriteriaAllInput),
-        at_least_one: selectedValues(categoryCriteriaAnyInput),
-      },
+      criteria: [...categoryDraftCriteria],
     };
 
     try {
