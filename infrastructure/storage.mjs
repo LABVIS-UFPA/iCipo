@@ -128,6 +128,8 @@ class NodeFsStrategy {
     const data = this.readJson(relPath) || {};
     this.activeProjectID = projectID;
     this.activeProjectData = data;
+    this.migrateLegacyScopedData();
+
     return { status: 'ok', data };
   }
 
@@ -235,23 +237,54 @@ class NodeFsStrategy {
   }
 
   // Storage-like get/set methods (chrome.storage.local-like behavior)
-  async get(keys) {
-    const config = this.readJson("config.json") || {};
-    const result = {};
+  get scopedStorageKeys() {
+    return new Set(['highlightedLinks', 'svat_papers', 'svat_project']);
+  }
 
-    if (!keys || keys.length === 0) {
-      return config;
-    }
+  getScopedStoragePath() {
+    if (!this.activeProjectID) return null;
+    const phaseLabel = this.activeProjectData?.activePhaseLabel || '_sem_fase';
+    return this.path.join(this.activeProjectID, 'phases', phaseLabel, 'storage.json');
+  }
 
-    // If keys is a string, wrap in array
-    const keyArray = typeof keys === 'string' ? [keys] : Array.isArray(keys) ? keys : [];
-    
-    for (const key of keyArray) {
+  migrateLegacyScopedData() {
+    const relPath = this.getScopedStoragePath();
+    if (!relPath || this.readJson(relPath)) return;
+
+    const config = this.readJson('config.json') || {};
+    const legacy = {};
+    for (const key of this.scopedStorageKeys) {
       if (key in config) {
-        result[key] = config[key];
+        legacy[key] = config[key];
+        delete config[key];
       }
     }
 
+    if (Object.keys(legacy).length > 0) {
+      this.writeJson(relPath, legacy);
+      this.writeJson('config.json', config);
+    }
+  }
+
+  async get(keys) {
+    const config = this.readJson("config.json") || {};
+    const scoped = this.getScopedStoragePath()
+      ? (this.readJson(this.getScopedStoragePath()) || {})
+      : {};
+
+    if (!keys || keys.length === 0) {
+      return { ...config, ...scoped };
+    }
+
+    const result = {};
+    const keyArray = typeof keys === 'string' ? [keys] : Array.isArray(keys) ? keys : [];
+
+    for (const key of keyArray) {
+      const source = this.scopedStorageKeys.has(key) ? scoped : config;
+      if (key in source) {
+        result[key] = source[key];
+      }
+    }
     return result;
   }
 
@@ -259,10 +292,205 @@ class NodeFsStrategy {
     if (!items || typeof items !== 'object') return;
 
     const config = this.readJson("config.json") || {};
-    const updated = { ...config, ...items };
-    this.writeJson("config.json", updated);
+    const scopedItems = {};
+    const globalItems = {};
+    for (const [key, value] of Object.entries(items)) {
+      (this.scopedStorageKeys.has(key) ? scopedItems : globalItems)[key] = value;
+    }
+
+    if (Object.keys(globalItems).length > 0) {
+      this.writeJson("config.json", { ...config, ...globalItems });
+    }
+
+    if (Object.keys(scopedItems).length > 0) {
+      const relPath = this.getScopedStoragePath();
+      if (!relPath) {
+        return { status: "error", message: "Abra um projeto antes de salvar links." };
+      }
+      const scoped = this.readJson(relPath) || {};
+      this.writeJson(relPath, { ...scoped, ...scopedItems });
+    }
 
     return { status: "ok", message: "Data saved." };
+  }
+
+  async getAllHighlightedLinksForActiveProject() {
+    if (!this.activeProjectID) {
+      return { status: 'error', message: 'Nenhum projeto ativo.', data: {} };
+    }
+
+    const allHighlightedLinks = {};
+    const phasesDir = this.path.join(this.baseDir, this.activeProjectID, 'phases');
+
+    if (this.fs.existsSync(phasesDir)) {
+      const phaseDirs = this.fs.readdirSync(phasesDir, { withFileTypes: true })
+        .filter(dirent => dirent.isDirectory())
+        .map(dirent => dirent.name);
+
+      phaseDirs.sort(); // Consistent merge order
+
+      for (const phaseDir of phaseDirs) {
+        const storagePath = this.path.join(this.activeProjectID, 'phases', phaseDir, 'storage.json');
+        const phaseScopedData = this.readJson(storagePath);
+        if (phaseScopedData && typeof phaseScopedData.highlightedLinks === 'object') {
+          Object.assign(allHighlightedLinks, phaseScopedData.highlightedLinks);
+        }
+      }
+    }
+    
+    // Also get scoped data from active phase
+    const scoped = this.getScopedStoragePath()
+      ? (this.readJson(this.getScopedStoragePath()) || {})
+      : {};
+    
+    const data = {
+        highlightedLinks: allHighlightedLinks,
+        svat_papers: scoped.svat_papers || [],
+        svat_project: scoped.svat_project || null
+    };
+    
+    return { status: 'ok', data: data };
+  }
+
+  normalizePhase(phaseData = {}, existing = {}) {
+    const title = (phaseData.title ?? existing.title ?? '').toString().trim();
+    const labelSource = (phaseData.label ?? existing.label ?? title).toString().trim();
+    const label = labelSource
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9._-]+/g, '_')
+      .replace(/^_+|_+$/g, '') || `fase_${Date.now().toString(36)}`;
+
+    const criteria = Array.isArray(phaseData.criteria)
+      ? phaseData.criteria
+      : typeof phaseData.criteria === 'string'
+        ? phaseData.criteria.split(/\r?\n|,/).map((v) => v.trim()).filter(Boolean)
+        : Array.isArray(existing.criteria) ? existing.criteria : [];
+
+    return {
+      label,
+      title,
+      description: phaseData.description ?? existing.description ?? '',
+      completed: typeof phaseData.completed === 'boolean' ? phaseData.completed : !!existing.completed,
+      categories: Array.isArray(phaseData.categories) ? phaseData.categories : (Array.isArray(existing.categories) ? existing.categories : []),
+      criteria,
+      papers: {
+        inheritedAccumulated: existing?.papers?.inheritedAccumulated || [],
+        inherited: existing?.papers?.inherited || [],
+        new: existing?.papers?.new || [],
+        removed: existing?.papers?.removed || [],
+        selected: existing?.papers?.selected || []
+      }
+    };
+  }
+
+  async savePhase(projectID, phaseData) {
+    const relPath = this.path.join(projectID, 'project.json');
+    const project = this.readJson(relPath);
+
+    console.log('🧭 NodeFsStrategy.savePhase', { projectID, phaseData, relPath });
+
+    if (!project) {
+      return { status: 'error', message: 'Projeto não encontrado.' };
+    }
+
+    if (!Array.isArray(project.phases)) project.phases = [];
+
+    const phase = this.normalizePhase(phaseData);
+    if (project.phases.some((p) => p.label === phase.label)) {
+      return { status: 'error', message: `Já existe uma fase com o rótulo "${phase.label}".` };
+    }
+
+    project.phases.push(phase);
+    if (!project.activePhaseLabel) project.activePhaseLabel = phase.label;
+    project.updatedAt = new Date().toISOString();
+
+    this.writeJson(relPath, project);
+    if (this.activeProjectID === projectID) this.activeProjectData = project;
+
+    console.log('✅ Fase salva no project.json:', phase);
+    return { status: 'ok', message: 'Fase salva com sucesso.', data: phase };
+  }
+
+  async updatePhase(projectID, phaseLabel, phaseData) {
+    const relPath = this.path.join(projectID, 'project.json');
+    const project = this.readJson(relPath);
+
+    console.log('🧭 NodeFsStrategy.updatePhase', { projectID, phaseLabel, phaseData, relPath });
+
+    if (!project) return { status: 'error', message: 'Projeto não encontrado.' };
+    if (!Array.isArray(project.phases)) project.phases = [];
+
+    const idx = project.phases.findIndex((p) => p.label === phaseLabel);
+    if (idx === -1) return { status: 'error', message: 'Fase não encontrada.' };
+
+    const current = project.phases[idx];
+    const phase = this.normalizePhase(phaseData, current);
+
+    const duplicate = project.phases.some((p, i) => i !== idx && p.label === phase.label);
+    if (duplicate) return { status: 'error', message: `Já existe uma fase com o rótulo "${phase.label}".` };
+
+    project.phases[idx] = phase;
+    if (project.activePhaseLabel === phaseLabel) project.activePhaseLabel = phase.label;
+    project.updatedAt = new Date().toISOString();
+
+    this.writeJson(relPath, project);
+    if (this.activeProjectID === projectID) this.activeProjectData = project;
+
+    console.log('✅ Fase atualizada no project.json:', phase);
+    return { status: 'ok', message: 'Fase atualizada com sucesso.', data: phase };
+  }
+
+  async deletePhase(projectID, phaseLabel) {
+    const relPath = this.path.join(projectID, 'project.json');
+    const project = this.readJson(relPath);
+
+    console.log('🧭 NodeFsStrategy.deletePhase', { projectID, phaseLabel, relPath });
+
+    if (!project) return { status: 'error', message: 'Projeto não encontrado.' };
+    if (!Array.isArray(project.phases)) project.phases = [];
+
+    const before = project.phases.length;
+    project.phases = project.phases.filter((p) => p.label !== phaseLabel);
+
+    if (project.phases.length === before) return { status: 'error', message: 'Fase não encontrada.' };
+
+    if (project.activePhaseLabel === phaseLabel) {
+      project.activePhaseLabel = project.phases[0]?.label || null;
+    }
+
+    project.updatedAt = new Date().toISOString();
+    this.writeJson(relPath, project);
+    if (this.activeProjectID === projectID) this.activeProjectData = project;
+
+    console.log('✅ Fase removida do project.json:', phaseLabel);
+    return { status: 'ok', message: 'Fase removida com sucesso.', data: { activePhaseLabel: project.activePhaseLabel || null } };
+  }
+
+  async setActivePhase(projectID, phaseLabel) {
+    const relPath = this.path.join(projectID, 'project.json');
+    const project = this.readJson(relPath);
+
+    console.log('🟢 NodeFsStrategy.setActivePhase', { projectID, phaseLabel, relPath });
+
+    if (!project) return { status: 'error', message: 'Projeto não encontrado.' };
+    if (!Array.isArray(project.phases)) project.phases = [];
+
+    const phaseExists = project.phases.some((p) => p.label === phaseLabel);
+    if (!phaseExists) return { status: 'error', message: 'Fase não encontrada.' };
+
+    project.activePhaseLabel = phaseLabel;
+    project.updatedAt = new Date().toISOString();
+
+    this.writeJson(relPath, project);
+    if (this.activeProjectID === projectID) this.activeProjectData = project;
+
+    return {
+      status: 'ok',
+      message: 'Fase ativa atualizada.',
+      data: { activePhaseLabel: phaseLabel }
+    };
   }
 
   // Check if this strategy is active and ready
@@ -367,7 +595,28 @@ class WebSocketStrategy {
   }
 
   async openProject(projectID) {
-    return this.send('open_project', { projectID });
+    // 1. Limpa o estado local para remover dados do projeto antigo.
+    //    Isso garante que, ao trocar de projeto, os links antigos desapareçam imediatamente.
+    //    Também desativa a extensão temporariamente para forçar a atualização do estado.
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      await new Promise((resolve) => {
+        chrome.storage.local.set({
+          highlightedLinks: {},
+          svat_papers: [],
+          svat_project: null,
+          active: false
+        }, resolve);
+      });
+    }
+
+    // 2. Avisa o servidor para trocar o projeto ativo.
+    const result = await this.send('open_project', { projectID });
+
+    // 3. Ativa a extensão e dispara a sincronização dos dados do NOVO projeto.
+    // O método `set` já cuida de chamar `syncActiveScopeToChrome` quando `active` é `true`.
+    await this.set({ active: true });
+
+    return result;
   }
 
   async getActiveProject(){
@@ -387,13 +636,19 @@ class WebSocketStrategy {
     return this.send('list_projects', {});
   }
 
-  // Accepts a `Paper` instance and returns the server response
+  // Accepts a `Paper` instance or a plain paper object and returns the server response
   async savePaper(paper) {
-    if(paper && paper instanceof Paper){
-      const data = paper.toJSON();
-      return this.send('save_paper', { paperId: data.id, data });
+    if (!paper) {
+      return Promise.reject(new Error("O artigo a salvar não pode ser vazio."));
     }
-    return Promise.reject(new Error("O objeto a salvar deve ser uma instância de Paper."));;
+
+    const data = paper instanceof Paper ? paper.toJSON() : paper;
+
+    if (!data.id && !(data.id === 0)) {
+      return Promise.reject(new Error("Paper JSON must include an id."));
+    }
+
+    return this.send('save_paper', { paperId: data.id, data });
   }
 
   // Returns a `Paper` instance (or null)
@@ -411,6 +666,36 @@ class WebSocketStrategy {
 
   async deletePaper(paperId) {
     return this.send('delete_paper', { paperId });
+  }
+
+  async savePhase(projectID, phaseData) {
+    return this.send('save_phase', { projectID, data: phaseData });
+  }
+
+  async updatePhase(projectID, phaseLabel, phaseData) {
+    return this.send('update_phase', { projectID, phaseLabel, data: phaseData });
+  }
+
+  async deletePhase(projectID, phaseLabel) {
+    return this.send('delete_phase', { projectID, phaseLabel });
+  }
+
+  async setActivePhase(projectID, phaseLabel) {
+    const result = await this.send('set_active_phase', { projectID, phaseLabel });
+    await this.syncActiveScopeToChrome();
+    return result;
+  }
+
+  async syncActiveScopeToChrome() {
+    if (typeof chrome === 'undefined' || !chrome.storage) return;
+
+    const data = await this.send('get_all_highlights', {}).catch(() => ({}));
+
+    await new Promise((resolve) => chrome.storage.local.set({
+      highlightedLinks: data?.highlightedLinks || {},
+      svat_papers: Array.isArray(data?.svat_papers) ? data.svat_papers : [],
+      svat_project: data?.svat_project || null
+    }, resolve));
   }
 
   // Returns array of `Paper` instances
@@ -432,11 +717,27 @@ class WebSocketStrategy {
     });
   }
 
+  async getAllHighlightedLinksForActiveProject() {
+    return this.send('get_all_highlights', {});
+  }
+
   async set(items) {
-    // If WebSocket is active, send normally
+    // Se o WebSocket estiver ativo, atualiza o storage local para efeito imediato E envia para o servidor para persistência.
+    // Isso corrige o bug onde o toggle 'active' não funcionava em tempo real.
     if (this.isActive()) {
+      if (typeof chrome !== 'undefined' && chrome.storage) {
+        await new Promise(resolve => chrome.storage.local.set(items, resolve));
+      }
+
+      // Se a extensão estiver sendo ativada, aciona uma sincronização completa dos links.
+      if (items && items.active === true) {
+        await this.syncActiveScopeToChrome();
+      }
+
       return this.send('storage_set', { items });
     }
+
+    // If WebSocket is active, send normally
 
     // If WebSocket is inactive, backup to chrome.storage
     return this.backupToChrome(items);
@@ -660,6 +961,20 @@ class StorageService {
     return this.strategy.getActiveProject();
   }
 
+  // Expose strategy's sync function to be triggered from background script
+  async syncActiveScopeToChrome() {
+    if (!this.initialized) await this.init();
+    if (this.strategy && typeof this.strategy.syncActiveScopeToChrome === 'function') {
+      return this.strategy.syncActiveScopeToChrome();
+    }
+    return Promise.resolve();
+  }
+
+  async getAllHighlightedLinksForActiveProject() {
+    if (!this.initialized) await this.init();
+    return this.strategy.getAllHighlightedLinksForActiveProject();
+  }
+
   // ========== Paper CRUD ==========
 
   // savePaper accepts a single `paper` object (must include `id`)
@@ -682,6 +997,28 @@ class StorageService {
   async listPapers() {
     if (!this.initialized) await this.init();
     return this.strategy.listPapers();
+  }
+
+  // ========== Phase CRUD ==========
+
+  async savePhase(projectID, phaseData) {
+    if (!this.initialized) await this.init();
+    return this.strategy.savePhase(projectID, phaseData);
+  }
+
+  async updatePhase(projectID, phaseLabel, phaseData) {
+    if (!this.initialized) await this.init();
+    return this.strategy.updatePhase(projectID, phaseLabel, phaseData);
+  }
+
+  async deletePhase(projectID, phaseLabel) {
+    if (!this.initialized) await this.init();
+    return this.strategy.deletePhase(projectID, phaseLabel);
+  }
+
+  async setActivePhase(projectID, phaseLabel) {
+    if (!this.initialized) await this.init();
+    return this.strategy.setActivePhase(projectID, phaseLabel);
   }
 
   

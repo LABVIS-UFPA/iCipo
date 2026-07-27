@@ -120,6 +120,25 @@ const messageHandler = {
   "storage_set": async (payload) => {
     return await storage.set(payload.items);
   },
+  "get_all_highlights": async () => {
+    return await storage.getAllHighlightedLinksForActiveProject();
+  },
+  "save_phase": async (payload) => {
+    console.log("🧭 save_phase recebido:", payload);
+    return verifyProjectID(payload) || await storage.savePhase(payload.projectID, payload.data);
+  },
+  "update_phase": async (payload) => {
+    console.log("🧭 update_phase recebido:", payload);
+    return verifyProjectID(payload) || await storage.updatePhase(payload.projectID, payload.phaseLabel, payload.data);
+  },
+  "delete_phase": async (payload) => {
+    console.log("🧭 delete_phase recebido:", payload);
+    return verifyProjectID(payload) || await storage.deletePhase(payload.projectID, payload.phaseLabel);
+  },
+  "set_active_phase": async (payload) => {
+    console.log("🟢 set_active_phase recebido:", payload);
+    return verifyProjectID(payload) || await storage.setActivePhase(payload.projectID, payload.phaseLabel);
+  },
 };
 
 function verifyNameSanitized(projectName) {

@@ -2,6 +2,18 @@ import {hashId, inferFromCategory} from './core/utils.mjs';
 import {storage} from './infrastructure/storage.mjs';
 import { wsManager } from './infrastructure/socketManager.mjs';
 
+// Adiciona um listener para sincronizar os dados sempre que a conexão com o servidor for (re)estabelecida.
+// Isso garante que, ao iniciar o navegador ou reconectar, os links marcados sejam atualizados.
+wsManager.addOnOpenListener(async () => {
+  console.log('iCipo: Conexão estabelecida, sincronizando dados com o chrome.storage...');
+  try {
+    await storage.syncActiveScopeToChrome(); 
+    console.log('iCipo: Sincronização de links concluída.');
+  } catch (error) {
+    console.warn('iCipo: Falha ao sincronizar links após a conexão.', error);
+  }
+});
+
 // const DEFAULT_SNOWBALLING_CATEGORIES = {
 //   "Seed": "#4CAF50",
 //   "Backward": "#2196F3",
@@ -11,8 +23,6 @@ import { wsManager } from './infrastructure/socketManager.mjs';
 //   "Duplicate": "#757575",
 //   "Pending": "#FBC02D",
 // };
-
-
 
 async function createContextMenu() {
   // Remove existing menus and recreate safely (ignore duplicate-id race warnings)
@@ -84,7 +94,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 });
 
 // Try connect on startup once if configured
-chrome.runtime.onStartup.addListener(() => {
+chrome.runtime.onStartup.addListener(async () => {
   wsManager.tryAutoConnect();
 });
 
