@@ -23,7 +23,7 @@
   },
   "homepage": "https://github.com/LABVIS-UFPA/Marcalink-Snowballing#readme",
   "dependencies": {
-    "ws": "^8.21.0"
+    "ws": "^8.21.1"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.3",

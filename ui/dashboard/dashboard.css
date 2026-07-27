@@ -376,6 +376,36 @@ body{
 }
 .linkBtn:hover{color: rgba(234,240,255,0.92)}
 
+/* Artigos: identificação suave pela cor da categoria */
+#papersTable tbody tr.paperCategoryRow td{
+  background: var(--paper-category-tint, transparent);
+}
+#papersTable tbody tr.paperCategoryRow td:first-child{
+  box-shadow: inset 4px 0 0 var(--paper-category-color, transparent);
+}
+#papersTable tbody tr.paperCategoryRow:hover td{
+  background: var(--paper-category-tint-hover, rgba(255,255,255,0.03));
+}
+.paperTitleWrap{
+  display:flex;
+  align-items:flex-start;
+  gap:8px;
+  min-width:0;
+}
+.paperCategoryMarker{
+  width:9px;
+  height:9px;
+  margin-top:5px;
+  border-radius:999px;
+  flex:0 0 auto;
+  box-shadow:0 0 0 2px rgba(255,255,255,0.12);
+}
+.paperTitleWrap .linkBtn{
+  min-width:0;
+  color:var(--text);
+}
+
+
 /* Modal */
 .modal{
   position:fixed;

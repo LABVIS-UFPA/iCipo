@@ -99,16 +99,29 @@ chrome.runtime.onStartup.addListener(async () => {
 });
 
 // Allow options page to trigger menu rebuild.
-chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg && msg.action === "updateContextMenu") {
-    createContextMenu();
-    return;
+    (async () => {
+      try {
+        await createContextMenu();
+        sendResponse({ status: "ok" });
+      } catch (error) {
+        console.warn("Falha ao atualizar menu de contexto:", error);
+        sendResponse({ status: "error", message: error?.message || String(error) });
+      }
+    })();
+    return true;
   }
   if (msg && msg.action === "seedDefaultCategories") {
     (async () => {
-      await createContextMenu();
+      try {
+        await createContextMenu();
+        sendResponse({ status: "ok" });
+      } catch (error) {
+        sendResponse({ status: "error", message: error?.message || String(error) });
+      }
     })();
-    return;
+    return true;
   }
   // Socket control messages from options page
   if (msg && msg.action === "socket_get_state") {

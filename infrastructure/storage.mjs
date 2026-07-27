@@ -87,6 +87,13 @@ class NodeFsStrategy {
     // Write merged project data
     this.writeJson(relPath, merged);
 
+    // Keep the active project cache synchronized with project.json.
+    // get_active_project is used by the Dashboard reload and by the
+    // background service worker when rebuilding the Google Scholar menu.
+    if (this.activeProjectID === projectID) {
+      this.activeProjectData = merged;
+    }
+
     // ensure config.json contains project entry and update metadata if needed
     try {
       const cfg = this.readJson('config.json') || { projects: [] };
@@ -319,37 +326,22 @@ class NodeFsStrategy {
       return { status: 'error', message: 'Nenhum projeto ativo.', data: {} };
     }
 
-    const allHighlightedLinks = {};
-    const phasesDir = this.path.join(this.baseDir, this.activeProjectID, 'phases');
+    // A fase ativa é a única fonte para a página web e para a aba Artigos.
+    // Não fazemos merge entre fases, pois isso faria links de outras fases
+    // continuarem marcados ao trocar de fase.
+    const scopedPath = this.getScopedStoragePath();
+    const scoped = scopedPath ? (this.readJson(scopedPath) || {}) : {};
 
-    if (this.fs.existsSync(phasesDir)) {
-      const phaseDirs = this.fs.readdirSync(phasesDir, { withFileTypes: true })
-        .filter(dirent => dirent.isDirectory())
-        .map(dirent => dirent.name);
-
-      phaseDirs.sort(); // Consistent merge order
-
-      for (const phaseDir of phaseDirs) {
-        const storagePath = this.path.join(this.activeProjectID, 'phases', phaseDir, 'storage.json');
-        const phaseScopedData = this.readJson(storagePath);
-        if (phaseScopedData && typeof phaseScopedData.highlightedLinks === 'object') {
-          Object.assign(allHighlightedLinks, phaseScopedData.highlightedLinks);
-        }
-      }
-    }
-    
-    // Also get scoped data from active phase
-    const scoped = this.getScopedStoragePath()
-      ? (this.readJson(this.getScopedStoragePath()) || {})
-      : {};
-    
-    const data = {
-        highlightedLinks: allHighlightedLinks,
-        svat_papers: scoped.svat_papers || [],
+    return {
+      status: 'ok',
+      data: {
+        highlightedLinks: scoped.highlightedLinks && typeof scoped.highlightedLinks === 'object'
+          ? scoped.highlightedLinks
+          : {},
+        svat_papers: Array.isArray(scoped.svat_papers) ? scoped.svat_papers : [],
         svat_project: scoped.svat_project || null
+      }
     };
-    
-    return { status: 'ok', data: data };
   }
 
   normalizePhase(phaseData = {}, existing = {}) {

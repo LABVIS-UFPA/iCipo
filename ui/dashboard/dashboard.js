@@ -111,6 +111,50 @@ function getLuminanceFromHex(hex) {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
+
+function normalizeHexColor(value, fallback = "") {
+  const color = String(value || "").trim();
+  if (/^#[0-9a-f]{6}$/i.test(color)) return color.toUpperCase();
+  if (/^#[0-9a-f]{3}$/i.test(color)) {
+    return `#${color.slice(1).split("").map(ch => ch + ch).join("")}`.toUpperCase();
+  }
+  return fallback;
+}
+
+function hexToRgba(hex, alpha = 0.12) {
+  const normalized = normalizeHexColor(hex);
+  if (!normalized) return "transparent";
+  const r = parseInt(normalized.slice(1, 3), 16);
+  const g = parseInt(normalized.slice(3, 5), 16);
+  const b = parseInt(normalized.slice(5, 7), 16);
+  const safeAlpha = Math.max(0, Math.min(1, Number(alpha) || 0));
+  return `rgba(${r}, ${g}, ${b}, ${safeAlpha})`;
+}
+
+function getPaperCategoryColor(paper, highlightedLinks = {}) {
+  const normalizedPaperUrl = normalizeUrl(paper?.url || "");
+
+  for (const [url, color] of Object.entries(highlightedLinks || {})) {
+    if (normalizeUrl(url) === normalizedPaperUrl) {
+      const normalized = normalizeHexColor(color);
+      if (normalized) return normalized;
+    }
+  }
+
+  const directColor = normalizeHexColor(paper?.highlightedColor || paper?.highlightColor || paper?.color);
+  if (directColor) return directColor;
+
+  const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
+  const tags = Array.isArray(paper?.tags) ? paper.tags.map(tag => String(tag).toLowerCase()) : [];
+  const category = categories.find(cat => {
+    const label = String(cat?.label || "").toLowerCase();
+    const title = String(cat?.title || "").toLowerCase();
+    return (label && tags.includes(label)) || (title && tags.includes(title));
+  });
+
+  return normalizeHexColor(category?.color);
+}
+
 function loadCategories() {
   const categoryList = document.getElementById("categoryList");
   if (!categoryList) return;
@@ -984,24 +1028,24 @@ async function renderPapersTable() {
   for (const p of rows) {
     const tags = Array.isArray(p.tags) ? p.tags.join(";") : "";
     const critVal = p.criteriaId || "";
-    // highlighted color styling
-    let titleStyle = "";
-    try {
-      const color = p.highlightedColor || p.color || p.highlightColor;
-      if (color) {
-        const lum = getLuminanceFromHex(color);
-        const ts = lum > 0.7 ? 'text-shadow:0 0 1px rgba(0,0,0,0.6);' : (lum < 0.15 ? 'text-shadow:0 0 1px rgba(255,255,255,0.08);' : '');
-        titleStyle = `style="color:${escapeHtml(color)};${ts}"`;
-      }
-    } catch (e) {
-      titleStyle = "";
-    }
+    // Use a light tint from the selected category so the title stays readable.
+    const categoryColor = getPaperCategoryColor(p, hl);
+    const rowStyle = categoryColor
+      ? `style="--paper-category-color:${escapeHtml(categoryColor)};--paper-category-tint:${escapeHtml(hexToRgba(categoryColor, 0.25))};--paper-category-tint-hover:${escapeHtml(hexToRgba(categoryColor, 0.50))}"`
+      : "";
+    const rowClass = categoryColor ? "paperCategoryRow" : "";
+    const categoryMarker = categoryColor
+      ? `<span class="paperCategoryMarker" style="background:${escapeHtml(categoryColor)}" aria-hidden="true"></span>`
+      : "";
 
     rowsHtml += `
-      <tr>
+      <tr class="${rowClass}" ${rowStyle}>
         <td><input type="checkbox" class="rowCheck" data-id="${p.id}" /></td>
         <td>
-          <button class="linkBtn" data-show-history="${p.id}" title="Ver histórico" ${titleStyle}>${escapeHtml(p.title || "(sem título)")}</button>
+          <div class="paperTitleWrap">
+            ${categoryMarker}
+            <button class="linkBtn" data-show-history="${p.id}" title="Ver histórico">${escapeHtml(p.title || "(sem título)")}</button>
+          </div>
           <div style="color:#666;font-size:11px;margin-top:4px">${escapeHtml(p.authorsRaw || "")} • ${escapeHtml(fmtDate(p.createdAt))}</div>
         </td>
         <td><input class="cellInput" data-field="year" data-id="${p.id}" value="${escapeHtml(p.year ?? "")}" placeholder="—" style="width:64px" /></td>
@@ -1752,6 +1796,31 @@ function bindEvents() {
     editingCategoryLabel = null;
   }
 
+  async function reloadCategoryProjectFromWebSocket(projectID) {
+    const freshProject = await storage.loadProject(projectID);
+    if (!freshProject) throw new Error("O projeto salvo não pôde ser recarregado pelo WebSocket.");
+    state.project = freshProject;
+    return freshProject;
+  }
+
+  async function updateScholarCategoryMenu() {
+    if (typeof chrome === "undefined" || !chrome.runtime?.sendMessage) return;
+
+    const response = await new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({ action: "updateContextMenu" }, (result) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        resolve(result);
+      });
+    });
+
+    if (response?.status === "error") {
+      throw new Error(response.message || "Não foi possível atualizar as categorias no Google Scholar.");
+    }
+  }
+
   btnShowAddCategory?.addEventListener("click", () => openCategoryPanel());
   btnCloseCategory?.addEventListener("click", closeCategoryPanel);
   btnAddCategoryCriterion?.addEventListener("click", addCategoryCriterion);
@@ -1790,11 +1859,15 @@ function bindEvents() {
     try {
       if (editingCategoryLabel) project.updateCategory(editingCategoryLabel, data);
       else project.addCategory(data);
+
+      // project.json no servidor é a única fonte persistente das categorias.
       await storage.saveProject(project);
+      await reloadCategoryProjectFromWebSocket(project.id);
+
       loadCategories();
       renderPhaseCategories?.([]);
+      await updateScholarCategoryMenu();
       closeCategoryPanel();
-      chrome.runtime.sendMessage({ action: "updateContextMenu" });
     } catch (error) {
       console.warn("category save failed", error);
       categoryTitleError.textContent = error?.message || "Não foi possível salvar a categoria.";
@@ -1808,10 +1881,15 @@ function bindEvents() {
     if (!category || !confirm(`Excluir a categoria "${category.title}"?`)) return;
     try {
       project.removeCategory(editingCategoryLabel);
+
+      // Persiste exclusivamente no project.json via WebSocket e recarrega a
+      // confirmação do servidor antes de atualizar a interface.
       await storage.saveProject(project);
+      await reloadCategoryProjectFromWebSocket(project.id);
+
       loadCategories();
+      await updateScholarCategoryMenu();
       closeCategoryPanel();
-      chrome.runtime.sendMessage({ action: "updateContextMenu" });
     } catch (error) {
       alert(error?.message || "Não foi possível excluir a categoria.");
     }
