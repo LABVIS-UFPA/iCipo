@@ -5,9 +5,9 @@ import { wsManager } from './infrastructure/socketManager.mjs';
 // Adiciona um listener para sincronizar os dados sempre que a conexão com o servidor for (re)estabelecida.
 // Isso garante que, ao iniciar o navegador ou reconectar, os links marcados sejam atualizados.
 wsManager.addOnOpenListener(async () => {
-  console.log('iCipo: Conexão estabelecida, sincronizando dados com o chrome.storage...');
+  console.log('iCipo: Conexão estabelecida, atualizando highlights via WebSocket...');
   try {
-    await storage.syncActiveScopeToChrome(); 
+    await broadcastHighlightsRefresh(); 
     console.log('iCipo: Sincronização de links concluída.');
   } catch (error) {
     console.warn('iCipo: Falha ao sincronizar links após a conexão.', error);
@@ -100,6 +100,14 @@ chrome.runtime.onStartup.addListener(async () => {
 
 // Allow options page to trigger menu rebuild.
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg && msg.action === 'getHighlightsFromWs') {
+    getHighlightsSnapshotFromWs().then(sendResponse);
+    return true;
+  }
+  if (msg && msg.action === 'refreshScholarHighlights') {
+    broadcastHighlightsRefresh().then(() => sendResponse({ status: 'ok' }));
+    return true;
+  }
   if (msg && msg.action === "updateContextMenu") {
     (async () => {
       try {
@@ -187,6 +195,29 @@ function nowIso() {
 }
 
 
+async function getHighlightsSnapshotFromWs() {
+  try {
+    const data = await storage.getAllHighlightedLinksForActiveProject();
+    return {
+      highlightedLinks: data?.highlightedLinks || {},
+      active: true
+    };
+  } catch (error) {
+    console.warn('iCipo: falha ao buscar highlights via WebSocket.', error);
+    return { highlightedLinks: {}, active: false, error: error?.message || String(error) };
+  }
+}
+
+async function broadcastHighlightsRefresh() {
+  if (typeof chrome === 'undefined' || !chrome.tabs) return;
+  const tabs = await chrome.tabs.query({});
+  await Promise.all(tabs.map((targetTab) => {
+    if (!targetTab?.id) return Promise.resolve();
+    return chrome.tabs.sendMessage(targetTab.id, { action: 'refreshHighlights' }).catch(() => undefined);
+  }));
+}
+
+
 
 
 
@@ -266,6 +297,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       papers.push({ ...base, createdAt: nowIso(), history: [{ ts: nowIso(), action: "mark", details: { category: category_label, origin, status, prevStatus: prev } }] });
     }
     await storage.set({ svat_project: project, svat_papers: papers });
+    await broadcastHighlightsRefresh();
   
   
   } else if (info.menuItemId === "removeHighlight") {
