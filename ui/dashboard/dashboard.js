@@ -111,6 +111,50 @@ function getLuminanceFromHex(hex) {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
+
+function normalizeHexColor(value, fallback = "") {
+  const color = String(value || "").trim();
+  if (/^#[0-9a-f]{6}$/i.test(color)) return color.toUpperCase();
+  if (/^#[0-9a-f]{3}$/i.test(color)) {
+    return `#${color.slice(1).split("").map(ch => ch + ch).join("")}`.toUpperCase();
+  }
+  return fallback;
+}
+
+function hexToRgba(hex, alpha = 0.12) {
+  const normalized = normalizeHexColor(hex);
+  if (!normalized) return "transparent";
+  const r = parseInt(normalized.slice(1, 3), 16);
+  const g = parseInt(normalized.slice(3, 5), 16);
+  const b = parseInt(normalized.slice(5, 7), 16);
+  const safeAlpha = Math.max(0, Math.min(1, Number(alpha) || 0));
+  return `rgba(${r}, ${g}, ${b}, ${safeAlpha})`;
+}
+
+function getPaperCategoryColor(paper, highlightedLinks = {}) {
+  const normalizedPaperUrl = normalizeUrl(paper?.url || "");
+
+  for (const [url, color] of Object.entries(highlightedLinks || {})) {
+    if (normalizeUrl(url) === normalizedPaperUrl) {
+      const normalized = normalizeHexColor(color);
+      if (normalized) return normalized;
+    }
+  }
+
+  const directColor = normalizeHexColor(paper?.highlightedColor || paper?.highlightColor || paper?.color);
+  if (directColor) return directColor;
+
+  const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
+  const tags = Array.isArray(paper?.tags) ? paper.tags.map(tag => String(tag).toLowerCase()) : [];
+  const category = categories.find(cat => {
+    const label = String(cat?.label || "").toLowerCase();
+    const title = String(cat?.title || "").toLowerCase();
+    return (label && tags.includes(label)) || (title && tags.includes(title));
+  });
+
+  return normalizeHexColor(category?.color);
+}
+
 function loadCategories() {
   const categoryList = document.getElementById("categoryList");
   if (!categoryList) return;
@@ -162,7 +206,7 @@ function loadCategories() {
 
     const sub = document.createElement("span");
     sub.className = "sub";
-    sub.textContent = "";
+    sub.textContent = cat.description || "";
 
     textWrap.appendChild(title);
     if (sub.textContent) textWrap.appendChild(sub);
@@ -179,21 +223,36 @@ function loadCategories() {
     meta.style.fontFamily = "monospace";
     meta.style.fontSize = "12px";
 
+    const editBtn = document.createElement("button");
+    editBtn.textContent = "Editar";
+    editBtn.addEventListener("click", () => {
+      window.dispatchEvent(new CustomEvent("icipo:edit-category", { detail: { label: categoryLabel } }));
+    });
+
     const btn = document.createElement("button");
     btn.textContent = "Excluir";
     btn.addEventListener("click", () => {
       if (!confirm(`Excluir a categoria "${category}"?`)) return;
-      project.removeCategory(categoryLabel);
-      persistProjectAndReload(); // Reload categories after removal
+      try {
+        project.removeCategory(categoryLabel);
+        persistProjectAndReload();
+      } catch (error) {
+        alert(error?.message || "Não foi possível excluir a categoria.");
+      }
     });
 
     const textColor = getLuminanceFromHex(color) < 0.5 ? "#fff" : "#000";
     title.style.color = textColor;
     meta.style.color = textColor;
+    editBtn.style.color = textColor;
     btn.style.color = textColor;
-    if (textColor === "#000") btn.classList.add("dark");
+    if (textColor === "#000") {
+      editBtn.classList.add("dark");
+      btn.classList.add("dark");
+    }
 
     right.appendChild(meta);
+    right.appendChild(editBtn);
     right.appendChild(btn);
 
     li.appendChild(left);
@@ -969,24 +1028,24 @@ async function renderPapersTable() {
   for (const p of rows) {
     const tags = Array.isArray(p.tags) ? p.tags.join(";") : "";
     const critVal = p.criteriaId || "";
-    // highlighted color styling
-    let titleStyle = "";
-    try {
-      const color = p.highlightedColor || p.color || p.highlightColor;
-      if (color) {
-        const lum = getLuminanceFromHex(color);
-        const ts = lum > 0.7 ? 'text-shadow:0 0 1px rgba(0,0,0,0.6);' : (lum < 0.15 ? 'text-shadow:0 0 1px rgba(255,255,255,0.08);' : '');
-        titleStyle = `style="color:${escapeHtml(color)};${ts}"`;
-      }
-    } catch (e) {
-      titleStyle = "";
-    }
+    // Use a light tint from the selected category so the title stays readable.
+    const categoryColor = getPaperCategoryColor(p, hl);
+    const rowStyle = categoryColor
+      ? `style="--paper-category-color:${escapeHtml(categoryColor)};--paper-category-tint:${escapeHtml(hexToRgba(categoryColor, 0.25))};--paper-category-tint-hover:${escapeHtml(hexToRgba(categoryColor, 0.50))}"`
+      : "";
+    const rowClass = categoryColor ? "paperCategoryRow" : "";
+    const categoryMarker = categoryColor
+      ? `<span class="paperCategoryMarker" style="background:${escapeHtml(categoryColor)}" aria-hidden="true"></span>`
+      : "";
 
     rowsHtml += `
-      <tr>
+      <tr class="${rowClass}" ${rowStyle}>
         <td><input type="checkbox" class="rowCheck" data-id="${p.id}" /></td>
         <td>
-          <button class="linkBtn" data-show-history="${p.id}" title="Ver histórico" ${titleStyle}>${escapeHtml(p.title || "(sem título)")}</button>
+          <div class="paperTitleWrap">
+            ${categoryMarker}
+            <button class="linkBtn" data-show-history="${p.id}" title="Ver histórico">${escapeHtml(p.title || "(sem título)")}</button>
+          </div>
           <div style="color:#666;font-size:11px;margin-top:4px">${escapeHtml(p.authorsRaw || "")} • ${escapeHtml(fmtDate(p.createdAt))}</div>
         </td>
         <td><input class="cellInput" data-field="year" data-id="${p.id}" value="${escapeHtml(p.year ?? "")}" placeholder="—" style="width:64px" /></td>
@@ -1578,88 +1637,273 @@ function bindEvents() {
     renderAll();
   });
 
-  // Categories & Links (moved from options)
-  const addCategoryButton = document.getElementById("addCategory");
-  const categoryNameInput = document.getElementById("categoryName");
+  // Categories CRUD
+  const btnShowAddCategory = document.getElementById("btnShowAddCategory");
+  const categoryPanel = document.getElementById("categoryPanel");
+  const categoryPanelTitle = document.getElementById("categoryPanelTitle");
+  const btnCloseCategory = document.getElementById("btnCloseCategory");
+  const btnSaveCategory = document.getElementById("btnSaveCategory");
+  const btnDeleteCategory = document.getElementById("btnDeleteCategory");
+  const categoryTitleInput = document.getElementById("categoryTitle");
+  const categoryDescriptionInput = document.getElementById("categoryDescription");
   const categoryColorInput = document.getElementById("categoryColor");
-  const seedDefaultCategoriesButton = document.getElementById("seedDefaultCategories");
+  const categoryColorValue = document.getElementById("categoryColorValue");
+  const categoryPhasesInput = document.getElementById("categoryPhases");
+  const categoryCriteriaInput = document.getElementById("categoryCriteria");
+  const categoryCriterionNewInput = document.getElementById("categoryCriterionNew");
+  const btnAddCategoryCriterion = document.getElementById("btnAddCategoryCriterion");
+  const categoryTitleError = document.getElementById("categoryTitleError");
   const highlightSearch = document.getElementById("highlightSearch");
   const removeLinks = document.getElementById("removeLinks");
+  let editingCategoryLabel = null;
+  let categoryDraftCriteria = [];
 
-  if (seedDefaultCategoriesButton) {
-    seedDefaultCategoriesButton.addEventListener("click", () => {
-      // Merge a lista padrão localmente dentro do projeto ativo
-      const DEFAULT_SNOWBALLING_CATEGORIES = {
-        "Seed": "#4CAF50",
-        "Backward": "#2196F3",
-        "Forward": "#9C27B0",
-        "Included": "#2E7D32",
-        "Excluded": "#D32F2F",
-        "Duplicate": "#757575",
-        "Pending": "#FBC02D",
-      };
+  const makeLabel = (value) => String(value || "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
-      const project = state && state.project ? state.project : null;
-      if (!project || !project.id) return alert('Nenhum projeto ativo.');
-      project.categories = project.categories || [];
-      const existing = new Set((project.categories || []).map(c => c.title));
-      for (const [name, color] of Object.entries(DEFAULT_SNOWBALLING_CATEGORIES)) {
-        if (!existing.has(name)) {
-          project.addCategory({ title: name, color: color });
+  function renderCategoryRequirementOptions(container, items, selected = []) {
+    if (!container) return;
+    container.innerHTML = "";
+    if (!items.length) {
+      const empty = document.createElement("div");
+      empty.className = "muted categoryEmptyRequirements";
+      empty.textContent = "Nenhum item cadastrado.";
+      container.appendChild(empty);
+      return;
+    }
+
+    for (const item of items) {
+      const label = item.label || makeLabel(item.title);
+      const wrapper = document.createElement("label");
+      wrapper.className = "phaseCategoryItem";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = label;
+      checkbox.checked = selected.includes(label);
+      const text = document.createElement("span");
+      text.textContent = item.title || label;
+      wrapper.append(checkbox, text);
+      container.appendChild(wrapper);
+    }
+  }
+
+  function renderCategoryCriteria() {
+    if (!categoryCriteriaInput) return;
+    categoryCriteriaInput.innerHTML = "";
+
+    if (!categoryDraftCriteria.length) {
+      const empty = document.createElement("div");
+      empty.className = "muted categoryEmptyRequirements";
+      empty.textContent = "Nenhum critério cadastrado.";
+      categoryCriteriaInput.appendChild(empty);
+      return;
+    }
+
+    categoryDraftCriteria.forEach((criterion, index) => {
+      const row = document.createElement("div");
+      row.className = "categoryCriterionItem";
+
+      const text = document.createElement("span");
+      text.className = "categoryCriterionText";
+      text.textContent = criterion;
+
+      const actions = document.createElement("div");
+      actions.className = "categoryCriterionActions";
+
+      const editButton = document.createElement("button");
+      editButton.type = "button";
+      editButton.title = "Editar critério";
+      editButton.textContent = "✎";
+      editButton.addEventListener("click", () => {
+        const nextValue = prompt("Editar critério:", criterion)?.trim();
+        if (!nextValue || nextValue === criterion) return;
+        const duplicated = categoryDraftCriteria.some((item, itemIndex) => itemIndex !== index && item.toLowerCase() === nextValue.toLowerCase());
+        if (duplicated) return alert("Este critério já foi adicionado à categoria.");
+        categoryDraftCriteria[index] = nextValue;
+        renderCategoryCriteria();
+      });
+
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "danger";
+      deleteButton.title = "Excluir critério";
+      deleteButton.textContent = "×";
+      deleteButton.addEventListener("click", () => {
+        categoryDraftCriteria.splice(index, 1);
+        renderCategoryCriteria();
+      });
+
+      actions.append(editButton, deleteButton);
+      row.append(text, actions);
+      categoryCriteriaInput.appendChild(row);
+    });
+  }
+
+  function addCategoryCriterion() {
+    const title = categoryCriterionNewInput?.value?.trim();
+    if (!title) return;
+    if (categoryDraftCriteria.some(item => item.toLowerCase() === title.toLowerCase())) {
+      return alert("Este critério já foi adicionado à categoria.");
+    }
+    categoryDraftCriteria.push(title);
+    renderCategoryCriteria();
+    categoryCriterionNewInput.value = "";
+    categoryCriterionNewInput.focus();
+  }
+
+  function selectedValues(container) {
+    return Array.from(container?.querySelectorAll('input[type="checkbox"]:checked') || []).map(input => input.value);
+  }
+
+  function openCategoryPanel(category = null) {
+    if (!categoryPanel) return;
+    editingCategoryLabel = category?.label || null;
+    categoryPanelTitle.textContent = category ? "Editar categoria" : "Nova categoria";
+    categoryTitleInput.value = category?.title || "";
+    categoryDescriptionInput.value = category?.description || "";
+    categoryColorInput.value = category?.color || "#4CAF50";
+    categoryColorValue.textContent = categoryColorInput.value.toUpperCase();
+    categoryTitleError.classList.remove("visible");
+    categoryTitleError.textContent = "";
+
+    const project = state?.project;
+    renderCategoryRequirementOptions(categoryPhasesInput, project?.phases || [], category?.phases || []);
+    categoryDraftCriteria = Array.isArray(category?.criteria) ? [...category.criteria] : [];
+    renderCategoryCriteria();
+    if (categoryCriterionNewInput) categoryCriterionNewInput.value = "";
+
+    btnDeleteCategory.style.display = category ? "" : "none";
+    categoryPanel.classList.add("open");
+    categoryPanel.setAttribute("aria-hidden", "false");
+    categoryPanel.removeAttribute("inert");
+    sideOverlay?.classList.add("open");
+    sideOverlay?.setAttribute("aria-hidden", "false");
+    document.body.classList.add("no-scroll");
+    setTimeout(() => categoryTitleInput?.focus(), 60);
+  }
+
+  function closeCategoryPanel() {
+    if (!categoryPanel) return;
+    categoryPanel.classList.remove("open");
+    categoryPanel.setAttribute("aria-hidden", "true");
+    categoryPanel.setAttribute("inert", "");
+    if (!document.getElementById("phasePanel")?.classList.contains("open")) {
+      sideOverlay?.classList.remove("open");
+      sideOverlay?.setAttribute("aria-hidden", "true");
+      document.body.classList.remove("no-scroll");
+    }
+    editingCategoryLabel = null;
+  }
+
+  async function reloadCategoryProjectFromWebSocket(projectID) {
+    const freshProject = await storage.loadProject(projectID);
+    if (!freshProject) throw new Error("O projeto salvo não pôde ser recarregado pelo WebSocket.");
+    state.project = freshProject;
+    return freshProject;
+  }
+
+  async function updateScholarCategoryMenu() {
+    if (typeof chrome === "undefined" || !chrome.runtime?.sendMessage) return;
+
+    const response = await new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({ action: "updateContextMenu" }, (result) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
         }
-      }
-
-      storage.saveProject(project).then(() => {
-        loadCategories();
-        alert("Categorias padrão de Snowballing adicionadas ao projeto!");
-      }).catch((e) => {
-        console.warn('seedDefaultCategories saveProject failed', e);
-        alert('Falha ao salvar categorias padrão no projeto.');
+        resolve(result);
       });
     });
+
+    if (response?.status === "error") {
+      throw new Error(response.message || "Não foi possível atualizar as categorias no Google Scholar.");
+    }
   }
 
-  if (addCategoryButton) {
-    addCategoryButton.addEventListener("click", () => {
-      const name = (categoryNameInput?.value || "").trim();
-      const color = categoryColorInput?.value || "#000000";
-      if (!name) return;
+  btnShowAddCategory?.addEventListener("click", () => openCategoryPanel());
+  btnCloseCategory?.addEventListener("click", closeCategoryPanel);
+  btnAddCategoryCriterion?.addEventListener("click", addCategoryCriterion);
+  categoryCriterionNewInput?.addEventListener("keydown", event => {
+    if (event.key === "Enter") { event.preventDefault(); addCategoryCriterion(); }
+  });
+  categoryColorInput?.addEventListener("input", () => {
+    categoryColorValue.textContent = categoryColorInput.value.toUpperCase();
+  });
+  window.addEventListener("icipo:edit-category", event => {
+    const category = state?.project?.getCategoryByLabel?.(event.detail?.label)
+      || state?.project?.categories?.find(item => item.label === event.detail?.label);
+    if (category) openCategoryPanel(category);
+  });
 
-      const project = state && state.project ? state.project : null;
-      if (!project || !project.id) return alert('Nenhum projeto ativo.');
+  btnSaveCategory?.addEventListener("click", async () => {
+    const project = state?.project;
+    if (!project?.id) return alert("Nenhum projeto ativo.");
+    const title = categoryTitleInput.value.trim();
+    if (!title) {
+      categoryTitleError.textContent = "Preencha o título da categoria.";
+      categoryTitleError.classList.add("visible");
+      categoryTitleInput.focus();
+      return;
+    }
 
-      project.categories = project.categories || [];
-      // Update if exists
-      const idx = project.categories.findIndex(c => c.title === name);
-      if (idx !== -1) {
-        //TODO: editar pelo CRUD da class Category, que ainda não existe.
-        project.categories[idx].color = color;
-      } else {
-        project.addCategory({ title: name, color: color });
-      }
+    const data = {
+      title,
+      label: makeLabel(title),
+      description: categoryDescriptionInput.value.trim(),
+      color: categoryColorInput.value,
+      phases: selectedValues(categoryPhasesInput),
+      criteria: [...categoryDraftCriteria],
+    };
 
-      storage.saveProject(project).then(() => {
-        if (categoryNameInput) categoryNameInput.value = "";
-        loadCategories();
-      }).catch((e) => {
-        console.warn('saveProject failed', e);
-        alert('Falha ao salvar categoria no projeto.');
-      });
-    });
-  }
+    try {
+      if (editingCategoryLabel) project.updateCategory(editingCategoryLabel, data);
+      else project.addCategory(data);
+
+      // project.json no servidor é a única fonte persistente das categorias.
+      await storage.saveProject(project);
+      await reloadCategoryProjectFromWebSocket(project.id);
+
+      loadCategories();
+      renderPhaseCategories?.([]);
+      await updateScholarCategoryMenu();
+      closeCategoryPanel();
+    } catch (error) {
+      console.warn("category save failed", error);
+      categoryTitleError.textContent = error?.message || "Não foi possível salvar a categoria.";
+      categoryTitleError.classList.add("visible");
+    }
+  });
+
+  btnDeleteCategory?.addEventListener("click", async () => {
+    const project = state?.project;
+    const category = project?.categories?.find(item => item.label === editingCategoryLabel);
+    if (!category || !confirm(`Excluir a categoria "${category.title}"?`)) return;
+    try {
+      project.removeCategory(editingCategoryLabel);
+
+      // Persiste exclusivamente no project.json via WebSocket e recarrega a
+      // confirmação do servidor antes de atualizar a interface.
+      await storage.saveProject(project);
+      await reloadCategoryProjectFromWebSocket(project.id);
+
+      loadCategories();
+      await updateScholarCategoryMenu();
+      closeCategoryPanel();
+    } catch (error) {
+      alert(error?.message || "Não foi possível excluir a categoria.");
+    }
+  });
 
   if (removeLinks) {
     removeLinks.addEventListener("click", () => {
       if (!confirm("Tem certeza que deseja remover TODOS os links marcados?")) return;
-      storage.set({ highlightedLinks: {}, svat_papers: [] }).then(() => {
-        loadHighlightedLinks();
-      }).catch((e) => { console.warn('removeLinks set failed', e); });
+      storage.set({ highlightedLinks: {}, svat_papers: [] }).then(loadHighlightedLinks)
+        .catch((e) => console.warn("removeLinks set failed", e));
     });
   }
 
-  if (highlightSearch) {
-    highlightSearch.addEventListener("input", () => loadHighlightedLinks());
-  }
+  highlightSearch?.addEventListener("input", loadHighlightedLinks);
 
   // --- Phases (persistidas no project.json via WebSocket) ---
   const btnShowAddPhase = document.getElementById('btnShowAddPhase');

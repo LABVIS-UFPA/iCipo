@@ -376,6 +376,36 @@ body{
 }
 .linkBtn:hover{color: rgba(234,240,255,0.92)}
 
+/* Artigos: identificação suave pela cor da categoria */
+#papersTable tbody tr.paperCategoryRow td{
+  background: var(--paper-category-tint, transparent);
+}
+#papersTable tbody tr.paperCategoryRow td:first-child{
+  box-shadow: inset 4px 0 0 var(--paper-category-color, transparent);
+}
+#papersTable tbody tr.paperCategoryRow:hover td{
+  background: var(--paper-category-tint-hover, rgba(255,255,255,0.03));
+}
+.paperTitleWrap{
+  display:flex;
+  align-items:flex-start;
+  gap:8px;
+  min-width:0;
+}
+.paperCategoryMarker{
+  width:9px;
+  height:9px;
+  margin-top:5px;
+  border-radius:999px;
+  flex:0 0 auto;
+  box-shadow:0 0 0 2px rgba(255,255,255,0.12);
+}
+.paperTitleWrap .linkBtn{
+  min-width:0;
+  color:var(--text);
+}
+
+
 /* Modal */
 .modal{
   position:fixed;
@@ -765,3 +795,27 @@ body.no-scroll{overflow:hidden}
   .phasesList{padding-bottom:40px}
   .sidePanel{width:100%;}
 }
+
+/* ===== Category CRUD side panel ===== */
+.categoryColorRow{display:flex;gap:10px;align-items:center}
+.categoryColorInput{width:74px;min-width:74px;height:44px;padding:4px;cursor:pointer}
+.categoryColorValue{font-family:monospace;font-weight:800;color:var(--muted)}
+.categoryFieldset{border:1px solid var(--border);border-radius:10px;padding:12px;margin:4px 0 0}
+.categoryFieldset legend{padding:0 6px;font-size:13px;font-weight:800;color:var(--muted)}
+.categoryRequirementsList{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.categoryEmptyRequirements{padding:4px 0;font-size:12px}
+.categoryList .sub{display:block;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:420px}
+@media (max-width:720px){.categoryList .sub{max-width:180px}}
+
+/* Category criteria CRUD */
+.categoryCriterionComposer{display:flex;gap:8px;align-items:center;margin:4px 0 10px}
+.categoryCriterionComposer .input{min-width:0;flex:1}
+.categoryCriterionComposer .btn{flex:0 0 auto}
+.categoryCriterionItem{display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05)}
+.categoryCriterionItem .phaseCategoryItem{flex:1;min-width:0}
+.categoryCriterionActions{display:flex;gap:4px;flex:0 0 auto}
+.categoryCriterionActions button{width:30px;height:30px;padding:0;border:0;border-radius:8px;background:rgba(255,255,255,.07);color:var(--text);cursor:pointer;font-weight:900}
+.categoryCriterionActions button:hover{filter:brightness(1.15)}
+.categoryCriterionActions button.danger{color:#ff8d8d}
+
+.categoryCriterionText{flex:1;min-width:0;overflow-wrap:anywhere;font-weight:700}

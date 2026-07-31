@@ -1,68 +1,85 @@
-// O cache `appliedHighlightUrls` não é mais necessário com a limpeza baseada em classe, tornando o processo mais robusto.
+// Os highlights são obtidos exclusivamente pelo background, que consulta o servidor via WebSocket.
+// Não há persistência nem leitura de artigos/highlights em chrome.storage.local.
+let currentHighlights = {};
+let highlightsEnabled = true;
+let refreshPromise = null;
+let mutationTimer = null;
 
-function applyHighlights() {
-  const run = async () => {
-    try {
-      // Simplificado: A única fonte da verdade para o content script é o chrome.storage.local.
-      // Ele é populado pelo storage.mjs com os dados corretos (todos os links do projeto).
-      const stored = await chrome.storage.local.get(["highlightedLinks", "active"]);
-      const isActive = stored.active !== false;
-      const highlights = (stored.highlightedLinks && typeof stored.highlightedLinks === 'object') ? stored.highlightedLinks : {};
-
-      // Limpa as marcações antigas para evitar "sujeira" visual.
-      // Usando uma classe marcadora para uma limpeza mais robusta e independente de estado.
-      document.querySelectorAll('a.ic-highlighted-link').forEach((link) => {
-        link.style.backgroundColor = '';
-        link.classList.remove('ic-highlighted-link');
-      });
-      
-      if (!isActive || !highlights || Object.keys(highlights).length === 0) {
-        return;
-      }
-
-      // Aplica as novas marcações a partir dos dados do storage.
-      for (const linkUrl of Object.keys(highlights)) {
-        document.querySelectorAll(`a[href^="${linkUrl}"]`).forEach((link) => {
-          link.classList.add('ic-highlighted-link');
-          link.style.backgroundColor = highlights[linkUrl];
-        });
-      }
-
-    } catch (error) {
-      console.warn("iCipo: erro ao aplicar highlights", error);
-    }
-  };
-
-  run();
-}
-
-let highlightObserver = null;
-function watchForChanges() {
-  if (highlightObserver || typeof MutationObserver === "undefined") return;
-
-  highlightObserver = new MutationObserver(() => {
-    applyHighlights();
+function paintHighlights() {
+  document.querySelectorAll('a.ic-highlighted-link').forEach((link) => {
+    link.style.backgroundColor = '';
+    link.classList.remove('ic-highlighted-link');
   });
 
-  highlightObserver.observe(document.documentElement || document.body, {
+  if (!highlightsEnabled || !currentHighlights || Object.keys(currentHighlights).length === 0) {
+    return;
+  }
+
+  for (const [linkUrl, color] of Object.entries(currentHighlights)) {
+    // Evita seletor CSS com URL não escapada. A comparação por href também lida
+    // melhor com URLs que contêm caracteres especiais.
+    document.querySelectorAll('a[href]').forEach((link) => {
+      if (link.href && link.href.startsWith(linkUrl)) {
+        link.classList.add('ic-highlighted-link');
+        link.style.backgroundColor = color;
+      }
+    });
+  }
+}
+
+async function refreshHighlightsFromWs() {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = new Promise((resolve) => {
+    chrome.runtime.sendMessage({ action: 'getHighlightsFromWs' }, (response) => {
+      try {
+        if (chrome.runtime.lastError) {
+          console.warn('iCipo: não foi possível consultar highlights via WS:', chrome.runtime.lastError.message);
+          resolve();
+          return;
+        }
+
+        currentHighlights = response?.highlightedLinks && typeof response.highlightedLinks === 'object'
+          ? response.highlightedLinks
+          : {};
+        highlightsEnabled = response?.active !== false;
+        paintHighlights();
+      } finally {
+        refreshPromise = null;
+        resolve();
+      }
+    });
+  });
+
+  return refreshPromise;
+}
+
+function watchForChanges() {
+  if (typeof MutationObserver === 'undefined') return;
+
+  const observer = new MutationObserver(() => {
+    clearTimeout(mutationTimer);
+    mutationTimer = setTimeout(paintHighlights, 80);
+  });
+
+  observer.observe(document.documentElement || document.body, {
     childList: true,
     subtree: true
   });
 }
 
-  document.addEventListener("DOMContentLoaded", () => {
-    applyHighlights();
-    watchForChanges();
-  });
-  window.addEventListener("load", () => {
-    applyHighlights();
-    watchForChanges();
-  });
-  chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName === "local" && (changes.highlightedLinks || changes.active)) {
-      applyHighlights();
-    }
-  });
+document.addEventListener('DOMContentLoaded', () => {
+  refreshHighlightsFromWs();
+  watchForChanges();
+});
+
+window.addEventListener('load', refreshHighlightsFromWs);
+
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg?.action === 'refreshHighlights') {
+    refreshHighlightsFromWs();
+  }
+});
 
 // Extract best-effort metadata for a given linkUrl on the current page.
 // This focuses on Google Scholar's common DOM structure, but degrades gracefully.

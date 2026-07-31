@@ -87,6 +87,13 @@ class NodeFsStrategy {
     // Write merged project data
     this.writeJson(relPath, merged);
 
+    // Keep the active project cache synchronized with project.json.
+    // get_active_project is used by the Dashboard reload and by the
+    // background service worker when rebuilding the Google Scholar menu.
+    if (this.activeProjectID === projectID) {
+      this.activeProjectData = merged;
+    }
+
     // ensure config.json contains project entry and update metadata if needed
     try {
       const cfg = this.readJson('config.json') || { projects: [] };
@@ -319,37 +326,69 @@ class NodeFsStrategy {
       return { status: 'error', message: 'Nenhum projeto ativo.', data: {} };
     }
 
-    const allHighlightedLinks = {};
+    // O Google Scholar deve exibir os highlights de todas as fases do projeto.
+    // Já a aba Artigos continua recebendo apenas os artigos da fase ativa.
     const phasesDir = this.path.join(this.baseDir, this.activeProjectID, 'phases');
+    const activePhaseLabel = this.activeProjectData?.activePhaseLabel || '_sem_fase';
+    const mergedHighlightedLinks = {};
+    let activeScoped = {};
+    let fallbackProject = null;
 
-    if (this.fs.existsSync(phasesDir)) {
-      const phaseDirs = this.fs.readdirSync(phasesDir, { withFileTypes: true })
-        .filter(dirent => dirent.isDirectory())
-        .map(dirent => dirent.name);
+    try {
+      if (this.fs.existsSync(phasesDir)) {
+        const phaseLabels = this.fs.readdirSync(phasesDir, { withFileTypes: true })
+          .filter((entry) => entry.isDirectory())
+          .map((entry) => entry.name);
 
-      phaseDirs.sort(); // Consistent merge order
+        // Processa a fase ativa por último. Caso a mesma URL esteja marcada em
+        // mais de uma fase, a cor da fase ativa prevalece enquanto ela estiver ativa.
+        phaseLabels.sort((a, b) => {
+          if (a === activePhaseLabel) return 1;
+          if (b === activePhaseLabel) return -1;
+          return a.localeCompare(b);
+        });
 
-      for (const phaseDir of phaseDirs) {
-        const storagePath = this.path.join(this.activeProjectID, 'phases', phaseDir, 'storage.json');
-        const phaseScopedData = this.readJson(storagePath);
-        if (phaseScopedData && typeof phaseScopedData.highlightedLinks === 'object') {
-          Object.assign(allHighlightedLinks, phaseScopedData.highlightedLinks);
+        for (const phaseLabel of phaseLabels) {
+          const storagePath = this.path.join(this.activeProjectID, 'phases', phaseLabel, 'storage.json');
+          const phaseScoped = this.readJson(storagePath) || {};
+          const phaseLinks = phaseScoped.highlightedLinks;
+
+          if (phaseLinks && typeof phaseLinks === 'object' && !Array.isArray(phaseLinks)) {
+            Object.assign(mergedHighlightedLinks, phaseLinks);
+          }
+
+          if (!fallbackProject && phaseScoped.svat_project) {
+            fallbackProject = phaseScoped.svat_project;
+          }
+
+          if (phaseLabel === activePhaseLabel) {
+            activeScoped = phaseScoped;
+          }
         }
       }
+    } catch (error) {
+      console.warn('Não foi possível reunir os highlights de todas as fases:', error);
     }
-    
-    // Also get scoped data from active phase
-    const scoped = this.getScopedStoragePath()
-      ? (this.readJson(this.getScopedStoragePath()) || {})
-      : {};
-    
-    const data = {
-        highlightedLinks: allHighlightedLinks,
-        svat_papers: scoped.svat_papers || [],
-        svat_project: scoped.svat_project || null
+
+    // Mantém compatibilidade quando a pasta/fase ainda não foi criada.
+    if (Object.keys(activeScoped).length === 0) {
+      const scopedPath = this.getScopedStoragePath();
+      activeScoped = scopedPath ? (this.readJson(scopedPath) || {}) : {};
+      const activeLinks = activeScoped.highlightedLinks;
+      if (activeLinks && typeof activeLinks === 'object' && !Array.isArray(activeLinks)) {
+        Object.assign(mergedHighlightedLinks, activeLinks);
+      }
+    }
+
+    return {
+      status: 'ok',
+      data: {
+        highlightedLinks: mergedHighlightedLinks,
+        // Somente os artigos da fase ativa são enviados ao Dashboard.
+        svat_papers: Array.isArray(activeScoped.svat_papers) ? activeScoped.svat_papers : [],
+        svat_project: activeScoped.svat_project || fallbackProject || null
+      }
     };
-    
-    return { status: 'ok', data: data };
   }
 
   normalizePhase(phaseData = {}, existing = {}) {
@@ -595,27 +634,9 @@ class WebSocketStrategy {
   }
 
   async openProject(projectID) {
-    // 1. Limpa o estado local para remover dados do projeto antigo.
-    //    Isso garante que, ao trocar de projeto, os links antigos desapareçam imediatamente.
-    //    Também desativa a extensão temporariamente para forçar a atualização do estado.
-    if (typeof chrome !== 'undefined' && chrome.storage) {
-      await new Promise((resolve) => {
-        chrome.storage.local.set({
-          highlightedLinks: {},
-          svat_papers: [],
-          svat_project: null,
-          active: false
-        }, resolve);
-      });
-    }
-
-    // 2. Avisa o servidor para trocar o projeto ativo.
+    // O projeto ativo e todos os seus dados são mantidos pelo servidor.
     const result = await this.send('open_project', { projectID });
-
-    // 3. Ativa a extensão e dispara a sincronização dos dados do NOVO projeto.
-    // O método `set` já cuida de chamar `syncActiveScopeToChrome` quando `active` é `true`.
-    await this.set({ active: true });
-
+    await this.notifyScholarRefresh();
     return result;
   }
 
@@ -682,20 +703,22 @@ class WebSocketStrategy {
 
   async setActivePhase(projectID, phaseLabel) {
     const result = await this.send('set_active_phase', { projectID, phaseLabel });
-    await this.syncActiveScopeToChrome();
+    await this.notifyScholarRefresh();
     return result;
   }
 
+  async notifyScholarRefresh() {
+    if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) return;
+    try {
+      await chrome.runtime.sendMessage({ action: 'refreshScholarHighlights' });
+    } catch (_) {
+      // Pode não existir receptor em páginas fora do contexto da extensão.
+    }
+  }
+
+  // Alias temporário para chamadas antigas. Não grava nada no chrome.storage.
   async syncActiveScopeToChrome() {
-    if (typeof chrome === 'undefined' || !chrome.storage) return;
-
-    const data = await this.send('get_all_highlights', {}).catch(() => ({}));
-
-    await new Promise((resolve) => chrome.storage.local.set({
-      highlightedLinks: data?.highlightedLinks || {},
-      svat_papers: Array.isArray(data?.svat_papers) ? data.svat_papers : [],
-      svat_project: data?.svat_project || null
-    }, resolve));
+    return this.notifyScholarRefresh();
   }
 
   // Returns array of `Paper` instances
@@ -722,25 +745,24 @@ class WebSocketStrategy {
   }
 
   async set(items) {
-    // Se o WebSocket estiver ativo, atualiza o storage local para efeito imediato E envia para o servidor para persistência.
-    // Isso corrige o bug onde o toggle 'active' não funcionava em tempo real.
-    if (this.isActive()) {
-      if (typeof chrome !== 'undefined' && chrome.storage) {
-        await new Promise(resolve => chrome.storage.local.set(items, resolve));
-      }
-
-      // Se a extensão estiver sendo ativada, aciona uma sincronização completa dos links.
-      if (items && items.active === true) {
-        await this.syncActiveScopeToChrome();
-      }
-
-      return this.send('storage_set', { items });
+    if (!this.isActive()) {
+      throw new Error('WebSocket desconectado. Os dados não foram salvos localmente.');
     }
 
-    // If WebSocket is active, send normally
+    // Persistência exclusiva no servidor via WebSocket.
+    const result = await this.send('storage_set', { items });
 
-    // If WebSocket is inactive, backup to chrome.storage
-    return this.backupToChrome(items);
+    const affectsScholar = !!items && (
+      Object.prototype.hasOwnProperty.call(items, 'highlightedLinks') ||
+      Object.prototype.hasOwnProperty.call(items, 'svat_papers') ||
+      Object.prototype.hasOwnProperty.call(items, 'svat_project')
+    );
+
+    if (affectsScholar) {
+      await this.notifyScholarRefresh();
+    }
+
+    return result;
   }
 
   // Backup data to chrome.storage when offline
