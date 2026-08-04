@@ -38,11 +38,6 @@
           <button class="navBtn" data-view="phases">🧭 Fases</button>
           <button class="navBtn" data-view="categories">🎨 Categorias</button>
           <button class="navBtn" data-view="papers">📚 Artigos</button>
-          <button class="navBtn" data-view="iterations">🔁 Iterações</button>
-          <button class="navBtn" data-view="criteria">✅ Critérios</button>
-          <button class="navBtn" data-view="citations">🔗 Conexões</button>
-          <button class="navBtn" data-view="graph">🕸️ Grafo</button>
-          <button class="navBtn" data-view="insights">✨ Insights</button>
         </nav>
 
         <div class="sideFooter">
@@ -91,7 +86,7 @@
               <div class="cardTitle">Pendentes recentes</div>
               <div class="tableWrap">
                 <table class="table" id="pendingTable">
-                  <thead><tr><th>Título</th><th>Origem</th><th>Iter.</th><th>Ações</th></tr></thead>
+                  <thead><tr><th>Título</th><th>Origem</th><th>Ações</th></tr></thead>
                   <tbody></tbody>
                 </table>
               </div>
@@ -117,10 +112,6 @@
               <option value="forward">Forward</option>
               <option value="unknown">Desconhecida</option>
             </select>
-            <select id="f_iteration" class="select">
-              <option value="all">Iteração: todas</option>
-            </select>
-
             <div class="menu" id="downloadCitationsMenu">
               <button id="btnDownloadCitations" class="btn">⬇️ Download Citations</button>
               <div id="downloadCitationsPanel" class="menuPanel" aria-label="Menu de Download Citations">
@@ -146,9 +137,7 @@
                   <th>Título</th>
                   <th style="width:72px">Ano</th>
                   <th style="width:110px">Origem</th>
-                  <th style="width:90px">Iter.</th>
                   <th style="width:110px">Status</th>
-                  <th style="width:140px">Critério</th>
                   <th style="width:160px">Tags</th>
                   <th style="width:90px">Link</th>
                 </tr>
@@ -156,152 +145,6 @@
               <tbody>
               </tbody>
             </table>
-          </div>
-        </section>
-
-        <!-- ITERATIONS -->
-        <section class="view hidden u-flex-fill-col" id="view_iterations">
-          <div class="card">
-            <div class="cardTitle">Iterações</div>
-            <div class="row">
-              <input id="newIterId" class="input" placeholder="Ex.: I2" style="max-width:140px" />
-              <select id="newIterMode" class="select" style="max-width:220px">
-                <option value="seed">Seed</option>
-                <option value="backward">Backward</option>
-                <option value="forward">Forward</option>
-                <option value="both">Backward + Forward</option>
-              </select>
-              <button id="btnAddIteration" class="btn">Adicionar</button>
-              <button id="btnSetCurrentIteration" class="btn">Definir como atual</button>
-            </div>
-            <div class="tableWrap">
-              <table class="table" id="iterationsTable">
-                <thead><tr><th>ID</th><th>Tipo</th><th>Modo</th><th>Criada em</th><th>Ações</th></tr></thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
-        <!-- CRITERIA -->
-        <section class="view hidden u-flex-fill-col" id="view_criteria">
-          <div class="grid2">
-            <div class="card">
-              <div class="cardTitle">Cadastrar critérios</div>
-              <div class="row">
-                <input id="critId" class="input" placeholder="Ex.: C1" style="max-width:120px" />
-                <input id="critDesc" class="input" placeholder="Descrição do critério" />
-                <button id="btnAddCriterion" class="btn">Salvar</button>
-              </div>
-              <div class="tableWrap">
-                <table class="table" id="criteriaTable">
-                  <thead><tr><th>ID</th><th>Descrição</th><th>Qtd.</th><th>Ações</th></tr></thead>
-                  <tbody></tbody>
-                </table>
-              </div>
-            </div>
-            <div class="card">
-              <div class="cardTitle">Excluídos (auditável)</div>
-              <div class="tableWrap">
-                <table class="table" id="excludedTable">
-                  <thead><tr><th>Título</th><th>Critério</th><th>Iter.</th><th>Link</th></tr></thead>
-                  <tbody></tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- CITATIONS -->
-        <section class="view hidden u-flex-fill-col" id="view_citations">
-          <div class="card">
-            <div class="cardTitle">Criar conexão (manual)</div>
-            <div class="row">
-              <select id="c_from" class="select"></select>
-              <select id="c_type" class="select" style="max-width:200px">
-                <option value="backward">Backward (referência)</option>
-                <option value="forward">Forward (citação)</option>
-              </select>
-              <select id="c_to" class="select"></select>
-              <button id="btnAddCitation" class="btn">Adicionar</button>
-            </div>
-            <div class="tableWrap">
-              <table class="table" id="citationsTable">
-                <thead><tr><th>De</th><th>Tipo</th><th>Para</th><th>Ações</th></tr></thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
-        <!-- GRAPH -->
-        <section class="view hidden u-flex-fill-col" id="view_graph">
-          <div class="grid2">
-            <div class="card">
-              <div class="cardTitle">Grafo de citações (simples, offline)</div>
-              <div class="row">
-                <select id="g_filterIteration" class="select" style="max-width:220px"></select>
-                <select id="g_filterStatus" class="select" style="max-width:220px">
-                  <option value="all">Status: todos</option>
-                  <option value="pending">Pendentes</option>
-                  <option value="included">Incluídos</option>
-                  <option value="excluded">Excluídos</option>
-                  <option value="duplicate">Duplicados</option>
-                </select>
-                <button id="btnGraphReset" class="btn">Recalcular layout</button>
-              </div>
-              <svg id="graph" width="100%" height="520" role="img" aria-label="Grafo"></svg>
-              <div class="hint">Dica: clique em um nó para abrir o link. O grafo usa as conexões criadas na aba “Conexões”.</div>
-            </div>
-            <div class="card">
-              <div class="cardTitle">Detalhes</div>
-              <div id="graphDetails" class="details">Selecione um nó…</div>
-            </div>
-          </div>
-        </section>
-
-        <!-- INSIGHTS -->
-        <section class="view hidden u-flex-fill-col" id="view_insights">
-          <div class="grid2">
-            <div class="card">
-              <div class="cardTitle">Resumo automático da revisão</div>
-              <div class="row">
-                <button id="btnGenerateSummary" class="btn">Gerar resumo</button>
-                <button id="btnCopySummary" class="btn">Copiar</button>
-              </div>
-              <textarea id="summaryText" class="input" style="width:100%;min-height:220px;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace" placeholder="Clique em 'Gerar resumo'..."></textarea>
-              <div class="hint" style="margin-top:8px">Use este texto como base do relatório/TCC (ajuste conforme necessário).</div>
-            </div>
-            <div class="card">
-              <div class="cardTitle">Saturação (alerta)</div>
-              <div id="saturationBox" class="hint">—</div>
-              <div class="cardTitle" style="margin-top:16px">Possíveis duplicatas (sugestão)</div>
-              <div class="row">
-                <button id="btnFindDuplicates" class="btn">Detectar duplicatas</button>
-                <select id="dupThreshold" class="select" style="max-width:240px">
-                  <option value="0.9">Limite: 0.90 (mais rígido)</option>
-                  <option value="0.85" selected>Limite: 0.85 (recomendado)</option>
-                  <option value="0.8">Limite: 0.80 (mais sensível)</option>
-                </select>
-              </div>
-              <div class="tableWrap">
-                <table class="table" id="dupsTable">
-                  <thead><tr><th>Par sugerido</th><th>Similaridade</th><th>Ações</th></tr></thead>
-                  <tbody></tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <div class="card" style="margin-top:16px">
-            <div class="cardTitle">Histórico (audit trail)</div>
-            <div class="hint">Clique no título de um artigo em <b>Artigos</b> para ver o histórico aqui.</div>
-            <div class="tableWrap" style="margin-top:10px">
-              <table class="table" id="historyTable">
-                <thead><tr><th>Quando</th><th>Ação</th><th>Detalhes</th></tr></thead>
-                <tbody></tbody>
-              </table>
-            </div>
           </div>
         </section>
 
@@ -448,7 +291,6 @@
           </div>
         </div>
 
-        <!-- (removed duplicate INSIGHTS + modal) -->
       </main>
 
       <div id="noActiveProjectNotice" class="floatingNotice hidden" role="status" aria-live="polite">

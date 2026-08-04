@@ -1,4 +1,4 @@
-import {fmtDate, normalizeStr, jaccard} from '../../core/utils.mjs';
+import {fmtDate, normalizeStr} from '../../core/utils.mjs';
 import { storage } from '../../infrastructure/storage.mjs';
 
 let state = null;
@@ -412,9 +412,6 @@ async function loadState() {
   const baseState = {
     project: {},
     papers: [],
-    iterations: [],
-    citations: [],
-    criteria: {},
   };
 
   state = baseState;
@@ -432,12 +429,7 @@ async function loadState() {
         else if (papersRes?.data && Array.isArray(papersRes.data)) papers = papersRes.data;
       }
 
-      const iterations = Array.isArray(project?.iterations) ? project.iterations : [];
-      const citations = Array.isArray(project?.citations) ? project.citations : [];
-      const critCandidate = project?.criteriaMap ?? project?.criteria;
-      const criteria = (critCandidate && typeof critCandidate === 'object' && !Array.isArray(critCandidate)) ? critCandidate : {};
-
-      state = { project, papers, iterations, citations, criteria };
+      state = { project, papers };
       toggleServerOfflineNotice(false);
       toggleNoActiveProjectNotice(false);
       resolve(state);
@@ -632,7 +624,6 @@ function renderTimeline() {
     rect.style.cursor = "pointer";
     rect.addEventListener("click", () => {
       setActiveView("papers");
-      $("#f_iteration").value = "all";
       $("#f_status").value = "all";
       $("#f_origin").value = "all";
       $("#search").value = String(y);
@@ -703,7 +694,6 @@ function renderPendingTable() {
     tr.innerHTML = `
       <td>${escapeHtml(p.title || p.url || "(sem título)")}</td>
       <td><span class="pill">${escapeHtml(p.origin || "unknown")}</span></td>
-      <td><span class="pill">${escapeHtml(p.iterationId || "-")}</span></td>
       <td>
         <button class="btn" data-act="include" data-id="${p.id}">Incluir</button>
         <button class="btn" data-act="exclude" data-id="${p.id}">Excluir</button>
@@ -759,181 +749,16 @@ function renderHistoryTable(targetTbody, history) {
 }
 
 function showHistory(paperId) {
-  const p = state.papers.find(x => x.id === paperId);
-  if (!p) return;
+  const paper = state.papers.find(item => item.id === paperId);
+  if (!paper) return;
 
-  // Update inline insights history table
-  const inlineTbody = document.querySelector("#historyTable tbody");
-  if (inlineTbody) renderHistoryTable(inlineTbody, p.history);
-
-  // Also open modal (fallback / better UX)
   const modal = document.getElementById("historyModal");
   const title = document.getElementById("historyModalTitle");
-  const modalTbody = document.querySelector("#historyModalTable tbody");
-  if (title) title.textContent = `Histórico: ${(p.title || p.url || p.id).slice(0, 90)}`;
-  if (modalTbody) renderHistoryTable(modalTbody, p.history);
+  const tbody = document.querySelector("#historyModalTable tbody");
+
+  if (title) title.textContent = `Histórico: ${(paper.title || paper.url || paper.id).slice(0, 90)}`;
+  if (tbody) renderHistoryTable(tbody, paper.history);
   if (modal) modal.classList.remove("hidden");
-
-  // Jump user to Insights so they see the audit trail section too
-  setActiveView("insights");
-}
-
-function buildSummaryText() {
-  const c = computeCounts();
-  const iters = [...state.iterations].sort((a, b) => (a.id || "").localeCompare(b.id || ""));
-  const byIter = new Map();
-  for (const it of iters) {
-    const papers = state.papers.filter(p => (p.iterationId || "") === it.id);
-    const inc = papers.filter(p => p.status === "included").length;
-    const exc = papers.filter(p => p.status === "excluded").length;
-    const dup = papers.filter(p => p.status === "duplicate").length;
-    const pend = papers.filter(p => (p.status || "pending") === "pending").length;
-    byIter.set(it.id, { total: papers.length, inc, exc, dup, pend, mode: it.mode || "both" });
-  }
-
-  const critKeys = Object.keys(state.criteria || {}).filter(k => k).sort();
-  const critCounts = critKeys.map(k => ({ k, n: state.papers.filter(p => p.criteriaId === k).length, d: state.criteria[k] || "" }))
-    .filter(x => x.n > 0)
-    .sort((a, b) => b.n - a.n)
-    .slice(0, 10);
-
-  const lines = [];
-  lines.push(`Projeto: ${state.project.title || "(sem título)"} (ID: ${state.project.id || "—"})`);
-  lines.push(`Pesquisador: ${state.project.researcher || "—"}`);
-  lines.push("");
-  lines.push("Resumo quantitativo:");
-  lines.push(`- Total coletado: ${c.total}`);
-  lines.push(`- Incluídos: ${c.included}`);
-  lines.push(`- Excluídos: ${c.excluded}`);
-  lines.push(`- Pendentes: ${c.pending}`);
-  lines.push(`- Duplicados: ${c.duplicate}`);
-  lines.push("");
-  lines.push("Por origem (rastreamento do snowballing):");
-  lines.push(`- Seeds: ${c.seed}`);
-  lines.push(`- Backward: ${c.backward}`);
-  lines.push(`- Forward: ${c.forward}`);
-  lines.push("");
-  lines.push("Por iteração:");
-  for (const [id, v] of byIter.entries()) {
-    lines.push(`- ${id} (${v.mode}): total=${v.total}, incluídos=${v.inc}, excluídos=${v.exc}, pendentes=${v.pend}, duplicados=${v.dup}`);
-  }
-  lines.push("");
-  if (critCounts.length) {
-    lines.push("Principais critérios de exclusão (top):");
-    for (const x of critCounts) lines.push(`- ${x.k}: ${x.n}${x.d ? ` — ${x.d}` : ""}`);
-    lines.push("");
-  }
-  lines.push("Observação: o Google Scholar não oferece API; as conexões (forward/backward) e metadados são coletados manualmente e registrados pela extensão.");
-  return lines.join("\n");
-}
-
-function computeSaturationNote() {
-  // Heurística simples: se a iteração atual (ou última) não trouxe novos incluídos, sinaliza.
-  const iters = [...state.iterations].sort((a, b) => (a.id || "").localeCompare(b.id || ""));
-  if (!iters.length) return "Sem iterações ainda.";
-  const last = iters[iters.length - 1].id;
-  const prev = iters.length >= 2 ? iters[iters.length - 2].id : null;
-
-  const incLast = state.papers.filter(p => p.iterationId === last && p.status === "included").length;
-  const newLast = state.papers.filter(p => p.iterationId === last).length;
-  const incPrev = prev ? state.papers.filter(p => p.iterationId === prev && p.status === "included").length : null;
-
-  if (newLast === 0) return `Iteração ${last}: nenhum artigo coletado ainda.`;
-  if (incLast === 0) return `Alerta: na iteração ${last}, nenhum artigo foi incluído. Isso pode indicar saturação.`;
-  if (incPrev !== null && incLast <= Math.max(1, Math.floor(incPrev * 0.2))) {
-    return `Possível saturação: incluídos em ${prev} = ${incPrev}, incluídos em ${last} = ${incLast}.`;
-  }
-  return `Sem sinal forte de saturação na iteração ${last} (incluídos: ${incLast}).`;
-}
-
-
-function findDuplicatePairs(threshold = 0.85) {
-  const papers = state.papers.filter(p => (p.title || "").trim().length >= 6);
-  const pairs = [];
-  for (let i = 0; i < papers.length; i++) {
-    for (let j = i + 1; j < papers.length; j++) {
-      const a = papers[i];
-      const b = papers[j];
-      if (a.id === b.id) continue;
-      const score = jaccard(a.title, b.title);
-      if (score >= threshold) {
-        pairs.push({ aId: a.id, bId: b.id, aTitle: a.title, bTitle: b.title, score });
-      }
-    }
-  }
-  pairs.sort((x, y) => y.score - x.score);
-  return pairs.slice(0, 50);
-}
-
-function renderDuplicates(pairs) {
-  const tbody = document.querySelector("#dupsTable tbody");
-  if (!tbody) return;
-  tbody.innerHTML = "";
-  for (const p of pairs) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>
-        <div style="font-weight:800">${escapeHtml(p.aTitle || p.aId)}</div>
-        <div style="margin-top:4px;color:#666">↔ ${escapeHtml(p.bTitle || p.bId)}</div>
-      </td>
-      <td style="font-variant-numeric:tabular-nums">${p.score.toFixed(2)}</td>
-      <td>
-        <button class="btn" data-dup="${p.aId}|${p.bId}">Marcar B como duplicado</button>
-      </td>
-    `;
-    tbody.appendChild(tr);
-  }
-  if (!pairs.length) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="3" style="color:#666">Nenhuma duplicata sugerida com esse limite.</td>`;
-    tbody.appendChild(tr);
-  }
-
-  tbody.querySelectorAll("button[data-dup]").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      //TODO: migrar para usar o infrastructure/storage.mjs
-      // const [aId, bId] = btn.getAttribute("data-dup").split("|");
-      // const b = state.papers.find(x => x.id === bId);
-      // if (!b) return;
-      // const prev = b.status || "pending";
-      // b.status = "duplicate";
-      // pushHistory(b, "status_change", { from: prev, to: "duplicate", via: "dupe_suggestion", matchWith: aId });
-      // b.updatedAt = svatNowIso();
-      // await persist();
-      // renderAll();
-      // setActiveView("insights");
-    });
-  });
-}
-
-function renderInsights() {
-  const sat = document.getElementById("saturationBox");
-  if (sat) sat.textContent = computeSaturationNote();
-}
-
-function renderIterationFilterOptions() {
-  const sel = $("#f_iteration");
-  const current = sel.value;
-  sel.innerHTML = `<option value="all">Iteração: todas</option>`;
-  for (const it of state.iterations) {
-    const opt = document.createElement("option");
-    opt.value = it.id;
-    opt.textContent = it.id;
-    sel.appendChild(opt);
-  }
-  sel.value = current && [...sel.options].some(o => o.value === current) ? current : "all";
-
-  // Graph filter
-  const gSel = $("#g_filterIteration");
-  const gCur = gSel.value;
-  gSel.innerHTML = `<option value="all">Iteração: todas</option>`;
-  for (const it of state.iterations) {
-    const opt = document.createElement("option");
-    opt.value = it.id;
-    opt.textContent = it.id;
-    gSel.appendChild(opt);
-  }
-  gSel.value = gCur && [...gSel.options].some(o => o.value === gCur) ? gCur : "all";
 }
 
 function getFilters() {
@@ -941,7 +766,6 @@ function getFilters() {
     q: normalizeStr($("#search").value),
     status: $("#f_status").value,
     origin: $("#f_origin").value,
-    iteration: $("#f_iteration").value,
   };
 }
 
@@ -950,7 +774,6 @@ function filteredPapers() {
   return state.papers.filter(p => {
     if (f.status !== "all" && (p.status || "pending") !== f.status) return false;
     if (f.origin !== "all" && (p.origin || "unknown") !== f.origin) return false;
-    if (f.iteration !== "all" && (p.iterationId || "") !== f.iteration) return false;
     if (!f.q) return true;
     const hay = normalizeStr(`${p.title || ""} ${p.authorsRaw || ""} ${(p.tags || []).join(" ")} ${p.year || ""} ${p.url || ""}`);
     return hay.includes(f.q);
@@ -1003,9 +826,7 @@ async function renderPapersTable() {
       createdAt: '',
       year: '',
       origin: 'unknown',
-      iterationId: '',
       status: 'pending',
-      criteriaId: '',
       tags: [],
       url: url,
       highlightedColor: color,
@@ -1013,7 +834,6 @@ async function renderPapersTable() {
     // apply simple filters similar to filteredPapers
     if (f.status !== "all" && (item.status || "pending") !== f.status) continue;
     if (f.origin !== "all" && (item.origin || "unknown") !== f.origin) continue;
-    if (f.iteration !== "all" && (item.iterationId || "") !== f.iteration) continue;
     if (f.q) {
       const hay = normalizeStr(`${item.title || ''} ${item.authorsRaw || ''} ${(item.tags || []).join(' ')} ${item.year || ''} ${item.url || ''}`);
       if (!hay.includes(f.q)) continue;
@@ -1027,7 +847,6 @@ async function renderPapersTable() {
   let rowsHtml = "";
   for (const p of rows) {
     const tags = Array.isArray(p.tags) ? p.tags.join(";") : "";
-    const critVal = p.criteriaId || "";
     // Use a light tint from the selected category so the title stays readable.
     const categoryColor = getPaperCategoryColor(p, hl);
     const rowStyle = categoryColor
@@ -1058,22 +877,11 @@ async function renderPapersTable() {
           </select>
         </td>
         <td>
-          <select class="cellSelect" data-field="iterationId" data-id="${p.id}">
-            ${state.iterations.map(it => `<option value="${it.id}" ${it.id === (p.iterationId||state.project.currentIterationId) ? "selected" : ""}>${it.id}</option>`).join("")}
-          </select>
-        </td>
-        <td>
           <select class="cellSelect" data-field="status" data-id="${p.id}">
             ${opt("pending","pending",p.status)}
             ${opt("included","included",p.status)}
             ${opt("excluded","excluded",p.status)}
             ${opt("duplicate","duplicate",p.status)}
-          </select>
-        </td>
-        <td>
-          <select class="cellSelect" data-field="criteriaId" data-id="${p.id}">
-            <option value="" ${!critVal ? "selected" : ""}>—</option>
-            ${Object.keys(state.criteria || {}).filter(k=>k).sort().map(k => `<option value="${k}" ${k === critVal ? "selected" : ""}>${k}</option>`).join("")}
           </select>
         </td>
         <td><input class="cellInput" data-field="tags" data-id="${p.id}" value="${escapeHtml(tags)}" placeholder="ex: vis;ml" /></td>
@@ -1085,8 +893,6 @@ async function renderPapersTable() {
   // Before writing to DOM, ensure this render is still the latest
   if (myToken !== renderToken) return;
 
-  // Apply iteration options and table in one DOM update
-  renderIterationFilterOptions();
   const tbody = $("#papersTable tbody");
   if (!tbody) return;
   tbody.innerHTML = rowsHtml;
@@ -1129,7 +935,6 @@ async function onCellChange(e) {
   // paper.updatedAt = svatNowIso();
   await persist();
   renderOverview();
-  renderCriteria();
 }
 
 function selectedPaperIds() {
@@ -1219,285 +1024,6 @@ async function bulkDeleteMarkedSelected() {
   renderAll();
 }
 
-function renderIterations() {
-  const tbody = $("#iterationsTable tbody");
-  tbody.innerHTML = "";
-  for (const it of state.iterations) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td><span class="pill">${escapeHtml(it.id)}</span></td>
-      <td>${escapeHtml(it.type || "snowballing")}</td>
-      <td>${escapeHtml(it.mode || "both")}</td>
-      <td>${escapeHtml(fmtDate(it.createdAt))}</td>
-      <td>
-        <button class="btn" data-act="setCurrent" data-id="${it.id}">Atual</button>
-        <button class="btn" data-act="del" data-id="${it.id}">Remover</button>
-      </td>
-    `;
-    tbody.appendChild(tr);
-  }
-
-  tbody.querySelectorAll("button[data-act]").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      //TODO: migrar para usar o infrastructure/storage.mjs
-      // const act = btn.getAttribute("data-act");
-      // const id = btn.getAttribute("data-id");
-      // if (act === "setCurrent") {
-      //   state.project.currentIterationId = id;
-      //   await persist();
-      //   renderHeader();
-      //   renderIterationFilterOptions();
-      //   alert(`Iteração atual definida: ${id}`);
-      // }
-      // if (act === "del") {
-      //   if (!confirm(`Remover iteração ${id}? (Artigos permanecem com iterationId)`)) return;
-      //   state.iterations = state.iterations.filter(x => x.id !== id);
-      //   if (!state.iterations.length) state.iterations.push({ id: "I1", type: "seed", mode: "seed", createdAt: svatNowIso() });
-      //   if (!state.iterations.find(x => x.id === state.project.currentIterationId)) state.project.currentIterationId = state.iterations[0].id;
-      //   await persist();
-      //   renderAll();
-      // }
-    });
-  });
-}
-
-function renderCriteria() {
-  // criteria table
-  const tbody = $("#criteriaTable tbody");
-  tbody.innerHTML = "";
-  const keys = Object.keys(state.criteria || {}).filter(k => k).sort();
-  for (const k of keys) {
-    const desc = state.criteria[k] || "";
-    const count = state.papers.filter(p => p.criteriaId === k).length;
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td><span class="pill">${escapeHtml(k)}</span></td>
-      <td>${escapeHtml(desc)}</td>
-      <td>${count}</td>
-      <td><button class="btn" data-del="${k}">Remover</button></td>
-    `;
-    tbody.appendChild(tr);
-  }
-  tbody.querySelectorAll("button[data-del]").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      const id = btn.getAttribute("data-del");
-      if (!confirm(`Remover critério ${id}?`)) return;
-      delete state.criteria[id];
-      // clear references
-      state.papers.forEach(p => { if (p.criteriaId === id) p.criteriaId = ""; });
-      await persist();
-      renderAll();
-    });
-  });
-
-  // excluded list
-  const exBody = $("#excludedTable tbody");
-  exBody.innerHTML = "";
-  const excluded = state.papers.filter(p => p.status === "excluded").slice(0, 200);
-  for (const p of excluded) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${escapeHtml(p.title || "(sem título)")}</td>
-      <td><span class="pill">${escapeHtml(p.criteriaId || "—")}</span></td>
-      <td><span class="pill">${escapeHtml(p.iterationId || "-")}</span></td>
-      <td><a class="link" href="${escapeHtml(p.url)}" target="_blank" rel="noreferrer">Abrir</a></td>
-    `;
-    exBody.appendChild(tr);
-  }
-}
-
-function renderCitations() {
-  const fromSel = $("#c_from");
-  const toSel = $("#c_to");
-  const papers = [...state.papers].sort((a, b) => (a.title || "").localeCompare(b.title || ""));
-  const makeOpts = () => papers.map(p => `<option value="${p.id}">${escapeHtml((p.title||p.url||p.id).slice(0, 80))}</option>`).join("");
-  fromSel.innerHTML = makeOpts();
-  toSel.innerHTML = makeOpts();
-
-  const tbody = $("#citationsTable tbody");
-  tbody.innerHTML = "";
-  for (const [idx, c] of state.citations.entries()) {
-    const f = state.papers.find(p => p.id === c.fromPaperId);
-    const t = state.papers.find(p => p.id === c.toPaperId);
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${escapeHtml((f?.title || c.fromPaperId).slice(0, 70))}</td>
-      <td><span class="pill">${escapeHtml(c.type)}</span></td>
-      <td>${escapeHtml((t?.title || c.toPaperId).slice(0, 70))}</td>
-      <td><button class="btn" data-del="${idx}">Remover</button></td>
-    `;
-    tbody.appendChild(tr);
-  }
-
-  tbody.querySelectorAll("button[data-del]").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      const i = Number(btn.getAttribute("data-del"));
-      state.citations.splice(i, 1);
-      await persist();
-      renderCitations();
-      renderGraph();
-    });
-  });
-}
-
-function buildGraphData() {
-  const it = $("#g_filterIteration").value;
-  const st = $("#g_filterStatus").value;
-
-  const paperOk = (p) => {
-    if (it !== "all" && (p.iterationId || "") !== it) return false;
-    if (st !== "all" && (p.status || "pending") !== st) return false;
-    return true;
-  };
-
-  const nodes = state.papers.filter(paperOk).map(p => ({
-    id: p.id,
-    title: p.title || p.url || p.id,
-    url: p.url,
-    status: p.status || "pending",
-    origin: p.origin || "unknown",
-    iterationId: p.iterationId || "",
-  }));
-  const nodeSet = new Set(nodes.map(n => n.id));
-  const links = state.citations
-    .filter(c => nodeSet.has(c.fromPaperId) && nodeSet.has(c.toPaperId))
-    .map(c => ({ source: c.fromPaperId, target: c.toPaperId, type: c.type }));
-  return { nodes, links };
-}
-
-function renderGraph() {
-  const svg = $("#graph");
-  while (svg.firstChild) svg.removeChild(svg.firstChild);
-  const details = $("#graphDetails");
-
-  const { nodes, links } = buildGraphData();
-  if (nodes.length === 0) {
-    details.textContent = "Sem nós para mostrar (ajuste filtros ou adicione artigos).";
-    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    t.setAttribute("x", "12");
-    t.setAttribute("y", "24");
-    t.setAttribute("fill", "#666");
-    t.textContent = "Sem dados para o grafo.";
-    svg.appendChild(t);
-    return;
-  }
-  const box = svg.getBoundingClientRect();
-  const w = Math.max(600, box.width || 900);
-  const h = 520;
-  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
-
-  // Simple force layout (Fruchterman-Reingold style)
-  // Initialize positions
-  const pos = new Map();
-  for (const n of nodes) {
-    pos.set(n.id, { x: Math.random() * w, y: Math.random() * h, vx: 0, vy: 0 });
-  }
-
-  const k = Math.sqrt((w * h) / (nodes.length + 1));
-  const iters = 300;
-  const dt = 0.02;
-  const rep = (d) => (k * k) / Math.max(1, d);
-  const att = (d) => (d * d) / k;
-  const linkPairs = links.map(l => [l.source, l.target]);
-
-  for (let step = 0; step < iters; step++) {
-    // Repulsion
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        const a = nodes[i].id;
-        const b = nodes[j].id;
-        const pa = pos.get(a);
-        const pb = pos.get(b);
-        const dx = pa.x - pb.x;
-        const dy = pa.y - pb.y;
-        const dist = Math.sqrt(dx * dx + dy * dy) + 0.01;
-        const f = rep(dist);
-        const fx = (dx / dist) * f;
-        const fy = (dy / dist) * f;
-        pa.vx += fx;
-        pa.vy += fy;
-        pb.vx -= fx;
-        pb.vy -= fy;
-      }
-    }
-    // Attraction
-    for (const [s, t] of linkPairs) {
-      const ps = pos.get(s);
-      const pt = pos.get(t);
-      const dx = ps.x - pt.x;
-      const dy = ps.y - pt.y;
-      const dist = Math.sqrt(dx * dx + dy * dy) + 0.01;
-      const f = att(dist);
-      const fx = (dx / dist) * f;
-      const fy = (dy / dist) * f;
-      ps.vx -= fx;
-      ps.vy -= fy;
-      pt.vx += fx;
-      pt.vy += fy;
-    }
-    // Integrate
-    for (const n of nodes) {
-      const p = pos.get(n.id);
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.vx *= 0.85;
-      p.vy *= 0.85;
-      // Keep inside
-      p.x = Math.max(16, Math.min(w - 16, p.x));
-      p.y = Math.max(16, Math.min(h - 16, p.y));
-    }
-  }
-
-  // Draw links
-  for (const l of links) {
-    const ps = pos.get(l.source);
-    const pt = pos.get(l.target);
-    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    line.setAttribute("x1", ps.x);
-    line.setAttribute("y1", ps.y);
-    line.setAttribute("x2", pt.x);
-    line.setAttribute("y2", pt.y);
-    line.setAttribute("stroke", "#bbb");
-    line.setAttribute("stroke-width", l.type === "forward" ? "2" : "1.2");
-    line.setAttribute("opacity", "0.8");
-    svg.appendChild(line);
-  }
-
-  // Draw nodes
-  for (const n of nodes) {
-    const p = pos.get(n.id);
-    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    g.style.cursor = "pointer";
-
-    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-    circle.setAttribute("cx", p.x);
-    circle.setAttribute("cy", p.y);
-    circle.setAttribute("r", "8");
-    circle.setAttribute("fill", "#111");
-    circle.setAttribute("opacity", n.status === "excluded" ? "0.35" : n.status === "included" ? "0.95" : "0.7");
-    g.appendChild(circle);
-
-    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    label.setAttribute("x", p.x + 12);
-    label.setAttribute("y", p.y + 4);
-    label.setAttribute("font-size", "11");
-    label.setAttribute("fill", "#333");
-    label.textContent = (n.title || "").toString().slice(0, 32);
-    g.appendChild(label);
-
-    g.addEventListener("click", () => {
-      details.innerHTML = `
-        <div style="font-weight:900;font-size:14px">${escapeHtml(n.title)}</div>
-        <div style="margin-top:6px;color:#444">Status: <span class="pill">${escapeHtml(n.status)}</span> • Origem: <span class="pill">${escapeHtml(n.origin)}</span> • Iteração: <span class="pill">${escapeHtml(n.iterationId)}</span></div>
-        <div style="margin-top:10px"><a class="link" href="${escapeHtml(n.url)}" target="_blank" rel="noreferrer">Abrir no navegador</a></div>
-      `;
-      if (n.url) window.open(n.url, "_blank");
-    });
-
-    svg.appendChild(g);
-  }
-}
-
 async function persist() {
   if (!state || !Array.isArray(state.papers)) return;
 
@@ -1511,12 +1037,7 @@ async function persist() {
 function renderAll() {
   renderHeader();
   renderOverview();
-  renderInsights();
   renderPapersTable();
-  renderIterations();
-  renderCriteria();
-  renderCitations();
-  renderGraph();
 }
 
 function bindEvents() {
@@ -1554,31 +1075,6 @@ function bindEvents() {
   });
 
   
-  // Insights
-  const btnSum = document.getElementById("btnGenerateSummary");
-  if (btnSum) btnSum.addEventListener("click", () => {
-    const t = document.getElementById("summaryText");
-    if (t) t.value = buildSummaryText();
-  });
-  const btnCopy = document.getElementById("btnCopySummary");
-  if (btnCopy) btnCopy.addEventListener("click", async () => {
-    const t = document.getElementById("summaryText");
-    if (!t) return;
-    try {
-      await navigator.clipboard.writeText(t.value || "");
-      alert("Resumo copiado.");
-    } catch {
-      t.select();
-      document.execCommand("copy");
-      alert("Resumo copiado.");
-    }
-  });
-  const btnDup = document.getElementById("btnFindDuplicates");
-  if (btnDup) btnDup.addEventListener("click", () => {
-    const thr = Number(document.getElementById("dupThreshold")?.value || "0.85");
-    renderDuplicates(findDuplicatePairs(thr));
-  });
-
   // History modal close
   const btnClose = document.getElementById("btnCloseHistory");
   if (btnClose) btnClose.addEventListener("click", () => document.getElementById("historyModal")?.classList.add("hidden"));
@@ -1588,7 +1084,7 @@ function bindEvents() {
   });
 
   // Papers filters
-  ["search", "f_status", "f_origin", "f_iteration"].forEach(id => {
+  ["search", "f_status", "f_origin"].forEach(id => {
     $("#" + id).addEventListener("input", renderPapersTable);
     $("#" + id).addEventListener("change", renderPapersTable);
   });
@@ -1602,40 +1098,6 @@ function bindEvents() {
   $("#btnBulkPending").addEventListener("click", () => bulkSet("status", "pending"));
   $("#btnBulkDuplicate").addEventListener("click", () => bulkSet("status", "duplicate"));
   $("#btnBulkDeleteMarked").addEventListener("click", () => bulkDeleteMarkedSelected());
-
-  // Iterations
-  $("#btnAddIteration").addEventListener("click", async () => {
-    // const id = $("#newIterId").value.trim();
-    // const mode = $("#newIterMode").value;
-    // if (!id) return alert("Informe um ID (ex: I2).");
-    // if (state.iterations.find(i => i.id === id)) return alert("Essa iteração já existe.");
-    // state.iterations.push({ id, type: mode === "seed" ? "seed" : "snowballing", mode, createdAt: svatNowIso() });
-    // $("#newIterId").value = "";
-    // await persist();
-    // renderAll();
-  });
-  $("#btnSetCurrentIteration").addEventListener("click", async () => {
-    const id = $("#newIterId").value.trim();
-    if (!id) return alert("Digite o ID da iteração e clique em Definir como atual.");
-    if (!state.iterations.find(i => i.id === id)) return alert("Essa iteração não existe (adicione primeiro).");
-    state.project.currentIterationId = id;
-    await persist();
-    renderHeader();
-    renderIterationFilterOptions();
-  });
-
-  // Criteria
-  $("#btnAddCriterion").addEventListener("click", async () => {
-    const id = $("#critId").value.trim();
-    const desc = $("#critDesc").value.trim();
-    if (!id) return alert("Informe um ID (ex: C1).");
-    state.criteria = state.criteria || {};
-    state.criteria[id] = desc;
-    $("#critId").value = "";
-    $("#critDesc").value = "";
-    await persist();
-    renderAll();
-  });
 
   // Categories CRUD
   const btnShowAddCategory = document.getElementById("btnShowAddCategory");
@@ -2383,30 +1845,6 @@ function bindEvents() {
     }
   });
 
-
-  // Citations
-  $("#btnAddCitation").addEventListener("click", async () => {
-    const from = $("#c_from").value;
-    const to = $("#c_to").value;
-    const type = $("#c_type").value;
-    if (!from || !to) return;
-    if (from === to) return alert("Escolha artigos diferentes.");
-    state.citations = state.citations || [];
-    // Avoid duplicates
-    if (state.citations.find(c => c.fromPaperId === from && c.toPaperId === to && c.type === type)) {
-      return alert("Conexão já existe.");
-    }
-    state.citations.push({ fromPaperId: from, toPaperId: to, type });
-    await persist();
-    renderCitations();
-    renderGraph();
-  });
-
-  // Graph filters
-  ["g_filterIteration", "g_filterStatus"].forEach(id => {
-    $("#" + id).addEventListener("change", renderGraph);
-  });
-  $("#btnGraphReset").addEventListener("click", renderGraph);
 }
 
 async function init() {
