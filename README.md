@@ -4,7 +4,7 @@ Plugin para Chrome que auxilia a marcação e organização de links durante o p
 ---
 
 ## Status atual (28/02/2026)
-- **Frontend**: interfaces principais implementadas (`ui/popup/popup.html`, `ui/options/options.html`, `ui/projects/projects.html`, `ui/dashboard/dashboard.html`) com scripts de interação (`ui/*/*.js`).
+- **Frontend**: interfaces principais implementadas (`ui/options/options.html`, `ui/projects/projects.html`, `ui/dashboard/dashboard.html`) com scripts de interação (`ui/*/*.js`).
 - **Extensão**: `background.js` e `content.js` presentes e tratam mensagens entre UI e background.
 - **Core**: lógica e modelos em [core/entities.mjs](core/entities.mjs) e [core/utils.mjs](core/utils.mjs).
 - **Infraestrutura**: persistência e comunicação em [infrastructure/storage.mjs](infrastructure/storage.mjs) e [infrastructure/socketManager.mjs](infrastructure/socketManager.mjs).
@@ -44,7 +44,7 @@ node server.mjs
 - [core/utils.mjs](core/utils.mjs)
 - [infrastructure/storage.mjs](infrastructure/storage.mjs)
 - [infrastructure/socketManager.mjs](infrastructure/socketManager.mjs)
-- UI: [ui/projects/projects.html](ui/projects/projects.html), [ui/projects/projects.js](ui/projects/projects.js), [ui/options/options.html](ui/options/options.html), [ui/popup/popup.html](ui/popup/popup.html), [ui/dashboard/dashboard.html](ui/dashboard/dashboard.html)
+- UI: [ui/projects/projects.html](ui/projects/projects.html), [ui/projects/projects.js](ui/projects/projects.js), [ui/options/options.html](ui/options/options.html), [ui/dashboard/dashboard.html](ui/dashboard/dashboard.html)
 
 ---
 
@@ -64,3 +64,6 @@ node server.mjs
 
 ## Licença
 Veja o arquivo [LICENSE](LICENSE).
+
+
+- Ao clicar no ícone da extensão, o dashboard é aberto diretamente em uma nova aba.

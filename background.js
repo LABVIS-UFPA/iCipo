@@ -98,6 +98,13 @@ chrome.runtime.onStartup.addListener(async () => {
   wsManager.tryAutoConnect();
 });
 
+// Abre o dashboard diretamente ao clicar no ícone da extensão.
+// O popup foi removido do manifest para que o evento onClicked seja disparado.
+chrome.action.onClicked.addListener(() => {
+  const dashboardUrl = chrome.runtime.getURL("ui/dashboard/dashboard.html");
+  chrome.tabs.create({ url: dashboardUrl });
+});
+
 // Allow options page to trigger menu rebuild.
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg && msg.action === 'getHighlightsFromWs') {
@@ -154,7 +161,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       const messages = Array.isArray(res.server_messages) ? res.server_messages : [];
       const url = res.server_url || '';
       const port = res.server_port || '';
-      _sendResponse && _sendResponse({ ok: true, url, port, status, messages });
+      sendResponse && sendResponse({ ok: true, url, port, status, messages });
     });
     return true; // async response
   }
@@ -166,24 +173,24 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       chrome.storage.local.set({ server_url: url, server_port: port });
     }
     wsManager.connect(url || undefined, port || undefined);
-    _sendResponse && _sendResponse({ ok: true });
+    sendResponse && sendResponse({ ok: true });
     return true;
   }
   if (msg && msg.action === "socket_disconnect") {
     wsManager.disconnect();
-    _sendResponse && _sendResponse({ ok: true });
+    sendResponse && sendResponse({ ok: true });
     return true;
   }
   if (msg && msg.action === "socket_send") {
     try {
       const ok = wsManager.send(msg.data);
       if (ok) {
-        _sendResponse && _sendResponse({ ok: true });
+        sendResponse && sendResponse({ ok: true });
       } else {
-        _sendResponse && _sendResponse({ ok: false, error: 'socket_not_connected' });
+        sendResponse && sendResponse({ ok: false, error: 'socket_not_connected' });
       }
     } catch (e) {
-      _sendResponse && _sendResponse({ ok: false, error: e?.message || e });
+      sendResponse && sendResponse({ ok: false, error: e?.message || e });
     }
     return true;
   }

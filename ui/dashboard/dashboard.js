@@ -2,8 +2,78 @@ import {fmtDate, normalizeStr} from '../../core/utils.mjs';
 import { storage } from '../../infrastructure/storage.mjs';
 
 let state = null;
+let dashboardAccessState = 'loading'; // loading | ready | project-required | offline
+let phaseCreationRequired = false;
+let dashboardIntroRequired = false;
+let categoryCreationRequired = false;
+let tutorialTransitionTimer = null;
+let overviewResizeTimer = null;
+const TUTORIAL_TRANSITION_DELAY = 2000;
+
+function projectHasCategories() {
+  return Array.isArray(state?.project?.categories) && state.project.categories.length > 0;
+}
+
+function tutorialStorageKey(projectID = state?.project?.id) {
+  return projectID ? `icipo:tutorial:${projectID}` : '';
+}
+
+function getTutorialStage(projectID = state?.project?.id) {
+  const key = tutorialStorageKey(projectID);
+  if (!key) return '';
+  try { return window.localStorage.getItem(key) || ''; } catch { return ''; }
+}
+
+function setTutorialStage(stage, projectID = state?.project?.id) {
+  const key = tutorialStorageKey(projectID);
+  if (!key) return;
+  try {
+    if (stage) window.localStorage.setItem(key, stage);
+    else window.localStorage.removeItem(key);
+  } catch { /* localStorage indisponível */ }
+}
+
+function dashboardIntroStorageKey(projectID = state?.project?.id) {
+  return projectID ? `icipo:dashboard-intro:${projectID}` : '';
+}
+
+function hasSeenDashboardIntro(projectID = state?.project?.id) {
+  const key = dashboardIntroStorageKey(projectID);
+  if (!key) return false;
+  try { return window.localStorage.getItem(key) === 'seen'; } catch { return false; }
+}
+
+function markDashboardIntroSeen(projectID = state?.project?.id) {
+  const key = dashboardIntroStorageKey(projectID);
+  if (!key) return;
+  try { window.localStorage.setItem(key, 'seen'); } catch { /* localStorage indisponível */ }
+}
+
+function clearTutorialTransitionTimer() {
+  if (tutorialTransitionTimer) {
+    clearTimeout(tutorialTransitionTimer);
+    tutorialTransitionTimer = null;
+  }
+}
+
+function updateTutorialNavLocks() {
+  const requiredView = dashboardIntroRequired
+    ? '__intro__'
+    : (phaseCreationRequired ? 'phases' : (categoryCreationRequired ? 'categories' : null));
+  $$(".navBtn").forEach((button) => {
+    const locked = Boolean(requiredView && (requiredView === '__intro__' || button.dataset.view !== requiredView));
+    button.classList.toggle('tutorialLocked', locked);
+    button.classList.toggle('phaseLocked', locked);
+    button.setAttribute('aria-disabled', locked ? 'true' : 'false');
+  });
+}
+
 // Incremental token to guard against out-of-order async renders
 let renderToken = 0;
+
+function projectHasPhases() {
+  return Array.isArray(state?.project?.phases) && state.project.phases.length > 0;
+}
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -108,31 +178,6 @@ function getPaperCategoryColor(paper, highlightedLinks = {}) {
   }
 
   return normalizeHexColor(paper?.highlightedColor || paper?.highlightColor || paper?.color);
-}
-
-function syncCategoryFilterOptions() {
-  const select = document.getElementById("f_category");
-  if (!select) return;
-
-  const previous = select.value || "all";
-  const categories = [...(Array.isArray(state?.project?.categories) ? state.project.categories : [])]
-    .sort((a, b) => String(a?.title || a?.label || "").localeCompare(String(b?.title || b?.label || "")));
-
-  select.innerHTML = `
-    <option value="all">Categoria: todas</option>
-    <option value="uncategorized">Sem categoria</option>
-  `;
-
-  for (const category of categories) {
-    const key = getPaperCategoryKey(category);
-    if (!key) continue;
-    const option = document.createElement("option");
-    option.value = key;
-    option.textContent = category.title || category.label || key;
-    select.appendChild(option);
-  }
-
-  select.value = Array.from(select.options).some(option => option.value === previous) ? previous : "all";
 }
 
 function loadCategories() {
@@ -395,6 +440,7 @@ async function loadState() {
   };
 
   state = baseState;
+  dashboardAccessState = 'loading';
 
   return new Promise((resolve, reject) => {
     storage.getActiveProject().then(async (res) => {
@@ -410,6 +456,13 @@ async function loadState() {
       }
 
       state = { project, papers };
+      dashboardAccessState = 'ready';
+      phaseCreationRequired = !projectHasPhases();
+      dashboardIntroRequired = phaseCreationRequired && !hasSeenDashboardIntro(project.id);
+      const savedTutorialStage = getTutorialStage(project.id);
+      categoryCreationRequired = !phaseCreationRequired
+        && !projectHasCategories()
+        && ['category-pending', 'category-required'].includes(savedTutorialStage);
       toggleServerOfflineNotice(false);
       toggleNoActiveProjectNotice(false);
       resolve(state);
@@ -418,11 +471,19 @@ async function loadState() {
       console.log('getActiveProject failed', err);
       if(err.message === "No active project"){
         state = baseState;
+        dashboardAccessState = 'project-required';
+        phaseCreationRequired = false;
+        dashboardIntroRequired = false;
+        categoryCreationRequired = false;
         toggleServerOfflineNotice(false);
         toggleNoActiveProjectNotice(true);
         resolve(baseState);
       }else if(err.message === "WebSocket not connected"){
         state = baseState;
+        dashboardAccessState = 'offline';
+        phaseCreationRequired = false;
+        dashboardIntroRequired = false;
+        categoryCreationRequired = false;
         toggleServerOfflineNotice(true); 
         toggleNoActiveProjectNotice(false);
         resolve(baseState);
@@ -437,8 +498,14 @@ async function loadState() {
 }
 
 function setActiveView(view) {
-  $$(".navBtn").forEach(btn => btn.classList.toggle("active", btn.dataset.view === view));
-  $$(".view").forEach(v => v.classList.toggle("hidden", v.id !== `view_${view}`));
+  const allowedView = dashboardIntroRequired
+    ? 'overview'
+    : (phaseCreationRequired
+      ? 'phases'
+      : (categoryCreationRequired ? 'categories' : view));
+  $$(".navBtn").forEach(btn => btn.classList.toggle("active", btn.dataset.view === allowedView));
+  $$(".view").forEach(v => v.classList.toggle("hidden", v.id !== `view_${allowedView}`));
+  if (allowedView === 'overview' && state) renderOverview();
 }
 
 function computeOverviewMetrics(highlightedLinks = {}) {
@@ -476,24 +543,35 @@ function pushHistory(paper, action, details = {}) {
 function renderHeader() {
   const project = state?.project || {};
   const title = project.name || project.title || project.id || "Projeto";
-  const description = project.description || project.objective || "Sem descrição";
+  const description = project.description || "Sem descrição cadastrada.";
+  const objective = project.objective || description;
   const researchers = formatResearchers(project.researchers || project.researcher) || "—";
 
-  $("#projectTitle").textContent = title;
-  const meta = $("#projectMeta");
-  if (meta) {
-    meta.innerHTML = `
-      <div class="metaLine metaResearchers">Pesquisadores: ${escapeHtml(researchers)}</div>
-      <div class="metaLine metaDescWrap">
-        <span class="metaDesc" id="projectMetaDesc">${escapeHtml(description)}</span>
-        <button class="linkBtn metaToggle hidden" id="projectMetaToggle" type="button">Ler mais</button>
-      </div>
-    `;
-    updateProjectMetaClamp(false);
-  }
-  $("#brandSub").textContent = project.id ? `ID: ${project.id}` : "Sem projeto ativo";
-}
+  const projectTitle = $("#projectTitle");
+  if (projectTitle) projectTitle.textContent = title;
 
+  const meta = $("#projectMeta");
+  if (meta) meta.textContent = `${researchers} — ${description}`;
+
+  const brandSub = $("#brandSub");
+  if (brandSub) brandSub.textContent = project.id ? `ID: ${project.id}` : "Sem projeto ativo";
+
+  const sidebarResearchers = $("#sidebarResearchers");
+  const sidebarObjective = $("#sidebarObjective");
+  const sidebarProjectId = $("#sidebarProjectId");
+  if (sidebarResearchers) {
+    sidebarResearchers.textContent = researchers;
+    sidebarResearchers.title = researchers;
+  }
+  if (sidebarObjective) {
+    sidebarObjective.textContent = objective;
+    sidebarObjective.title = objective;
+  }
+  if (sidebarProjectId) {
+    sidebarProjectId.textContent = project.id || "—";
+    sidebarProjectId.title = project.id || "";
+  }
+}
 function updateProjectMetaClamp(expand) {
   const desc = document.getElementById("projectMetaDesc");
   const toggle = document.getElementById("projectMetaToggle");
@@ -527,173 +605,327 @@ function updateProjectMetaClamp(expand) {
   toggle.onclick = () => updateProjectMetaClamp(!desc.classList.contains("expanded"));
 }
 
-async function renderOverview() {
-  let highlightedLinks = {};
-  try {
-    const data = await storage.get(["highlightedLinks"]);
-    highlightedLinks = data?.highlightedLinks || {};
-  } catch (error) {
-    console.warn("Não foi possível carregar as categorias dos artigos no dashboard.", error);
-  }
-
-  const metrics = computeOverviewMetrics(highlightedLinks);
-  $("#kpi_total").textContent = metrics.total;
-  $("#kpi_categories").textContent = metrics.categories;
-  $("#kpi_categorized").textContent = metrics.categorized;
-  $("#kpi_uncategorized").textContent = metrics.uncategorized;
-  $("#kpi_with_year").textContent = metrics.withYear;
-  $("#kpi_without_year").textContent = metrics.withoutYear;
-
-  renderCategoryBars(highlightedLinks);
-  renderTimeline();
-  renderRecentTable(highlightedLinks);
+function unwrapStoragePayload(response) {
+  if (!response) return {};
+  if (response.data && typeof response.data === "object") return response.data;
+  return typeof response === "object" ? response : {};
 }
 
-function renderCategoryBars(highlightedLinks = {}) {
-  const bars = $("#categoryBars");
-  if (!bars) return;
-  bars.innerHTML = "";
+function getOverviewPaperKey(paper, fallbackIndex = 0) {
+  const normalizedUrl = normalizeUrl(paper?.url || "").trim().toLowerCase();
+  if (normalizedUrl) return `url:${normalizedUrl}`;
+  if (paper?.id || paper?.id === 0) return `id:${paper.id}`;
+  return `paper:${fallbackIndex}:${String(paper?.title || "").trim().toLowerCase()}`;
+}
 
+function mergeOverviewPaper(base = {}, incoming = {}) {
+  const merged = { ...base };
+  for (const [key, value] of Object.entries(incoming || {})) {
+    const current = merged[key];
+    const incomingHasValue = Array.isArray(value)
+      ? value.length > 0
+      : value !== undefined && value !== null && value !== "";
+    const currentHasValue = Array.isArray(current)
+      ? current.length > 0
+      : current !== undefined && current !== null && current !== "";
+    if (incomingHasValue || !currentHasValue) merged[key] = value;
+  }
+  return merged;
+}
+
+async function loadOverviewContext() {
+  let activeScope = {};
+  let projectScope = {};
+
+  try {
+    activeScope = unwrapStoragePayload(await storage.get(["highlightedLinks", "svat_papers", "svat_project"]));
+  } catch (error) {
+    console.warn("Não foi possível carregar os artigos da fase ativa para a visão geral.", error);
+  }
+
+  try {
+    if (typeof storage.getAllHighlightedLinksForActiveProject === "function") {
+      projectScope = unwrapStoragePayload(await storage.getAllHighlightedLinksForActiveProject());
+    }
+  } catch (error) {
+    console.warn("Não foi possível carregar as marcações de todas as fases.", error);
+  }
+
+  const highlightedLinks = {
+    ...(projectScope.highlightedLinks || {}),
+    ...(activeScope.highlightedLinks || {}),
+  };
+
+  const sources = [
+    ...(Array.isArray(state?.papers) ? state.papers : []),
+    ...(Array.isArray(projectScope.svat_papers) ? projectScope.svat_papers : []),
+    ...(Array.isArray(activeScope.svat_papers) ? activeScope.svat_papers : []),
+  ];
+
+  const byKey = new Map();
+  sources.forEach((paper, index) => {
+    if (!paper || typeof paper !== "object") return;
+    const key = getOverviewPaperKey(paper, index);
+    byKey.set(key, mergeOverviewPaper(byKey.get(key), paper));
+  });
+
+  for (const [url, color] of Object.entries(highlightedLinks)) {
+    const key = getOverviewPaperKey({ url });
+    const existing = byKey.get(key) || {};
+    byKey.set(key, mergeOverviewPaper(existing, {
+      id: existing.id || `marked:${normalizeUrl(url).toLowerCase()}`,
+      url,
+      title: existing.title || url,
+      highlightedColor: color,
+    }));
+  }
+
+  return {
+    papers: [...byKey.values()],
+    highlightedLinks,
+  };
+}
+
+function extractPaperYear(paper) {
+  const candidates = [
+    paper?.year,
+    paper?.publicationYear,
+    paper?.publishedYear,
+    paper?.publication_date,
+    paper?.publishedAt,
+    paper?.date,
+    paper?.authorsRaw,
+    paper?.title,
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate === undefined || candidate === null || candidate === "") continue;
+    const direct = Number(candidate);
+    if (Number.isInteger(direct) && direct > 1900 && direct < 2100) return direct;
+    const match = String(candidate).match(/\b(19|20)\d{2}\b/);
+    if (match) {
+      const year = Number(match[0]);
+      if (year > 1900 && year < 2100) return year;
+    }
+  }
+  return null;
+}
+
+function getPaperAuthorsText(paper) {
+  if (Array.isArray(paper?.authors) && paper.authors.length) {
+    return paper.authors.map(author => typeof author === "string" ? author : author?.name).filter(Boolean).join(", ");
+  }
+  const raw = String(paper?.authorsRaw || "").trim();
+  if (!raw) return "—";
+  return raw.split(/\s+-\s+/)[0].trim() || raw;
+}
+
+function formatOverviewDate(value, includeTime = false) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+
+  const now = new Date();
+  const sameDay = date.toDateString() === now.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = date.toDateString() === yesterday.toDateString();
+  const time = date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+
+  if (includeTime && sameDay) return `Hoje, ${time}`;
+  if (includeTime && isYesterday) return `Ontem, ${time}`;
+  return includeTime
+    ? date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
+    : date.toLocaleDateString("pt-BR");
+}
+
+function openPapersFromOverview(_categoryKey = "all", year = "") {
+  setActiveView("papers");
+  const searchInput = $("#search");
+  if (searchInput) searchInput.value = year === "Sem ano" ? "" : String(year || "");
+  renderPapersTable();
+}
+
+async function renderOverview() {
+  const { papers, highlightedLinks } = await loadOverviewContext();
+  if (!state) return;
+
+  const project = state.project || {};
+
+  const latestPaperDate = papers
+    .map(paper => paper?.updatedAt || paper?.createdAt)
+    .filter(Boolean)
+    .sort()
+    .at(-1);
+  const updatedAt = project.updatedAt || latestPaperDate || project.createdAt;
+  const updatedElement = $("#overviewUpdatedAt");
+  if (updatedElement) {
+    updatedElement.textContent = updatedAt
+      ? `Última atualização: ${formatOverviewDate(updatedAt, true).toLowerCase()}`
+      : "Última atualização: agora";
+  }
+
+  renderCategoryDistribution(papers, highlightedLinks);
+  renderPhaseProgress(papers);
+  renderOverviewRecentArticles(papers, highlightedLinks);
+}
+
+function buildCategoryDistribution(papers, highlightedLinks = {}) {
   const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
-  const counts = new Map(categories.map(category => [getPaperCategoryKey(category), 0]));
+  const entries = categories.map(category => ({
+    key: getPaperCategoryKey(category),
+    label: category.title || category.label || "Categoria",
+    color: normalizeHexColor(category.color, "#4CAF50"),
+    count: 0,
+  })).filter(entry => entry.key);
+  const byKey = new Map(entries.map(entry => [entry.key, entry]));
   let uncategorized = 0;
 
-  for (const paper of state?.papers || []) {
+  for (const paper of papers) {
     const category = getPaperCategory(paper, highlightedLinks);
     const key = getPaperCategoryKey(category);
-    if (key && counts.has(key)) counts.set(key, (counts.get(key) || 0) + 1);
+    if (key && byKey.has(key)) byKey.get(key).count += 1;
     else uncategorized += 1;
   }
 
-  const rows = categories.map(category => ({
-    label: category.title || category.label || "Categoria",
-    value: counts.get(getPaperCategoryKey(category)) || 0,
-    color: normalizeHexColor(category.color, "#7AA2FF"),
-  }));
-  rows.push({ label: "Sem categoria", value: uncategorized, color: "#7C879E" });
+  if (uncategorized > 0 || entries.length === 0) {
+    entries.push({ key: "uncategorized", label: "Sem categoria", color: "#A5ADBA", count: uncategorized });
+  }
 
-  const max = Math.max(1, ...rows.map(row => row.value));
-  for (const row of rows) {
-    const div = document.createElement("div");
-    div.className = "barRow";
-    div.innerHTML = `
-      <div>${escapeHtml(row.label)}</div>
-      <div class="bar"><span style="width:${(row.value / max) * 100}%;background:${escapeHtml(row.color)}"></span></div>
-      <div style="text-align:right;font-variant-numeric:tabular-nums">${row.value}</div>
+  return entries;
+}
+
+function renderCategoryDistribution(papers, highlightedLinks = {}) {
+  const donut = $("#categoryDonut");
+  const totalElement = $("#categoryDonutTotal");
+  const legend = $("#categoryLegend");
+  if (!donut || !legend) return;
+
+  const entries = buildCategoryDistribution(papers, highlightedLinks);
+  const total = papers.length;
+  if (totalElement) totalElement.textContent = String(total);
+
+  if (!total) {
+    donut.style.background = "conic-gradient(#E5E9F0 0 100%)";
+  } else {
+    let cursor = 0;
+    const segments = [];
+    for (const entry of entries) {
+      if (!entry.count) continue;
+      const start = cursor;
+      cursor += (entry.count / total) * 100;
+      segments.push(`${entry.color} ${start.toFixed(3)}% ${cursor.toFixed(3)}%`);
+    }
+    donut.style.background = `conic-gradient(${segments.join(", ") || "#E5E9F0 0 100%"})`;
+  }
+
+  legend.innerHTML = "";
+  for (const entry of entries) {
+    const percentage = total ? (entry.count / total) * 100 : 0;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "categoryLegendRow";
+    button.innerHTML = `
+      <span class="categoryLegendLabel"><i style="background:${escapeHtml(entry.color)}"></i>${escapeHtml(entry.label)}</span>
+      <span>${entry.count} (${percentage.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%)</span>
     `;
-    bars.appendChild(div);
+    button.addEventListener("click", () => openPapersFromOverview(entry.key));
+    legend.appendChild(button);
   }
 }
 
-function renderTimeline() {
-  const svg = $("#timeline");
-  // Clear
-  while (svg.firstChild) svg.removeChild(svg.firstChild);
+function getPhaseOverviewStats(phase, paperCount) {
+  const phasePapers = phase?.papers || {};
+  const inherited = Array.isArray(phasePapers.inherited) ? phasePapers.inherited : [];
+  const added = Array.isArray(phasePapers.new) ? phasePapers.new : [];
+  const selected = Array.isArray(phasePapers.selected) ? phasePapers.selected : [];
+  const removed = Array.isArray(phasePapers.removed) ? phasePapers.removed : [];
+  const totalSet = new Set([...inherited, ...added].map(item => typeof item === "object" ? item.id || item.url : item).filter(Boolean));
+  const processedSet = new Set([...selected, ...removed].map(item => typeof item === "object" ? item.id || item.url : item).filter(Boolean));
+  let total = totalSet.size;
+  let processed = processedSet.size;
 
-  const years = state.papers
-    .map(p => Number(p.year))
-    .filter(y => Number.isFinite(y) && y > 1900 && y < 2100);
-  if (!years.length) {
-    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    t.setAttribute("x", "12");
-    t.setAttribute("y", "24");
-    t.setAttribute("fill", "#666");
-    t.textContent = "Sem anos detectados ainda (ok — você pode adicionar manualmente na tabela).";
-    svg.appendChild(t);
+  if (!total && phase?.label === state?.project?.activePhaseLabel && paperCount) total = paperCount;
+  if (phase?.completed && total) processed = total;
+  const percentage = total ? Math.min(100, Math.round((processed / total) * 100)) : (phase?.completed ? 100 : 0);
+  return { total, processed, percentage };
+}
+
+function renderPhaseProgress(papers) {
+  const container = $("#phaseProgressList");
+  if (!container) return;
+  container.replaceChildren();
+  const phases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
+
+  if (!phases.length) {
+    container.innerHTML = `<div class="overviewEmptyState">Crie uma fase para acompanhar o progresso do projeto.</div>`;
     return;
   }
-  const minY = Math.min(...years);
-  const maxY = Math.max(...years);
-  const counts = new Map();
-  for (let y = minY; y <= maxY; y++) counts.set(y, 0);
-  for (const y of years) counts.set(y, (counts.get(y) || 0) + 1);
-  const entries = [...counts.entries()];
-  const maxC = Math.max(...entries.map(([, v]) => v));
 
-  const box = svg.getBoundingClientRect();
-  const w = Math.max(300, box.width || 600);
-  const h = 180;
-  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
-  const pad = { l: 24, r: 10, t: 10, b: 26 };
-  const bw = (w - pad.l - pad.r) / entries.length;
-
-  // Bars
-  entries.forEach(([y, v], i) => {
-    const bh = (v / maxC) * (h - pad.t - pad.b);
-    const x = pad.l + i * bw;
-    const y0 = h - pad.b - bh;
-
-    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("x", x + 1);
-    rect.setAttribute("y", y0);
-    rect.setAttribute("width", Math.max(2, bw - 2));
-    rect.setAttribute("height", bh);
-    rect.setAttribute("rx", "4");
-    rect.setAttribute("fill", "#111");
-    rect.setAttribute("opacity", "0.85");
-    rect.style.cursor = "pointer";
-    rect.addEventListener("click", () => {
-      setActiveView("papers");
-      $("#f_category").value = "all";
-      $("#search").value = String(y);
-      renderPapersTable();
-    });
-    svg.appendChild(rect);
-
-    if (i % Math.ceil(entries.length / 8) === 0) {
-      const tx = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      tx.setAttribute("x", x + bw / 2);
-      tx.setAttribute("y", h - 10);
-      tx.setAttribute("text-anchor", "middle");
-      tx.setAttribute("font-size", "10");
-      tx.setAttribute("fill", "#555");
-      tx.textContent = String(y);
-      svg.appendChild(tx);
-    }
+  phases.slice(0, 6).forEach((phase, index) => {
+    const stats = getPhaseOverviewStats(phase, papers.length);
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "phaseProgressRow";
+    row.innerHTML = `
+      <span class="phaseProgressNumber">${index + 1}</span>
+      <span class="phaseProgressContent">
+        <span class="phaseProgressTop"><strong>${escapeHtml(phase.title || `Fase ${index + 1}`)}</strong><span>${stats.processed}/${stats.total}</span></span>
+        <span class="phaseProgressTrack"><i style="width:${stats.percentage}%"></i></span>
+      </span>
+    `;
+    row.addEventListener("click", () => setActiveView("phases"));
+    container.appendChild(row);
   });
-
-  // Axis line
-  const axis = document.createElementNS("http://www.w3.org/2000/svg", "line");
-  axis.setAttribute("x1", pad.l);
-  axis.setAttribute("x2", w - pad.r);
-  axis.setAttribute("y1", h - pad.b);
-  axis.setAttribute("y2", h - pad.b);
-  axis.setAttribute("stroke", "#ddd");
-  svg.appendChild(axis);
 }
 
-function renderRecentTable(highlightedLinks = {}) {
-  const tbody = $("#recentTable tbody");
-  if (!tbody) return;
-  tbody.innerHTML = "";
+function getPaperPhaseTitle(paper) {
+  const phases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
+  const requested = paper?.phaseLabel || paper?.phase || paper?.phaseId || paper?.iterationId;
+  const phase = phases.find(item => [item?.label, item?.id, item?.title].filter(Boolean).includes(requested));
+  if (phase) return phase.title || phase.label;
+  const active = phases.find(item => item?.label === state?.project?.activePhaseLabel);
+  return active?.title || active?.label || "—";
+}
 
-  const recent = [...(state?.papers || [])]
-    .sort((a, b) => (b.updatedAt || b.createdAt || "").localeCompare(a.updatedAt || a.createdAt || ""))
-    .slice(0, 8);
+function renderOverviewRecentArticles(papers, highlightedLinks = {}) {
+  const tbody = $("#overviewRecentTable tbody");
+  if (!tbody) return;
+  tbody.replaceChildren();
+
+  const recent = [...papers]
+    .sort((a, b) => String(b?.updatedAt || b?.createdAt || "").localeCompare(String(a?.updatedAt || a?.createdAt || "")))
+    .slice(0, 5);
+
+  if (!recent.length) {
+    const row = document.createElement("tr");
+    row.innerHTML = `<td colspan="6" class="overviewEmptyCell">Nenhum artigo marcado neste projeto.</td>`;
+    tbody.appendChild(row);
+    return;
+  }
 
   for (const paper of recent) {
     const category = getPaperCategory(paper, highlightedLinks);
-    const color = getPaperCategoryColor(paper, highlightedLinks);
+    const color = getPaperCategoryColor(paper, highlightedLinks) || "#A5ADBA";
     const categoryLabel = category?.title || category?.label || "Sem categoria";
-    const marker = color
-      ? `<span class="paperCategoryMarker" style="background:${escapeHtml(color)}" aria-hidden="true"></span>`
-      : "";
-
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${escapeHtml(paper.title || paper.url || "(sem título)")}</td>
-      <td><span class="categoryBadge">${marker}<span>${escapeHtml(categoryLabel)}</span></span></td>
+    const year = extractPaperYear(paper) || "—";
+    const date = paper?.updatedAt || paper?.createdAt;
+    const row = document.createElement("tr");
+    const title = escapeHtml(paper?.title || paper?.url || "(sem título)");
+    const titleContent = paper?.url
+      ? `<a href="${escapeHtml(paper.url)}" target="_blank" rel="noreferrer" title="Abrir artigo">${title}</a>`
+      : title;
+    row.innerHTML = `
+      <td class="overviewRecentTitle">${titleContent}</td>
+      <td>${escapeHtml(getPaperAuthorsText(paper))}</td>
+      <td>${escapeHtml(year)}</td>
+      <td><span class="overviewCategoryBadge"><i style="background:${escapeHtml(color)}"></i>${escapeHtml(categoryLabel)}</span></td>
+      <td>${escapeHtml(getPaperPhaseTitle(paper))}</td>
+      <td>${escapeHtml(formatOverviewDate(date, true))}</td>
     `;
-    tbody.appendChild(tr);
-  }
-
-  if (!recent.length) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="2" class="muted">Nenhum artigo cadastrado.</td>`;
-    tbody.appendChild(tr);
+    tbody.appendChild(row);
   }
 }
-
 function escapeHtml(s) {
   return (s ?? "").toString()
     .replace(/&/g, "&amp;")
@@ -739,16 +971,11 @@ function showHistory(paperId) {
 function getFilters() {
   return {
     q: normalizeStr($("#search").value),
-    category: $("#f_category").value,
   };
 }
 
 function paperMatchesFilters(paper, filters, highlightedLinks = {}) {
   const category = getPaperCategory(paper, highlightedLinks);
-  const categoryKey = getPaperCategoryKey(category);
-
-  if (filters.category === "uncategorized" && category) return false;
-  if (filters.category !== "all" && filters.category !== "uncategorized" && categoryKey !== filters.category) return false;
 
   if (!filters.q) return true;
   const categoryText = category ? `${category.title || ""} ${category.label || ""}` : "sem categoria";
@@ -760,7 +987,6 @@ async function renderPapersTable() {
   // token for this render; only the latest token may write to the DOM
   const myToken = ++renderToken;
 
-  syncCategoryFilterOptions();
   const f = getFilters();
 
   // fetch highlighted links and svat_papers
@@ -968,10 +1194,82 @@ function renderAll() {
 }
 
 function bindEvents() {
-  // Navigation
-  $$(".navBtn").forEach(btn => btn.addEventListener("click", () => setActiveView(btn.dataset.view)));
+  const dashboardIntroModal = document.getElementById('dashboardIntroModal');
+  const btnContinueDashboardIntro = document.getElementById('btnContinueDashboardIntro');
+  const btnDashboardIntroProjects = document.getElementById('btnDashboardIntroProjects');
 
-  window.addEventListener("resize", () => updateProjectMetaClamp(false));
+  function openDashboardIntro() {
+    if (!dashboardIntroModal) {
+      markDashboardIntroSeen();
+      dashboardIntroRequired = false;
+      updateTutorialNavLocks();
+      requireFirstPhase();
+      return;
+    }
+
+    dashboardIntroRequired = true;
+    dashboardIntroModal.classList.remove('hidden');
+    dashboardIntroModal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('dashboardIntroRequired', 'no-scroll');
+    updateTutorialNavLocks();
+    setActiveView('overview');
+    setTimeout(() => btnContinueDashboardIntro?.focus(), 80);
+  }
+
+  function finishDashboardIntro() {
+    markDashboardIntroSeen();
+    dashboardIntroRequired = false;
+    dashboardIntroModal?.classList.add('hidden');
+    dashboardIntroModal?.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('dashboardIntroRequired');
+    if (!document.querySelector('.sidePanel.open')) document.body.classList.remove('no-scroll');
+    updateTutorialNavLocks();
+    requireFirstPhase();
+  }
+
+  btnContinueDashboardIntro?.addEventListener('click', finishDashboardIntro);
+  btnDashboardIntroProjects?.addEventListener('click', () => {
+    window.location.href = '../projects/projects.html';
+  });
+
+  // Navigation
+  $$(".navBtn").forEach(btn => btn.addEventListener("click", () => {
+    if (dashboardIntroRequired) {
+      dashboardIntroModal?.classList.add('dashboardIntroAttention');
+      setTimeout(() => dashboardIntroModal?.classList.remove('dashboardIntroAttention'), 420);
+      btnContinueDashboardIntro?.focus();
+      return;
+    }
+    if (phaseCreationRequired && btn.dataset.view !== 'phases') {
+      setActiveView('phases');
+      document.getElementById('phasePanel')?.classList.add('phaseGateAttention');
+      setTimeout(() => document.getElementById('phasePanel')?.classList.remove('phaseGateAttention'), 450);
+      document.getElementById('phaseTitle')?.focus();
+      return;
+    }
+    if (categoryCreationRequired && btn.dataset.view !== 'categories') {
+      setActiveView('categories');
+      const panel = document.getElementById('categoryPanel');
+      panel?.classList.add('phaseGateAttention');
+      setTimeout(() => panel?.classList.remove('phaseGateAttention'), 450);
+      document.getElementById('categoryTitle')?.focus();
+      return;
+    }
+    setActiveView(btn.dataset.view);
+  }));
+
+  $$('[data-overview-view]').forEach((button) => {
+    button.addEventListener('click', () => setActiveView(button.dataset.overviewView));
+  });
+
+
+  window.addEventListener("resize", () => {
+    updateProjectMetaClamp(false);
+    clearTimeout(overviewResizeTimer);
+    overviewResizeTimer = setTimeout(() => {
+      if (!$("#view_overview")?.classList.contains("hidden")) renderOverview();
+    }, 160);
+  });
 
   // Top actions
   const btnProjects = document.getElementById("btnProjects");
@@ -997,11 +1295,8 @@ function bindEvents() {
     if (e.target === modal) modal.classList.add("hidden");
   });
 
-  // Papers filters
-  ["search", "f_category"].forEach(id => {
-    $("#" + id).addEventListener("input", renderPapersTable);
-    $("#" + id).addEventListener("change", renderPapersTable);
-  });
+  // Pesquisa de artigos
+  $("#search").addEventListener("input", renderPapersTable);
   $("#checkAll").addEventListener("change", (e) => {
     const checked = e.target.checked;
     $$(".rowCheck").forEach(ch => ch.checked = checked);
@@ -1025,6 +1320,9 @@ function bindEvents() {
   const categoryCriterionNewInput = document.getElementById("categoryCriterionNew");
   const btnAddCategoryCriterion = document.getElementById("btnAddCategoryCriterion");
   const categoryTitleError = document.getElementById("categoryTitleError");
+  const categoryRequiredNotice = document.getElementById("categoryRequiredNotice");
+  const articleTutorialPanel = document.getElementById("articleTutorialPanel");
+  const btnCloseArticleTutorial = document.getElementById("btnCloseArticleTutorial");
   const highlightSearch = document.getElementById("highlightSearch");
   const removeLinks = document.getElementById("removeLinks");
   let editingCategoryLabel = null;
@@ -1131,7 +1429,9 @@ function bindEvents() {
   function openCategoryPanel(category = null) {
     if (!categoryPanel) return;
     editingCategoryLabel = category?.label || null;
-    categoryPanelTitle.textContent = category ? "Editar categoria" : "Nova categoria";
+    categoryPanelTitle.textContent = category
+      ? "Editar categoria"
+      : (categoryCreationRequired ? "Crie a primeira categoria" : "Nova categoria");
     categoryTitleInput.value = category?.title || "";
     categoryDescriptionInput.value = category?.description || "";
     categoryColorInput.value = category?.color || "#4CAF50";
@@ -1155,17 +1455,108 @@ function bindEvents() {
     setTimeout(() => categoryTitleInput?.focus(), 60);
   }
 
-  function closeCategoryPanel() {
-    if (!categoryPanel) return;
+  function applyCategoryRequirementUI(required) {
+    categoryCreationRequired = Boolean(required);
+    document.body.classList.toggle('categoryCreationRequired', categoryCreationRequired);
+    categoryPanel?.classList.toggle('categoryCreationRequiredPanel', categoryCreationRequired);
+    categoryRequiredNotice?.classList.toggle('hidden', !categoryCreationRequired);
+
+    if (categoryPanelTitle && !editingCategoryLabel) {
+      categoryPanelTitle.textContent = categoryCreationRequired ? 'Crie a primeira categoria' : 'Nova categoria';
+    }
+    if (btnCloseCategory) {
+      btnCloseCategory.textContent = categoryCreationRequired ? 'Voltar aos projetos' : 'Fechar';
+      btnCloseCategory.title = categoryCreationRequired
+        ? 'Voltar à lista de projetos'
+        : 'Fechar o formulário';
+    }
+
+    updateTutorialNavLocks();
+  }
+
+  function closeCategoryPanel(force = false) {
+    if (!categoryPanel) return false;
+    if (categoryCreationRequired && !force) {
+      categoryPanel.classList.add('phaseGateAttention');
+      setTimeout(() => categoryPanel.classList.remove('phaseGateAttention'), 450);
+      categoryTitleInput?.focus();
+      return false;
+    }
+
     categoryPanel.classList.remove("open");
     categoryPanel.setAttribute("aria-hidden", "true");
     categoryPanel.setAttribute("inert", "");
-    if (!document.getElementById("phasePanel")?.classList.contains("open")) {
+    const phaseOpen = document.getElementById("phasePanel")?.classList.contains("open");
+    const tutorialOpen = articleTutorialPanel?.classList.contains('open');
+    if (!phaseOpen && !tutorialOpen) {
       sideOverlay?.classList.remove("open");
       sideOverlay?.setAttribute("aria-hidden", "true");
       document.body.classList.remove("no-scroll");
     }
     editingCategoryLabel = null;
+    return true;
+  }
+
+  function requireFirstCategory() {
+    clearTutorialTransitionTimer();
+    setTutorialStage('category-required');
+    setActiveView('categories');
+    applyCategoryRequirementUI(true);
+    openCategoryPanel();
+  }
+
+  function closeArticleTutorialPanel() {
+    if (!articleTutorialPanel) return;
+    articleTutorialPanel.classList.remove('open');
+    articleTutorialPanel.setAttribute('aria-hidden', 'true');
+    articleTutorialPanel.setAttribute('inert', '');
+    if (!categoryPanel?.classList.contains('open') && !document.getElementById('phasePanel')?.classList.contains('open')) {
+      sideOverlay?.classList.remove('open');
+      sideOverlay?.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('no-scroll');
+    }
+    setTutorialStage('complete');
+  }
+
+  function openArticleTutorialPanel() {
+    clearTutorialTransitionTimer();
+    applyCategoryRequirementUI(false);
+    setActiveView('papers');
+    renderPapersTable();
+    if (!articleTutorialPanel) {
+      setTutorialStage('complete');
+      return;
+    }
+    articleTutorialPanel.classList.add('open');
+    articleTutorialPanel.setAttribute('aria-hidden', 'false');
+    articleTutorialPanel.removeAttribute('inert');
+    sideOverlay?.classList.add('open');
+    sideOverlay?.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('no-scroll');
+    setTutorialStage('articles-open');
+    setTimeout(() => btnCloseArticleTutorial?.focus(), 80);
+  }
+
+  function scheduleCategoryTutorial(delay = TUTORIAL_TRANSITION_DELAY) {
+    clearTutorialTransitionTimer();
+    setTutorialStage('category-pending');
+    tutorialTransitionTimer = setTimeout(() => {
+      tutorialTransitionTimer = null;
+      if (projectHasCategories()) {
+        scheduleArticlesTutorial(TUTORIAL_TRANSITION_DELAY);
+        return;
+      }
+      requireFirstCategory();
+    }, delay);
+  }
+
+  function scheduleArticlesTutorial(delay = TUTORIAL_TRANSITION_DELAY) {
+    clearTutorialTransitionTimer();
+    setTutorialStage('articles-pending');
+    tutorialTransitionTimer = setTimeout(() => {
+      tutorialTransitionTimer = null;
+      openArticleTutorialPanel();
+    }, delay);
   }
 
   async function reloadCategoryProjectFromWebSocket(projectID) {
@@ -1194,7 +1585,14 @@ function bindEvents() {
   }
 
   btnShowAddCategory?.addEventListener("click", () => openCategoryPanel());
-  btnCloseCategory?.addEventListener("click", closeCategoryPanel);
+  btnCloseCategory?.addEventListener("click", () => {
+    if (categoryCreationRequired) {
+      window.location.href = '../projects/projects.html';
+      return;
+    }
+    closeCategoryPanel();
+  });
+  btnCloseArticleTutorial?.addEventListener('click', closeArticleTutorialPanel);
   btnAddCategoryCriterion?.addEventListener("click", addCategoryCriterion);
   categoryCriterionNewInput?.addEventListener("keydown", event => {
     if (event.key === "Enter") { event.preventDefault(); addCategoryCriterion(); }
@@ -1210,6 +1608,7 @@ function bindEvents() {
 
   btnSaveCategory?.addEventListener("click", async () => {
     const project = state?.project;
+    const completesRequiredCategory = categoryCreationRequired && !editingCategoryLabel;
     if (!project?.id) return alert("Nenhum projeto ativo.");
     const title = categoryTitleInput.value.trim();
     if (!title) {
@@ -1238,8 +1637,20 @@ function bindEvents() {
 
       loadCategories();
       renderPhaseCategories?.([]);
-      await updateScholarCategoryMenu();
-      closeCategoryPanel();
+      renderAll();
+      try {
+        await updateScholarCategoryMenu();
+      } catch (menuError) {
+        console.warn('A categoria foi salva, mas o menu do Google Scholar não pôde ser atualizado imediatamente.', menuError);
+      }
+
+      if (completesRequiredCategory) {
+        applyCategoryRequirementUI(false);
+        closeCategoryPanel(true);
+        scheduleArticlesTutorial(TUTORIAL_TRANSITION_DELAY);
+      } else {
+        closeCategoryPanel();
+      }
     } catch (error) {
       console.warn("category save failed", error);
       categoryTitleError.textContent = error?.message || "Não foi possível salvar a categoria.";
@@ -1260,6 +1671,7 @@ function bindEvents() {
       await reloadCategoryProjectFromWebSocket(project.id);
 
       loadCategories();
+      renderAll();
       await updateScholarCategoryMenu();
       closeCategoryPanel();
     } catch (error) {
@@ -1294,6 +1706,8 @@ function bindEvents() {
   const phaseTitleError = document.getElementById('phaseTitleError');
   const phaseDescError = document.getElementById('phaseDescError');
   const phaseCriteriaError = document.getElementById('phaseCriteriaError');
+  const phasePanelTitle = document.getElementById('phasePanelTitle');
+  const phaseRequiredNotice = document.getElementById('phaseRequiredNotice');
   let phaseEditingCard = null; // card em edição
   let phaseEditingLabel = null; // label original da fase em edição
   let phaseLabelStatus = 'pending'; // 'pending' | 'done'
@@ -1501,6 +1915,44 @@ function bindEvents() {
 
   renderPhasesFromProject();
 
+  function applyPhaseRequirementUI(required) {
+    phaseCreationRequired = Boolean(required);
+    document.body.classList.toggle('phaseCreationRequired', phaseCreationRequired);
+    phasePanel?.classList.toggle('phaseCreationRequiredPanel', phaseCreationRequired);
+    phaseRequiredNotice?.classList.toggle('hidden', !phaseCreationRequired);
+
+    if (phasePanelTitle) {
+      phasePanelTitle.textContent = phaseCreationRequired ? 'Crie a primeira fase' : 'Nova fase';
+    }
+    if (btnClosePhase) {
+      btnClosePhase.textContent = phaseCreationRequired ? 'Voltar aos projetos' : 'Fechar';
+      btnClosePhase.title = phaseCreationRequired
+        ? 'Voltar à lista de projetos'
+        : 'Fechar o formulário';
+    }
+
+    updateTutorialNavLocks();
+  }
+
+  function prepareNewPhaseForm() {
+    phaseEditingCard = null;
+    phaseEditingLabel = null;
+    if(phaseTitleInput) phaseTitleInput.value = '';
+    if(phaseDescInput) phaseDescInput.value = '';
+    if(phaseCriteriaInput) phaseCriteriaInput.value = '';
+    if(phaseCategoriesInput) renderPhaseCategories([]);
+    phaseLabelStatus = 'pending';
+    updateToggleButtonUI();
+    updateSaveState();
+  }
+
+  function requireFirstPhase() {
+    applyPhaseRequirementUI(true);
+    setActiveView('phases');
+    prepareNewPhaseForm();
+    openPhasePanel(false);
+  }
+
   function openPhasePanel(isEditing){
     phasePanel.classList.add('open');
     phasePanel.setAttribute('aria-hidden', 'false');
@@ -1517,7 +1969,14 @@ function bindEvents() {
     }
     setTimeout(() => phaseTitleInput?.focus(), 60);
   }
-  function closePhasePanel(){
+  function closePhasePanel(force = false){
+    if (phaseCreationRequired && !force) {
+      phasePanel?.classList.add('phaseGateAttention');
+      setTimeout(() => phasePanel?.classList.remove('phaseGateAttention'), 450);
+      phaseTitleInput?.focus();
+      return false;
+    }
+
     phasePanel.classList.remove('open');
     phasePanel.setAttribute('aria-hidden','true');
     phasePanel.setAttribute('inert', '');
@@ -1610,20 +2069,30 @@ function bindEvents() {
 
   if (btnShowAddPhase && phasePanel) {
     btnShowAddPhase.addEventListener('click', () => {
-      // ensure fresh empty form when adding
-      phaseEditingCard = null;
-      if(phaseTitleInput) phaseTitleInput.value = '';
-      if(phaseDescInput) phaseDescInput.value = '';
-      if(phaseCriteriaInput) phaseCriteriaInput.value = '';
-      if(phaseCategoriesInput) renderPhaseCategories([]);
-      phaseLabelStatus = 'pending';
-      updateToggleButtonUI();
-      updateSaveState();
+      prepareNewPhaseForm();
       openPhasePanel(false);
     });
   }
-  if (btnClosePhase) btnClosePhase.addEventListener('click', closePhasePanel);
-  if (sideOverlay) sideOverlay.addEventListener('click', closePhasePanel);
+  if (btnClosePhase) btnClosePhase.addEventListener('click', () => {
+    if (phaseCreationRequired) {
+      window.location.href = '../projects/projects.html';
+      return;
+    }
+    closePhasePanel();
+  });
+  if (sideOverlay) sideOverlay.addEventListener('click', () => {
+    if (phasePanel?.classList.contains('open')) {
+      closePhasePanel();
+      return;
+    }
+    if (categoryPanel?.classList.contains('open')) {
+      closeCategoryPanel();
+      return;
+    }
+    if (articleTutorialPanel?.classList.contains('open')) {
+      closeArticleTutorialPanel();
+    }
+  });
 
   // Disable save until required fields are filled
   function updateSaveState(){
@@ -1670,6 +2139,7 @@ function bindEvents() {
 
   if (btnSavePhase) btnSavePhase.addEventListener('click', async (e) => {
     e.preventDefault();
+    const completesRequiredFirstPhase = phaseCreationRequired && !phaseEditingLabel;
     const title = (phaseTitleInput?.value || '').trim();
     const desc = (phaseDescInput?.value || '').trim();
     const criteriaText = (phaseCriteriaInput?.value || '').trim();
@@ -1723,8 +2193,21 @@ function bindEvents() {
 
       await reloadActiveProjectAfterPhaseChange();
       renderPhasesFromProject();
+      renderHeader();
+      renderOverview();
+      const stillRequiresPhase = !projectHasPhases();
+      applyPhaseRequirementUI(stillRequiresPhase);
       clearPhaseForm();
-      closePhasePanel();
+      if (stillRequiresPhase) {
+        requireFirstPhase();
+      } else {
+        closePhasePanel(true);
+        setActiveView('phases');
+        phasesList?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (completesRequiredFirstPhase) {
+          scheduleCategoryTutorial(TUTORIAL_TRANSITION_DELAY);
+        }
+      }
     } catch (err) {
       console.warn('savePhase failed', err);
       alert(err?.message || err?.message || err?.payload?.message || 'Falha ao salvar fase. Veja o console.');
@@ -1747,24 +2230,56 @@ function bindEvents() {
       await storage.deletePhase(state.project.id, phaseEditingLabel);
       await reloadActiveProjectAfterPhaseChange();
       renderPhasesFromProject();
+      renderHeader();
+      renderOverview();
+      const requiresReplacementPhase = !projectHasPhases();
+      applyPhaseRequirementUI(requiresReplacementPhase);
       clearPhaseForm();
-      closePhasePanel();
+      if (requiresReplacementPhase) {
+        requireFirstPhase();
+      } else {
+        closePhasePanel(true);
+      }
     } catch (err) {
       console.warn('deletePhase failed', err);
       alert(err?.message || 'Falha ao excluir fase. Veja o console.');
     }
   });
 
+  applyPhaseRequirementUI(phaseCreationRequired);
+  applyCategoryRequirementUI(categoryCreationRequired);
+  if (phaseCreationRequired) {
+    if (dashboardIntroRequired) openDashboardIntro();
+    else requireFirstPhase();
+  } else {
+    const stage = getTutorialStage();
+    if (['category-pending', 'category-required'].includes(stage)) {
+      if (projectHasCategories()) scheduleArticlesTutorial(TUTORIAL_TRANSITION_DELAY);
+      else if (stage === 'category-required') requireFirstCategory();
+      else scheduleCategoryTutorial(TUTORIAL_TRANSITION_DELAY);
+    } else if (stage === 'articles-pending') {
+      scheduleArticlesTutorial(TUTORIAL_TRANSITION_DELAY);
+    } else if (stage === 'articles-open') {
+      openArticleTutorialPanel();
+    }
+  }
 }
 
 async function init() {
   await loadState();
+
+  if (dashboardAccessState === 'project-required') {
+    // O dashboard não pode ser utilizado sem um projeto ativo.
+    window.location.replace('../projects/projects.html?dashboardRequiresProject=1');
+    return;
+  }
+
   bindEvents();
   renderAll();
   // Load moved features
   loadCategories();
   loadHighlightedLinks();
-  setActiveView("overview");
+  setActiveView(dashboardIntroRequired ? 'overview' : (phaseCreationRequired ? 'phases' : (categoryCreationRequired ? 'categories' : 'overview')));
 }
 
 init();

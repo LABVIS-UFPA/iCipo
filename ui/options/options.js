@@ -12,13 +12,24 @@ document.addEventListener("DOMContentLoaded", () => {
   const downloadStorage = document.getElementById("downloadStorage");
   const uploadStorage = document.getElementById("uploadStorage");
   const checkOnOff = document.getElementById("checkOnOff");
+  const extensionStatusText = document.getElementById("extensionStatusText");
+  const extensionStatusDot = document.getElementById("extensionStatusDot");
+  const uploadFileName = document.getElementById("uploadFileName");
+  const btnDashboard = document.getElementById("btnDashboard");
 
   // =====================
   // Helpers
   // =====================
+  function updateExtensionStatus(active) {
+    if (extensionStatusText) extensionStatusText.textContent = active ? "Extensão ativada" : "Extensão desativada";
+    if (extensionStatusDot) extensionStatusDot.classList.toggle("active", active);
+  }
+
   function loadOnOff() {
     storage.get("active").then((data) => {
-      checkOnOff.checked = !!(data && data.active);
+      const active = !!(data && data.active);
+      checkOnOff.checked = active;
+      updateExtensionStatus(active);
     });
   }
 
@@ -231,10 +242,18 @@ document.addEventListener("DOMContentLoaded", () => {
   // Events: On/Off, categories, links, backup
   // =====================
   checkOnOff.addEventListener("change", () => {
-    storage.set({ active: checkOnOff.checked }).then(() => {
-      console.log(checkOnOff.checked ? "Ativo." : "Desativado.");
+    const active = checkOnOff.checked;
+    updateExtensionStatus(active);
+    storage.set({ active }).then(() => {
+      console.log(active ? "Ativo." : "Desativado.");
     });
   });
+
+  if (btnDashboard) {
+    btnDashboard.addEventListener("click", () => {
+      window.location.href = chrome.runtime.getURL("ui/dashboard/dashboard.html");
+    });
+  }
 
   if (seedDefaultCategoriesButton) {
     seedDefaultCategoriesButton.addEventListener("click", () => {
@@ -266,9 +285,15 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   uploadStorage.addEventListener("change", function (event) {
-    if (!confirm("Tem certeza de que deseja fazer upload deste arquivo? Isso pode sobrescrever os dados existentes.")) return;
-
     const file = event.target.files[0];
+    if (uploadFileName) uploadFileName.textContent = file?.name || "Nenhum arquivo escolhido";
+    if (!file) return;
+    if (!confirm("Tem certeza de que deseja fazer upload deste arquivo? Isso pode sobrescrever os dados existentes.")) {
+      event.target.value = "";
+      if (uploadFileName) uploadFileName.textContent = "Nenhum arquivo escolhido";
+      return;
+    }
+
     if (file) {
       const reader = new FileReader();
       reader.onload = function (event) {
@@ -298,9 +323,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let server_status = 'Desconectado';
   function setServerStatus(text) {
-    const icon = text === 'Conectado' ? '🟢' : '🔴';
-    if (serverStatusLabel) serverStatusLabel.textContent = `${icon} ${text}`;
-    if (connectBtn) connectBtn.textContent = (text === 'Conectado') ? 'Desconectar' : 'Conectar';
+    const connected = text === 'Conectado';
+    if (serverStatusLabel) serverStatusLabel.textContent = text;
+    const statusPill = document.getElementById("serverStatusPill");
+    if (statusPill) statusPill.classList.toggle("connected", connected);
+    if (connectBtn) connectBtn.textContent = connected ? 'Desconectar' : 'Conectar';
     server_status = text;
   }
 

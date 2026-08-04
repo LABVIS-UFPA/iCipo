@@ -20,82 +20,137 @@
     <div class="app">
       
       <aside class="sidebar u-flex-fill-col">
-        <div class="brand">
-          <div class="logo">
-            <picture>
-              <source srcset="/img/icipo_logo[dark].png" media="(prefers-color-scheme: dark)">
-              <img class="brandLogo" src="/img/icipo_logo.png" alt="iCipó" />
-            </picture>
-          </div>
-          <div>
-            <div class="brandTitle">Dashboard</div>
-            <div class="brandSub" id="brandSub">—</div>
-          </div>
+        <div class="brand brandModern">
+          <picture class="brandPicture">
+            <source srcset="/img/icipo_logo[dark].png" media="(prefers-color-scheme: dark)">
+            <img class="brandLogo" src="/img/icipo_logo[dark].png" alt="iCipó" />
+          </picture>
+          <span class="brandFallback">iCipó</span>
+          <span class="brandSub hidden" id="brandSub">—</span>
         </div>
 
-        <nav class="nav u-flex-fill-col u-scroll-y">
-          <button class="navBtn active" data-view="overview">📌 Visão geral</button>
-          <button class="navBtn" data-view="phases">🧭 Fases</button>
-          <button class="navBtn" data-view="categories">🎨 Categorias</button>
-          <button class="navBtn" data-view="papers">📚 Artigos</button>
+        <nav class="nav u-flex-fill-col u-scroll-y" aria-label="Navegação principal">
+          <button class="navBtn active" data-view="overview"><span class="navIcon">⌂</span><span>Visão Geral</span></button>
+          <button class="navBtn" data-view="phases"><span class="navIcon">◇</span><span>Fases</span></button>
+          <button class="navBtn" data-view="categories"><span class="navIcon">□</span><span>Categorias</span></button>
+          <button class="navBtn" data-view="papers"><span class="navIcon">▤</span><span>Artigos</span></button>
         </nav>
 
-        <div class="sideFooter">
-          <button id="btnProjects" class="ghost">📁 Projetos</button>
-          <button id="btnOptions" class="ghost">⚙️ Configurações</button>
-          <div class="hint">Dica: marque artigos no Scholar com botão direito → “Marcar link” → categoria.</div>
+        <div class="sideFooter sideFooterModern">
+          <div class="sidebarProjectSummary" aria-label="Informações do projeto">
+            <div class="sidebarSectionTitle">Sobre o projeto</div>
+            <div class="sidebarInfoBlock">
+              <span>Pesquisadores</span>
+              <strong id="sidebarResearchers">—</strong>
+            </div>
+            <div class="sidebarInfoBlock">
+              <span>Objetivo</span>
+              <strong id="sidebarObjective">—</strong>
+            </div>
+            <div class="sidebarInfoBlock">
+              <span>ID do projeto</span>
+              <strong id="sidebarProjectId">—</strong>
+            </div>
+          </div>
+          <div class="sidebarFooterActions">
+            <button id="btnProjects" class="ghost">Projetos</button>
+            <button id="btnOptions" class="ghost">Configurações</button>
+          </div>
         </div>
       </aside>
 
       <main class="main">
         <header class="topbar">
-          <div class="topLeft">
-            <h1 id="projectTitle">Projeto</h1>
-            <div class="meta" id="projectMeta">—</div>
+          <div class="currentProjectBlock">
+            <span class="topbarEyebrow">Projeto atual</span>
+            <div class="currentProjectPill">
+              <strong id="projectTitle">Projeto</strong>
+              <span class="projectStatus"><i></i> Ativo</span>
+            </div>
+            <div class="meta visually-hidden" id="projectMeta">—</div>
           </div>
         </header>
 
+
+        <!-- INTRODUÇÃO OBRIGATÓRIA DO DASHBOARD -->
+        <div id="dashboardIntroModal" class="dashboardIntroModal hidden" role="dialog" aria-modal="true" aria-labelledby="dashboardIntroTitle" aria-describedby="dashboardIntroDescription" aria-hidden="true">
+          <div class="dashboardIntroCard">
+            <div class="dashboardIntroEyebrow">Tutorial · Etapa 1 de 4</div>
+            <div class="dashboardIntroIcon" aria-hidden="true">⌂</div>
+            <h2 id="dashboardIntroTitle">Bem-vindo ao dashboard</h2>
+            <p id="dashboardIntroDescription">Aqui você acompanha o andamento do projeto, organiza as etapas da revisão e consulta os artigos marcados durante a pesquisa.</p>
+
+            <div class="dashboardIntroFeatures" aria-label="Recursos principais do dashboard">
+              <div><strong>Fases</strong><span>Estruturam o processo de seleção e análise.</span></div>
+              <div><strong>Categorias</strong><span>Classificam os artigos em cada etapa.</span></div>
+              <div><strong>Visão Geral</strong><span>Resume a distribuição e a evolução dos estudos.</span></div>
+            </div>
+
+            <div class="dashboardIntroNextStep">
+              <strong>Primeiro passo</strong>
+              <span>Crie a primeira fase para definir como os artigos serão avaliados.</span>
+            </div>
+
+            <div class="dashboardIntroActions">
+              <button id="btnDashboardIntroProjects" type="button" class="btn ghost">Voltar aos projetos</button>
+              <button id="btnContinueDashboardIntro" type="button" class="btn dashboardIntroPrimary">Começar</button>
+            </div>
+          </div>
+        </div>
+
         <!-- OVERVIEW -->
-        <section class="view u-flex-fill-col" id="view_overview">
-          <div class="kpiGrid">
-            <div class="kpi"><div class="kpiLabel">Total</div><div class="kpiVal" id="kpi_total">0</div></div>
-            <div class="kpi"><div class="kpiLabel">Categorias</div><div class="kpiVal" id="kpi_categories">0</div></div>
-            <div class="kpi"><div class="kpiLabel">Com categoria</div><div class="kpiVal" id="kpi_categorized">0</div></div>
-            <div class="kpi"><div class="kpiLabel">Sem categoria</div><div class="kpiVal" id="kpi_uncategorized">0</div></div>
-            <div class="kpi"><div class="kpiLabel">Com ano</div><div class="kpiVal" id="kpi_with_year">0</div></div>
-            <div class="kpi"><div class="kpiLabel">Sem ano</div><div class="kpiVal" id="kpi_without_year">0</div></div>
+        <section class="view overviewView u-flex-fill-col" id="view_overview">
+          <div class="overviewHeading">
+            <div>
+              <h2>Visão Geral</h2>
+              <p>Acompanhe o progresso do seu projeto e explore os principais indicadores.</p>
+            </div>
+            <div class="overviewUpdated"><span aria-hidden="true">◷</span><span id="overviewUpdatedAt">Última atualização: —</span></div>
           </div>
 
-          <div class="grid2">
-            <div class="card">
-              <div class="cardTitle">Artigos por categoria</div>
-              <div id="categoryBars" class="bars"></div>
-            </div>
-            <div class="card">
-              <div class="cardTitle">Publicações por ano</div>
-              <svg id="timeline" width="100%" height="180" role="img" aria-label="Histograma por ano"></svg>
-            </div>
+          <div class="overviewLayout overviewLayoutTop overviewLayoutPrimary">
+            <article class="overviewCard categoryDistributionCard">
+              <div class="overviewCardHeader">
+                <div class="overviewCardTitle"><span class="overviewTitleIcon">◫</span> Distribuição por categoria</div>
+              </div>
+              <div class="categoryDistributionBody">
+                <div id="categoryDonut" class="categoryDonut" role="img" aria-label="Distribuição dos artigos por categoria">
+                  <div class="categoryDonutCenter"><strong id="categoryDonutTotal">0</strong><span>Total</span></div>
+                </div>
+                <div id="categoryLegend" class="categoryLegend"></div>
+              </div>
+              <button class="overviewCardLink" type="button" data-overview-view="categories">Ver todas as categorias <span>→</span></button>
+            </article>
+
+            <article class="overviewCard phaseProgressCard">
+              <div class="overviewCardHeader">
+                <div class="overviewCardTitle"><span class="overviewTitleIcon">▧</span> Progresso das fases</div>
+              </div>
+              <div id="phaseProgressList" class="phaseProgressList"></div>
+              <button class="overviewCardLink" type="button" data-overview-view="phases">Ver todas as fases <span>→</span></button>
+            </article>
           </div>
 
-          <div class="card" style="margin-top:12px">
-            <div class="cardTitle">Artigos recentes</div>
-            <div class="tableWrap">
-              <table class="table" id="recentTable">
-                <thead><tr><th>Título</th><th style="width:190px">Categoria</th></tr></thead>
+          <article class="overviewCard recentArticlesCard">
+            <div class="overviewCardHeader">
+              <div class="overviewCardTitle"><span class="overviewTitleIcon">▣</span> Artigos recentes</div>
+            </div>
+            <div class="overviewRecentTableWrap">
+              <table class="overviewRecentTable" id="overviewRecentTable">
+                <thead>
+                  <tr><th>Título</th><th>Autores</th><th>Ano</th><th>Categoria</th><th>Fase</th><th>Adicionado em</th></tr>
+                </thead>
                 <tbody></tbody>
               </table>
             </div>
-          </div>
+            <button class="overviewCardLink" type="button" data-overview-view="papers">Ver todos os artigos <span>→</span></button>
+          </article>
         </section>
 
         <!-- PAPERS -->
         <section class="view hidden u-flex-fill-col" id="view_papers">
           <div class="toolbar">
             <input id="search" class="input" placeholder="Buscar por título, autor, tag…" />
-            <select id="f_category" class="select" aria-label="Filtrar artigos por categoria">
-              <option value="all">Categoria: todas</option>
-              <option value="uncategorized">Sem categoria</option>
-            </select>
             <button id="btnBulkDeleteMarked" class="btn">Remover marcado</button>
           </div>
 
@@ -191,6 +246,12 @@
             <button id="btnCloseCategory" class="btn">Fechar</button>
           </div>
           <div class="sidePanelBody u-scroll-y">
+            <div id="categoryRequiredNotice" class="phaseRequiredNotice hidden" role="alert" aria-live="assertive">
+              <span class="requiredStepLabel">Tutorial · Etapa 3 de 4</span>
+              <strong>Crie a primeira categoria para continuar</strong>
+              <span>As categorias organizam e identificam os artigos durante cada fase. Preencha o título e salve pelo menos uma categoria para avançar no tutorial.</span>
+            </div>
+
             <label for="categoryTitle">Título da categoria</label>
             <input id="categoryTitle" class="input" placeholder="Ex.: Incluído" />
             <div id="categoryTitleError" class="fieldError" aria-live="polite"></div>
@@ -225,12 +286,59 @@
           </div>
         </div>
 
-        <div id="phasePanel" class="sidePanel" aria-hidden="true">
+
+
+        <!-- SIDE PANEL: Tutorial da aba Artigos -->
+        <div id="articleTutorialPanel" class="sidePanel articleTutorialPanel" aria-hidden="true" inert>
           <div class="sidePanelHeader">
-            <div style="font-weight:900">Nova fase</div>
+            <div>
+              <div class="tutorialEyebrow">Tutorial · Etapa 4 de 4</div>
+              <div style="font-weight:900">Como funciona a aba Artigos</div>
+            </div>
+            <button id="btnCloseArticleTutorial" class="btn">Entendi</button>
+          </div>
+          <div class="sidePanelBody u-scroll-y">
+            <p class="articleTutorialIntro">Esta aba concentra os artigos marcados para o projeto e permite revisar rapidamente os dados coletados.</p>
+
+            <div class="articleTutorialStep">
+              <span class="articleTutorialNumber">1</span>
+              <div><strong>Adicione artigos pelo navegador</strong><span>No Google Scholar, clique com o botão direito em um resultado, escolha “Marcar link” e selecione uma categoria.</span></div>
+            </div>
+            <div class="articleTutorialStep">
+              <span class="articleTutorialNumber">2</span>
+              <div><strong>Pesquise os artigos</strong><span>Use a busca para localizar títulos, autores, anos, tags e categorias.</span></div>
+            </div>
+            <div class="articleTutorialStep">
+              <span class="articleTutorialNumber">3</span>
+              <div><strong>Confira ano e categoria</strong><span>As colunas Ano e Categoria ajudam a validar a publicação e a classificação aplicada ao estudo.</span></div>
+            </div>
+            <div class="articleTutorialStep">
+              <span class="articleTutorialNumber">4</span>
+              <div><strong>Abra a fonte original</strong><span>Use o botão da coluna Link para acessar a página do artigo e consultar o conteúdo completo.</span></div>
+            </div>
+            <div class="articleTutorialStep">
+              <span class="articleTutorialNumber">5</span>
+              <div><strong>Remova marcações quando necessário</strong><span>Selecione os artigos pela caixa lateral e utilize “Remover marcado” apenas quando quiser retirar a marcação do projeto.</span></div>
+            </div>
+
+            <div class="articleTutorialTip">
+              <strong>Próximo passo</strong>
+              <span>Abra o Google Scholar, marque um artigo em uma categoria e volte a esta tela para acompanhar a coleta.</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="phasePanel" class="sidePanel" aria-hidden="true" inert>
+          <div class="sidePanelHeader">
+            <div id="phasePanelTitle" style="font-weight:900">Nova fase</div>
             <button id="btnClosePhase" class="btn">Fechar</button>
           </div>
           <div class="sidePanelBody u-scroll-y">
+            <div id="phaseRequiredNotice" class="phaseRequiredNotice hidden" role="alert" aria-live="assertive">
+              <span class="requiredStepLabel">Tutorial · Etapa 2 de 4</span>
+              <strong>Crie a primeira fase para continuar</strong>
+              <span>Este projeto ainda não possui fases. Preencha os campos obrigatórios e salve uma fase para liberar o dashboard.</span>
+            </div>
             <label class="visually-hidden" for="phaseTitle">Título</label>
             <input id="phaseTitle" class="input" placeholder="Título da fase" />
             <div id="phaseTitleError" class="fieldError" aria-live="polite"></div>
