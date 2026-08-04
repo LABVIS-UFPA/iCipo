@@ -8,76 +8,6 @@ let renderToken = 0;
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
-// Helper: download a file in the browser (Blob + <a download>)
-// NOTE: This is intentionally UI-only. The formatting logic lives in core/entities.mjs (Paper).
-function downloadFile(filename, content, mime = "text/plain;charset=utf-8") {
-  try {
-    const blob = new Blob([content], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 2500);
-  } catch (e) {
-    console.error("downloadFile failed", e);
-    alert("Não foi possível baixar o arquivo.");
-  }
-}
-
-// Best-effort: format a citation from a Paper instance.
-// IMPORTANT: do not "link" this button with the Paper entity yet; we only prepare helpers.
-function formatCitationFromPaper(paper, format) {
-  if (!paper) return "";
-  const f = String(format || "").toLowerCase();
-  try {
-    if (f === "bibtex" && typeof paper.toBibTeX === "function") return paper.toBibTeX();
-    if (f === "abnt" && typeof paper.toABNT === "function") return paper.toABNT();
-    if (f === "apa" && typeof paper.toAPA === "function") return paper.toAPA();
-    if ((f === "endnote" || f === "ris") && typeof paper.toEndNoteRIS === "function") return paper.toEndNoteRIS();
-  } catch (e) {
-    console.warn("formatCitationFromPaper failed", e);
-  }
-  return "";
-}
-
-function defaultCitationFilename(format) {
-  const f = String(format || "").toLowerCase();
-  if (f === "bibtex") return "citations.bib";
-  if (f === "endnote" || f === "ris") return "citations.ris";
-  return "citations.txt";
-}
-
-function wireMenu({ buttonEl, panelEl, onPick }) {
-  if (!buttonEl || !panelEl) return;
-
-  const close = () => panelEl.classList.remove("open");
-  const toggle = (e) => {
-    e?.preventDefault?.();
-    e?.stopPropagation?.();
-    panelEl.classList.toggle("open");
-  };
-
-  buttonEl.addEventListener("click", toggle);
-  panelEl.addEventListener("click", (e) => {
-    const item = e.target.closest?.(".menuItem");
-    if (!item) return;
-    const fmt = item.dataset.format;
-    close();
-    onPick?.(fmt);
-  });
-  document.addEventListener("click", (e) => {
-    if (panelEl.contains(e.target) || buttonEl.contains(e.target)) return;
-    close();
-  });
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") close();
-  });
-}
-
-
 function formatResearchers(value) {
   if (Array.isArray(value)) return value.map(v => String(v).trim()).filter(Boolean).join(', ');
   if (typeof value === 'string') {
@@ -131,9 +61,45 @@ function hexToRgba(hex, alpha = 0.12) {
   return `rgba(${r}, ${g}, ${b}, ${safeAlpha})`;
 }
 
-function getPaperCategoryColor(paper, highlightedLinks = {}) {
-  const normalizedPaperUrl = normalizeUrl(paper?.url || "");
+function getPaperCategory(paper, highlightedLinks = {}) {
+  const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
+  const tags = Array.isArray(paper?.tags)
+    ? paper.tags.map(tag => String(tag).trim().toLowerCase()).filter(Boolean)
+    : [];
 
+  const categoryByTag = categories.find(cat => {
+    const label = String(cat?.label || "").trim().toLowerCase();
+    const title = String(cat?.title || "").trim().toLowerCase();
+    return (label && tags.includes(label)) || (title && tags.includes(title));
+  });
+  if (categoryByTag) return categoryByTag;
+
+  const normalizedPaperUrl = normalizeUrl(paper?.url || "");
+  let resolvedColor = "";
+  for (const [url, color] of Object.entries(highlightedLinks || {})) {
+    if (normalizeUrl(url) === normalizedPaperUrl) {
+      resolvedColor = normalizeHexColor(color);
+      break;
+    }
+  }
+
+  if (!resolvedColor) {
+    resolvedColor = normalizeHexColor(paper?.highlightedColor || paper?.highlightColor || paper?.color);
+  }
+
+  if (!resolvedColor) return null;
+  return categories.find(cat => normalizeHexColor(cat?.color) === resolvedColor) || null;
+}
+
+function getPaperCategoryKey(category) {
+  return String(category?.label || category?.title || "").trim();
+}
+
+function getPaperCategoryColor(paper, highlightedLinks = {}) {
+  const category = getPaperCategory(paper, highlightedLinks);
+  if (category) return normalizeHexColor(category.color);
+
+  const normalizedPaperUrl = normalizeUrl(paper?.url || "");
   for (const [url, color] of Object.entries(highlightedLinks || {})) {
     if (normalizeUrl(url) === normalizedPaperUrl) {
       const normalized = normalizeHexColor(color);
@@ -141,18 +107,32 @@ function getPaperCategoryColor(paper, highlightedLinks = {}) {
     }
   }
 
-  const directColor = normalizeHexColor(paper?.highlightedColor || paper?.highlightColor || paper?.color);
-  if (directColor) return directColor;
+  return normalizeHexColor(paper?.highlightedColor || paper?.highlightColor || paper?.color);
+}
 
-  const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
-  const tags = Array.isArray(paper?.tags) ? paper.tags.map(tag => String(tag).toLowerCase()) : [];
-  const category = categories.find(cat => {
-    const label = String(cat?.label || "").toLowerCase();
-    const title = String(cat?.title || "").toLowerCase();
-    return (label && tags.includes(label)) || (title && tags.includes(title));
-  });
+function syncCategoryFilterOptions() {
+  const select = document.getElementById("f_category");
+  if (!select) return;
 
-  return normalizeHexColor(category?.color);
+  const previous = select.value || "all";
+  const categories = [...(Array.isArray(state?.project?.categories) ? state.project.categories : [])]
+    .sort((a, b) => String(a?.title || a?.label || "").localeCompare(String(b?.title || b?.label || "")));
+
+  select.innerHTML = `
+    <option value="all">Categoria: todas</option>
+    <option value="uncategorized">Sem categoria</option>
+  `;
+
+  for (const category of categories) {
+    const key = getPaperCategoryKey(category);
+    if (!key) continue;
+    const option = document.createElement("option");
+    option.value = key;
+    option.textContent = category.title || category.label || key;
+    select.appendChild(option);
+  }
+
+  select.value = Array.from(select.options).some(option => option.value === previous) ? previous : "all";
 }
 
 function loadCategories() {
@@ -461,16 +441,23 @@ function setActiveView(view) {
   $$(".view").forEach(v => v.classList.toggle("hidden", v.id !== `view_${view}`));
 }
 
-function computeCounts() {
-  const total = state.papers.length;
-  const included = state.papers.filter(p => p.status === "included").length;
-  const excluded = state.papers.filter(p => p.status === "excluded").length;
-  const pending = state.papers.filter(p => p.status === "pending").length;
-  const duplicate = state.papers.filter(p => p.status === "duplicate").length;
-  const seed = state.papers.filter(p => p.origin === "seed").length;
-  const backward = state.papers.filter(p => p.origin === "backward").length;
-  const forward = state.papers.filter(p => p.origin === "forward").length;
-  return { total, included, excluded, pending, duplicate, seed, backward, forward };
+function computeOverviewMetrics(highlightedLinks = {}) {
+  const papers = Array.isArray(state?.papers) ? state.papers : [];
+  const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
+  const categorized = papers.filter(paper => Boolean(getPaperCategory(paper, highlightedLinks))).length;
+  const withYear = papers.filter(paper => {
+    const year = Number(paper?.year);
+    return Number.isFinite(year) && year > 1900 && year < 2100;
+  }).length;
+
+  return {
+    total: papers.length,
+    categories: categories.length,
+    categorized,
+    uncategorized: papers.length - categorized,
+    withYear,
+    withoutYear: papers.length - withYear,
+  };
 }
 
 function ensureHistory(p) {
@@ -540,39 +527,62 @@ function updateProjectMetaClamp(expand) {
   toggle.onclick = () => updateProjectMetaClamp(!desc.classList.contains("expanded"));
 }
 
-function renderOverview() {
-  const c = computeCounts();
-  $("#kpi_total").textContent = c.total;
-  $("#kpi_included").textContent = c.included;
-  $("#kpi_excluded").textContent = c.excluded;
-  $("#kpi_pending").textContent = c.pending;
-  $("#kpi_duplicate").textContent = c.duplicate;
-  $("#kpi_seed").textContent = c.seed;
+async function renderOverview() {
+  let highlightedLinks = {};
+  try {
+    const data = await storage.get(["highlightedLinks"]);
+    highlightedLinks = data?.highlightedLinks || {};
+  } catch (error) {
+    console.warn("Não foi possível carregar as categorias dos artigos no dashboard.", error);
+  }
 
-  // Status bars
-  const rows = [
-    { label: "Incluídos", val: c.included },
-    { label: "Excluídos", val: c.excluded },
-    { label: "Pendentes", val: c.pending },
-    { label: "Duplicados", val: c.duplicate },
-  ];
-  const max = Math.max(1, ...rows.map(r => r.val));
-  const bars = $("#statusBars");
+  const metrics = computeOverviewMetrics(highlightedLinks);
+  $("#kpi_total").textContent = metrics.total;
+  $("#kpi_categories").textContent = metrics.categories;
+  $("#kpi_categorized").textContent = metrics.categorized;
+  $("#kpi_uncategorized").textContent = metrics.uncategorized;
+  $("#kpi_with_year").textContent = metrics.withYear;
+  $("#kpi_without_year").textContent = metrics.withoutYear;
+
+  renderCategoryBars(highlightedLinks);
+  renderTimeline();
+  renderRecentTable(highlightedLinks);
+}
+
+function renderCategoryBars(highlightedLinks = {}) {
+  const bars = $("#categoryBars");
+  if (!bars) return;
   bars.innerHTML = "";
-  for (const r of rows) {
+
+  const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
+  const counts = new Map(categories.map(category => [getPaperCategoryKey(category), 0]));
+  let uncategorized = 0;
+
+  for (const paper of state?.papers || []) {
+    const category = getPaperCategory(paper, highlightedLinks);
+    const key = getPaperCategoryKey(category);
+    if (key && counts.has(key)) counts.set(key, (counts.get(key) || 0) + 1);
+    else uncategorized += 1;
+  }
+
+  const rows = categories.map(category => ({
+    label: category.title || category.label || "Categoria",
+    value: counts.get(getPaperCategoryKey(category)) || 0,
+    color: normalizeHexColor(category.color, "#7AA2FF"),
+  }));
+  rows.push({ label: "Sem categoria", value: uncategorized, color: "#7C879E" });
+
+  const max = Math.max(1, ...rows.map(row => row.value));
+  for (const row of rows) {
     const div = document.createElement("div");
     div.className = "barRow";
     div.innerHTML = `
-      <div>${r.label}</div>
-      <div class="bar"><span style="width:${(r.val / max) * 100}%"></span></div>
-      <div style="text-align:right;font-variant-numeric:tabular-nums">${r.val}</div>
+      <div>${escapeHtml(row.label)}</div>
+      <div class="bar"><span style="width:${(row.value / max) * 100}%;background:${escapeHtml(row.color)}"></span></div>
+      <div style="text-align:right;font-variant-numeric:tabular-nums">${row.value}</div>
     `;
     bars.appendChild(div);
   }
-
-  renderTimeline();
-  renderFlow();
-  renderPendingTable();
 }
 
 function renderTimeline() {
@@ -624,8 +634,7 @@ function renderTimeline() {
     rect.style.cursor = "pointer";
     rect.addEventListener("click", () => {
       setActiveView("papers");
-      $("#f_status").value = "all";
-      $("#f_origin").value = "all";
+      $("#f_category").value = "all";
       $("#search").value = String(y);
       renderPapersTable();
     });
@@ -653,70 +662,36 @@ function renderTimeline() {
   svg.appendChild(axis);
 }
 
-function renderFlow() {
-  const c = computeCounts();
-  const duplicates = c.duplicate;
-  const foundBackward = c.backward;
-  const foundForward = c.forward;
-  const foundSeed = c.seed;
-  const screened = c.total - duplicates;
-  const included = c.included;
-  const excluded = c.excluded;
-
-  const flow = $("#flow");
-  flow.innerHTML = "";
-  const boxes = [
-    { t: "Seeds", v: foundSeed },
-    { t: "Backward", v: foundBackward },
-    { t: "Forward", v: foundForward },
-    { t: "Duplicados", v: duplicates },
-    { t: "Triados", v: screened },
-    { t: "Incluídos", v: included },
-  ];
-  for (const b of boxes) {
-    const el = document.createElement("div");
-    el.className = "flowBox";
-    el.innerHTML = `<div class="t">${b.t}</div><div class="v">${b.v}</div>`;
-    flow.appendChild(el);
-  }
-}
-
-function renderPendingTable() {
-  const tbody = $("#pendingTable tbody");
+function renderRecentTable(highlightedLinks = {}) {
+  const tbody = $("#recentTable tbody");
+  if (!tbody) return;
   tbody.innerHTML = "";
-  const pending = state.papers
-    .filter(p => p.status === "pending")
+
+  const recent = [...(state?.papers || [])]
     .sort((a, b) => (b.updatedAt || b.createdAt || "").localeCompare(a.updatedAt || a.createdAt || ""))
     .slice(0, 8);
 
-  for (const p of pending) {
+  for (const paper of recent) {
+    const category = getPaperCategory(paper, highlightedLinks);
+    const color = getPaperCategoryColor(paper, highlightedLinks);
+    const categoryLabel = category?.title || category?.label || "Sem categoria";
+    const marker = color
+      ? `<span class="paperCategoryMarker" style="background:${escapeHtml(color)}" aria-hidden="true"></span>`
+      : "";
+
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${escapeHtml(p.title || p.url || "(sem título)")}</td>
-      <td><span class="pill">${escapeHtml(p.origin || "unknown")}</span></td>
-      <td>
-        <button class="btn" data-act="include" data-id="${p.id}">Incluir</button>
-        <button class="btn" data-act="exclude" data-id="${p.id}">Excluir</button>
-      </td>
+      <td>${escapeHtml(paper.title || paper.url || "(sem título)")}</td>
+      <td><span class="categoryBadge">${marker}<span>${escapeHtml(categoryLabel)}</span></span></td>
     `;
     tbody.appendChild(tr);
   }
 
-  tbody.querySelectorAll("button[data-act]").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      //TODO: migrar para usar o infrastructure/storage.mjs
-      // const id = btn.getAttribute("data-id");
-      // const act = btn.getAttribute("data-act");
-      // const paper = state.papers.find(x => x.id === id);
-      // if (!paper) return;
-      // const prev = paper.status || "pending";
-      // paper.status = act === "include" ? "included" : "excluded";
-      // pushHistory(paper, "status_change", { from: prev, to: paper.status, via: "pendingTable" });
-      // paper.updatedAt = svatNowIso();
-      // await persist();
-      // renderAll();
-    });
-  });
+  if (!recent.length) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td colspan="2" class="muted">Nenhum artigo cadastrado.</td>`;
+    tbody.appendChild(tr);
+  }
 }
 
 function escapeHtml(s) {
@@ -764,29 +739,29 @@ function showHistory(paperId) {
 function getFilters() {
   return {
     q: normalizeStr($("#search").value),
-    status: $("#f_status").value,
-    origin: $("#f_origin").value,
+    category: $("#f_category").value,
   };
 }
 
-function filteredPapers() {
-  const f = getFilters();
-  return state.papers.filter(p => {
-    if (f.status !== "all" && (p.status || "pending") !== f.status) return false;
-    if (f.origin !== "all" && (p.origin || "unknown") !== f.origin) return false;
-    if (!f.q) return true;
-    const hay = normalizeStr(`${p.title || ""} ${p.authorsRaw || ""} ${(p.tags || []).join(" ")} ${p.year || ""} ${p.url || ""}`);
-    return hay.includes(f.q);
-  });
+function paperMatchesFilters(paper, filters, highlightedLinks = {}) {
+  const category = getPaperCategory(paper, highlightedLinks);
+  const categoryKey = getPaperCategoryKey(category);
+
+  if (filters.category === "uncategorized" && category) return false;
+  if (filters.category !== "all" && filters.category !== "uncategorized" && categoryKey !== filters.category) return false;
+
+  if (!filters.q) return true;
+  const categoryText = category ? `${category.title || ""} ${category.label || ""}` : "sem categoria";
+  const hay = normalizeStr(`${paper.title || ""} ${paper.authorsRaw || ""} ${(paper.tags || []).join(" ")} ${paper.year || ""} ${paper.url || ""} ${categoryText}`);
+  return hay.includes(filters.q);
 }
 
 async function renderPapersTable() {
   // token for this render; only the latest token may write to the DOM
   const myToken = ++renderToken;
 
+  syncCategoryFilterOptions();
   const f = getFilters();
-  // base papers filtered
-  const base = filteredPapers();
 
   // fetch highlighted links and svat_papers
   let hl = {};
@@ -801,6 +776,8 @@ async function renderPapersTable() {
 
   // Early cancellation: if a newer render started, bail out
   if (myToken !== renderToken) return;
+
+  const base = (state.papers || []).filter(paper => paperMatchesFilters(paper, f, hl));
 
   const titleByUrl = new Map();
   for (const p of svat || []) {
@@ -825,19 +802,11 @@ async function renderPapersTable() {
       authorsRaw: '',
       createdAt: '',
       year: '',
-      origin: 'unknown',
-      status: 'pending',
       tags: [],
       url: url,
       highlightedColor: color,
     };
-    // apply simple filters similar to filteredPapers
-    if (f.status !== "all" && (item.status || "pending") !== f.status) continue;
-    if (f.origin !== "all" && (item.origin || "unknown") !== f.origin) continue;
-    if (f.q) {
-      const hay = normalizeStr(`${item.title || ''} ${item.authorsRaw || ''} ${(item.tags || []).join(' ')} ${item.year || ''} ${item.url || ''}`);
-      if (!hay.includes(f.q)) continue;
-    }
+    if (!paperMatchesFilters(item, f, hl)) continue;
     synth.push(item);
   }
 
@@ -848,6 +817,7 @@ async function renderPapersTable() {
   for (const p of rows) {
     const tags = Array.isArray(p.tags) ? p.tags.join(";") : "";
     // Use a light tint from the selected category so the title stays readable.
+    const category = getPaperCategory(p, hl);
     const categoryColor = getPaperCategoryColor(p, hl);
     const rowStyle = categoryColor
       ? `style="--paper-category-color:${escapeHtml(categoryColor)};--paper-category-tint:${escapeHtml(hexToRgba(categoryColor, 0.25))};--paper-category-tint-hover:${escapeHtml(hexToRgba(categoryColor, 0.50))}"`
@@ -862,27 +832,16 @@ async function renderPapersTable() {
         <td><input type="checkbox" class="rowCheck" data-id="${p.id}" /></td>
         <td>
           <div class="paperTitleWrap">
-            ${categoryMarker}
             <button class="linkBtn" data-show-history="${p.id}" title="Ver histórico">${escapeHtml(p.title || "(sem título)")}</button>
           </div>
           <div style="color:#666;font-size:11px;margin-top:4px">${escapeHtml(p.authorsRaw || "")} • ${escapeHtml(fmtDate(p.createdAt))}</div>
         </td>
         <td><input class="cellInput" data-field="year" data-id="${p.id}" value="${escapeHtml(p.year ?? "")}" placeholder="—" style="width:64px" /></td>
         <td>
-          <select class="cellSelect" data-field="origin" data-id="${p.id}">
-            ${opt("seed","seed",p.origin)}
-            ${opt("backward","backward",p.origin)}
-            ${opt("forward","forward",p.origin)}
-            ${opt("unknown","unknown",p.origin)}
-          </select>
-        </td>
-        <td>
-          <select class="cellSelect" data-field="status" data-id="${p.id}">
-            ${opt("pending","pending",p.status)}
-            ${opt("included","included",p.status)}
-            ${opt("excluded","excluded",p.status)}
-            ${opt("duplicate","duplicate",p.status)}
-          </select>
+          <span class="categoryBadge">
+            ${categoryMarker}
+            <span>${escapeHtml(category?.title || category?.label || "Sem categoria")}</span>
+          </span>
         </td>
         <td><input class="cellInput" data-field="tags" data-id="${p.id}" value="${escapeHtml(tags)}" placeholder="ex: vis;ml" /></td>
         <td><a class="link" href="${escapeHtml(p.url)}" target="_blank" rel="noreferrer">Abrir</a></td>
@@ -898,7 +857,6 @@ async function renderPapersTable() {
   tbody.innerHTML = rowsHtml;
 
   // Bind inputs
-  tbody.querySelectorAll(".cellSelect").forEach(el => el.addEventListener("change", onCellChange));
   tbody.querySelectorAll(".cellInput").forEach(el => el.addEventListener("change", onCellChange));
   tbody.querySelectorAll("button[data-show-history]").forEach(b => {
     b.addEventListener("click", () => showHistory(b.getAttribute("data-show-history")));
@@ -906,10 +864,6 @@ async function renderPapersTable() {
   $("#checkAll").checked = false;
 }
 
-function opt(value, label, current) {
-  const cur = current || (value === "pending" ? "pending" : "unknown");
-  return `<option value="${value}" ${value === cur ? "selected" : ""}>${label}</option>`;
-}
 
 async function onCellChange(e) {
   const el = e.target;
@@ -927,40 +881,13 @@ async function onCellChange(e) {
   } else {
     paper[field] = val;
   }
-  if (field === "status") {
-    pushHistory(paper, "status_change", { from: prev || "pending", to: paper.status, via: "table" });
-  } else {
-    pushHistory(paper, "update_field", { field, from: prev, to: paper[field] });
-  }
-  // paper.updatedAt = svatNowIso();
+  pushHistory(paper, "update_field", { field, from: prev, to: paper[field] });
   await persist();
-  renderOverview();
+  renderAll();
 }
 
 function selectedPaperIds() {
   return $$(".rowCheck:checked").map(ch => ch.getAttribute("data-id"));
-}
-
-async function bulkSet(field, value) {
-  const ids = selectedPaperIds();
-  if (!ids.length) {
-    alert("Selecione pelo menos 1 artigo.");
-    return;
-  }
-  for (const id of ids) {
-    const p = state.papers.find(x => x.id === id);
-    if (!p) continue;
-    const prev = p[field];
-    p[field] = value;
-    if (field === "status") {
-      pushHistory(p, "status_change", { from: prev || "pending", to: value, via: "bulk" });
-    } else {
-      pushHistory(p, "bulk_update", { field, from: prev, to: value });
-    }
-    // p.updatedAt = svatNowIso();
-  }
-  await persist();
-  renderAll();
 }
 
 async function bulkDeleteMarkedSelected() {
@@ -1061,19 +988,6 @@ function bindEvents() {
   $("#btnOptions").addEventListener("click", () => chrome.runtime.openOptionsPage());
   // (btnClear removed) — replaced by "Projetos"
 
-  // Download Citations menu (UI only — formatting lives in core/entities.mjs)
-  wireMenu({
-    buttonEl: document.getElementById("btnDownloadCitations"),
-    panelEl: document.getElementById("downloadCitationsPanel"),
-    onPick: (format) => {
-      // NOTE: Not linked yet — later we will pass a Paper instance here.
-      // For now, keep it non-breaking and user-friendly.
-      const msg = "(Em breve) Para baixar citações, primeiro selecione/abra um artigo.";
-      console.warn("Download Citations not wired yet", { format });
-      alert(msg);
-    }
-  });
-
   
   // History modal close
   const btnClose = document.getElementById("btnCloseHistory");
@@ -1084,7 +998,7 @@ function bindEvents() {
   });
 
   // Papers filters
-  ["search", "f_status", "f_origin"].forEach(id => {
+  ["search", "f_category"].forEach(id => {
     $("#" + id).addEventListener("input", renderPapersTable);
     $("#" + id).addEventListener("change", renderPapersTable);
   });
@@ -1093,10 +1007,6 @@ function bindEvents() {
     $$(".rowCheck").forEach(ch => ch.checked = checked);
   });
 
-  $("#btnBulkInclude").addEventListener("click", () => bulkSet("status", "included"));
-  $("#btnBulkExclude").addEventListener("click", () => bulkSet("status", "excluded"));
-  $("#btnBulkPending").addEventListener("click", () => bulkSet("status", "pending"));
-  $("#btnBulkDuplicate").addEventListener("click", () => bulkSet("status", "duplicate"));
   $("#btnBulkDeleteMarked").addEventListener("click", () => bulkDeleteMarkedSelected());
 
   // Categories CRUD

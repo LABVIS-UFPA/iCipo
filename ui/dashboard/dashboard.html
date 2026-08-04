@@ -59,17 +59,17 @@
         <section class="view u-flex-fill-col" id="view_overview">
           <div class="kpiGrid">
             <div class="kpi"><div class="kpiLabel">Total</div><div class="kpiVal" id="kpi_total">0</div></div>
-            <div class="kpi"><div class="kpiLabel">Incluídos</div><div class="kpiVal" id="kpi_included">0</div></div>
-            <div class="kpi"><div class="kpiLabel">Excluídos</div><div class="kpiVal" id="kpi_excluded">0</div></div>
-            <div class="kpi"><div class="kpiLabel">Pendentes</div><div class="kpiVal" id="kpi_pending">0</div></div>
-            <div class="kpi"><div class="kpiLabel">Duplicados</div><div class="kpiVal" id="kpi_duplicate">0</div></div>
-            <div class="kpi"><div class="kpiLabel">Seeds</div><div class="kpiVal" id="kpi_seed">0</div></div>
+            <div class="kpi"><div class="kpiLabel">Categorias</div><div class="kpiVal" id="kpi_categories">0</div></div>
+            <div class="kpi"><div class="kpiLabel">Com categoria</div><div class="kpiVal" id="kpi_categorized">0</div></div>
+            <div class="kpi"><div class="kpiLabel">Sem categoria</div><div class="kpiVal" id="kpi_uncategorized">0</div></div>
+            <div class="kpi"><div class="kpiLabel">Com ano</div><div class="kpiVal" id="kpi_with_year">0</div></div>
+            <div class="kpi"><div class="kpiLabel">Sem ano</div><div class="kpiVal" id="kpi_without_year">0</div></div>
           </div>
 
           <div class="grid2">
             <div class="card">
-              <div class="cardTitle">Status dos artigos</div>
-              <div id="statusBars" class="bars"></div>
+              <div class="cardTitle">Artigos por categoria</div>
+              <div id="categoryBars" class="bars"></div>
             </div>
             <div class="card">
               <div class="cardTitle">Publicações por ano</div>
@@ -77,19 +77,13 @@
             </div>
           </div>
 
-          <div class="grid2">
-            <div class="card">
-              <div class="cardTitle">Fluxo (PRISMA adaptado)</div>
-              <div id="flow" class="flow"></div>
-            </div>
-            <div class="card">
-              <div class="cardTitle">Pendentes recentes</div>
-              <div class="tableWrap">
-                <table class="table" id="pendingTable">
-                  <thead><tr><th>Título</th><th>Origem</th><th>Ações</th></tr></thead>
-                  <tbody></tbody>
-                </table>
-              </div>
+          <div class="card" style="margin-top:12px">
+            <div class="cardTitle">Artigos recentes</div>
+            <div class="tableWrap">
+              <table class="table" id="recentTable">
+                <thead><tr><th>Título</th><th style="width:190px">Categoria</th></tr></thead>
+                <tbody></tbody>
+              </table>
             </div>
           </div>
         </section>
@@ -98,34 +92,10 @@
         <section class="view hidden u-flex-fill-col" id="view_papers">
           <div class="toolbar">
             <input id="search" class="input" placeholder="Buscar por título, autor, tag…" />
-            <select id="f_status" class="select">
-              <option value="all">Status: todos</option>
-              <option value="pending">Pendentes</option>
-              <option value="included">Incluídos</option>
-              <option value="excluded">Excluídos</option>
-              <option value="duplicate">Duplicados</option>
+            <select id="f_category" class="select" aria-label="Filtrar artigos por categoria">
+              <option value="all">Categoria: todas</option>
+              <option value="uncategorized">Sem categoria</option>
             </select>
-            <select id="f_origin" class="select">
-              <option value="all">Origem: todas</option>
-              <option value="seed">Seed</option>
-              <option value="backward">Backward</option>
-              <option value="forward">Forward</option>
-              <option value="unknown">Desconhecida</option>
-            </select>
-            <div class="menu" id="downloadCitationsMenu">
-              <button id="btnDownloadCitations" class="btn">⬇️ Download Citations</button>
-              <div id="downloadCitationsPanel" class="menuPanel" aria-label="Menu de Download Citations">
-                <button class="menuItem" data-format="bibtex">BibTeX (.bib)</button>
-                <button class="menuItem" data-format="abnt">ABNT (texto)</button>
-                <button class="menuItem" data-format="apa">APA (texto)</button>
-                <button class="menuItem" data-format="endnote">EndNote / RIS (.ris)</button>
-              </div>
-            </div>
-
-            <button id="btnBulkInclude" class="btn">Incluir</button>
-            <button id="btnBulkExclude" class="btn">Excluir</button>
-            <button id="btnBulkPending" class="btn">Pendente</button>
-            <button id="btnBulkDuplicate" class="btn">Duplicado</button>
             <button id="btnBulkDeleteMarked" class="btn">Remover marcado</button>
           </div>
 
@@ -136,8 +106,7 @@
                   <th style="width:36px"><input type="checkbox" id="checkAll" /></th>
                   <th>Título</th>
                   <th style="width:72px">Ano</th>
-                  <th style="width:110px">Origem</th>
-                  <th style="width:110px">Status</th>
+                  <th style="width:190px">Categoria</th>
                   <th style="width:160px">Tags</th>
                   <th style="width:90px">Link</th>
                 </tr>
