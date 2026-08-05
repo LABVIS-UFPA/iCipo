@@ -1543,3 +1543,43 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
   -webkit-line-clamp: 6;
   line-clamp: 6;
 }
+
+/* Categorias: contraste automático entre a cor do cartão e seus textos. */
+.main .categoryList li{
+  color:var(--category-foreground,#101828);
+  border:1px solid var(--category-card-border,rgba(15,23,42,.14));
+}
+.main .categoryList li[data-category-tone="light"]{
+  --category-card-border:rgba(15,23,42,.16);
+  --category-action-bg:rgba(255,255,255,.72);
+  --category-action-border:rgba(15,23,42,.18);
+  --category-action-hover-bg:rgba(255,255,255,.92);
+}
+.main .categoryList li[data-category-tone="dark"]{
+  --category-card-border:rgba(255,255,255,.26);
+  --category-action-bg:rgba(0,0,0,.16);
+  --category-action-border:rgba(255,255,255,.28);
+  --category-action-hover-bg:rgba(0,0,0,.26);
+}
+.main .categoryList .title{
+  color:var(--category-foreground,#101828);
+}
+.main .categoryList .sub,
+.main .categoryList .meta{
+  color:var(--category-description,var(--category-foreground,#101828));
+}
+.main .categoryList .pill{
+  border-color:var(--category-action-border,rgba(15,23,42,.18));
+  box-shadow:0 0 0 2px var(--category-action-bg,rgba(255,255,255,.72));
+}
+.main .categoryList button,
+.main .categoryList button.dark{
+  border:1px solid var(--category-action-border,rgba(15,23,42,.18));
+  background:var(--category-action-bg,#eef2f7);
+  color:var(--category-foreground,#101828);
+}
+.main .categoryList button:hover,
+.main .categoryList button.dark:hover{
+  background:var(--category-action-hover-bg,#f7f9fc);
+  filter:none;
+}

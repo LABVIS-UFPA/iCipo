@@ -112,6 +112,23 @@ function getLuminanceFromHex(hex) {
 }
 
 
+function getContrastRatio(firstLuminance, secondLuminance) {
+  const lighter = Math.max(firstLuminance, secondLuminance);
+  const darker = Math.min(firstLuminance, secondLuminance);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function getReadableCategoryTextColor(backgroundColor) {
+  const backgroundLuminance = getLuminanceFromHex(backgroundColor);
+  const darkText = "#101828";
+  const lightText = "#FFFFFF";
+  const darkContrast = getContrastRatio(backgroundLuminance, getLuminanceFromHex(darkText));
+  const lightContrast = getContrastRatio(backgroundLuminance, getLuminanceFromHex(lightText));
+
+  return darkContrast >= lightContrast ? darkText : lightText;
+}
+
+
 function normalizeHexColor(value, fallback = "") {
   const color = String(value || "").trim();
   if (/^#[0-9a-f]{6}$/i.test(color)) return color.toUpperCase();
@@ -210,10 +227,15 @@ function loadCategories() {
   for (const cat of items) {
     const category = cat.title;
     const categoryLabel = cat.label;
-    const color = cat.color || "#ffffff";
+    const color = normalizeHexColor(cat.color, "#FFFFFF");
+    const textColor = getReadableCategoryTextColor(color);
+    const usesDarkText = textColor === "#101828";
 
     const li = document.createElement("li");
     li.style.backgroundColor = color;
+    li.style.setProperty("--category-foreground", textColor);
+    li.style.setProperty("--category-description", textColor);
+    li.dataset.categoryTone = usesDarkText ? "light" : "dark";
 
     const left = document.createElement("div");
     left.className = "left";
@@ -265,16 +287,6 @@ function loadCategories() {
         alert(error?.message || "Não foi possível excluir a categoria.");
       }
     });
-
-    const textColor = getLuminanceFromHex(color) < 0.5 ? "#fff" : "#000";
-    title.style.color = textColor;
-    meta.style.color = textColor;
-    editBtn.style.color = textColor;
-    btn.style.color = textColor;
-    if (textColor === "#000") {
-      editBtn.classList.add("dark");
-      btn.classList.add("dark");
-    }
 
     right.appendChild(meta);
     right.appendChild(editBtn);
