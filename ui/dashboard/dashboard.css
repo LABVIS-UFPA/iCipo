@@ -1669,7 +1669,7 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
 /* Resumo consolidado dos artigos na Visão Geral. */
 .paperMetricsGrid{
   display:grid;
-  grid-template-columns:repeat(4,minmax(0,1fr));
+  grid-template-columns:repeat(5,minmax(0,1fr));
   gap:12px;
   margin-bottom:14px;
 }
@@ -1705,6 +1705,7 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
 }
 .paperMetricCard--included{--metric-color:#168455;--metric-soft:#edf9f3;--metric-border:#d6eee2}
 .paperMetricCard--excluded{--metric-color:#c2414a;--metric-soft:#fff2f3;--metric-border:#f2dadd}
+.paperMetricCard--pending{--metric-color:#59677c;--metric-soft:#f2f5f8;--metric-border:#dfe5ec}
 .paperMetricCard--duplicate{--metric-color:#b56a09;--metric-soft:#fff8eb;--metric-border:#f1e1bf}
 .paperMetricIcon{
   width:38px;
@@ -1805,7 +1806,10 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
 .categoryMetricBadge--duplicate::before{background:#b56a09}
 .categoryMetricBadge--pending::before{background:#7b8799}
 
-@media (max-width:1180px){
+@media (max-width:1320px){
+  .paperMetricsGrid{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media (max-width:860px){
   .paperMetricsGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media (max-width:620px){

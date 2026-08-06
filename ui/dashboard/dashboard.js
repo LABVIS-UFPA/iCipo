@@ -1068,15 +1068,18 @@ function renderPaperMetrics(papers, highlightedLinks = {}) {
   const total = $("#paperMetricTotal");
   const included = $("#paperMetricIncluded");
   const excluded = $("#paperMetricExcluded");
+  const pending = $("#paperMetricPending");
   const duplicate = $("#paperMetricDuplicate");
   const totalDetail = $("#paperMetricTotalDetail");
   const includedDetail = $("#paperMetricIncludedDetail");
   const excludedDetail = $("#paperMetricExcludedDetail");
+  const pendingDetail = $("#paperMetricPendingDetail");
   const duplicateDetail = $("#paperMetricDuplicateDetail");
 
   if (total) total.textContent = String(metrics.total);
   if (included) included.textContent = String(metrics.included);
   if (excluded) excluded.textContent = String(metrics.excluded);
+  if (pending) pending.textContent = String(metrics.pending);
   if (duplicate) duplicate.textContent = String(metrics.duplicate);
 
   if (totalDetail) {
@@ -1088,6 +1091,7 @@ function renderPaperMetrics(papers, highlightedLinks = {}) {
   }
   if (includedDetail) includedDetail.textContent = formatMetricPercentage(metrics.included, metrics.total);
   if (excludedDetail) excludedDetail.textContent = formatMetricPercentage(metrics.excluded, metrics.total);
+  if (pendingDetail) pendingDetail.textContent = formatMetricPercentage(metrics.pending, metrics.total);
   if (duplicateDetail) duplicateDetail.textContent = formatMetricPercentage(metrics.duplicate, metrics.total);
 }
 
