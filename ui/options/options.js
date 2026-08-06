@@ -14,6 +14,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const checkOnOff = document.getElementById("checkOnOff");
   const extensionStatusText = document.getElementById("extensionStatusText");
   const extensionStatusDot = document.getElementById("extensionStatusDot");
+  const extensionToggleText = document.getElementById("extensionToggleText");
   const uploadFileName = document.getElementById("uploadFileName");
   const btnDashboard = document.getElementById("btnDashboard");
 
@@ -23,14 +24,44 @@ document.addEventListener("DOMContentLoaded", () => {
   function updateExtensionStatus(active) {
     if (extensionStatusText) extensionStatusText.textContent = active ? "Extensão ativada" : "Extensão desativada";
     if (extensionStatusDot) extensionStatusDot.classList.toggle("active", active);
+    if (extensionToggleText) extensionToggleText.textContent = active ? "Desligar extensão" : "Ativar extensão";
+    if (checkOnOff) checkOnOff.setAttribute("aria-label", active ? "Desligar extensão" : "Ativar extensão");
   }
 
-  function loadOnOff() {
-    storage.get("active").then((data) => {
-      const active = !!(data && data.active);
+  function sendRuntimeMessage(message) {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage(message, (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        resolve(response);
+      });
+    });
+  }
+
+  async function loadOnOff() {
+    if (!checkOnOff) return;
+    checkOnOff.disabled = true;
+
+    try {
+      const response = await sendRuntimeMessage({ action: "getExtensionState" });
+      if (!response?.ok) throw new Error(response?.message || "Não foi possível consultar o estado da extensão.");
+      const active = response.active !== false;
       checkOnOff.checked = active;
       updateExtensionStatus(active);
-    });
+      checkOnOff.disabled = false;
+    } catch (error) {
+      // Fallback local para manter o controle utilizável mesmo se o service
+      // worker estiver reiniciando no momento da abertura da página.
+      chrome.storage.local.get(["active"], (data) => {
+        const active = data?.active !== false;
+        checkOnOff.checked = active;
+        updateExtensionStatus(active);
+        checkOnOff.disabled = false;
+      });
+      console.warn("Não foi possível consultar o estado da extensão no background.", error);
+    }
   }
 
   function normalizeUrl(url) {
@@ -241,13 +272,37 @@ document.addEventListener("DOMContentLoaded", () => {
   // =====================
   // Events: On/Off, categories, links, backup
   // =====================
-  checkOnOff.addEventListener("change", () => {
-    const active = checkOnOff.checked;
-    updateExtensionStatus(active);
-    storage.set({ active }).then(() => {
-      console.log(active ? "Ativo." : "Desativado.");
+  if (checkOnOff) {
+    checkOnOff.addEventListener("change", async () => {
+      const requestedActive = checkOnOff.checked;
+      const previousActive = !requestedActive;
+      const control = checkOnOff.closest(".switchControl");
+
+      checkOnOff.disabled = true;
+      control?.classList.add("isBusy");
+      updateExtensionStatus(requestedActive);
+
+      try {
+        const response = await sendRuntimeMessage({
+          action: "setExtensionActive",
+          active: requestedActive,
+        });
+        if (!response?.ok) throw new Error(response?.message || "Não foi possível alterar o estado da extensão.");
+
+        const confirmedActive = response.active !== false;
+        checkOnOff.checked = confirmedActive;
+        updateExtensionStatus(confirmedActive);
+        console.log(confirmedActive ? "Extensão ativada." : "Extensão desativada.");
+      } catch (error) {
+        checkOnOff.checked = previousActive;
+        updateExtensionStatus(previousActive);
+        alert(`Não foi possível ${requestedActive ? "ativar" : "desligar"} a extensão. ${error?.message || "Tente novamente."}`);
+      } finally {
+        checkOnOff.disabled = false;
+        control?.classList.remove("isBusy");
+      }
     });
-  });
+  }
 
   if (btnDashboard) {
     btnDashboard.addEventListener("click", () => {
@@ -360,7 +415,12 @@ document.addEventListener("DOMContentLoaded", () => {
   refreshServerState();
 
   // Listen for background updates
-  chrome.storage.onChanged.addListener((changes) => {
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === "local" && changes.active && checkOnOff) {
+      const active = changes.active.newValue !== false;
+      checkOnOff.checked = active;
+      updateExtensionStatus(active);
+    }
     if (changes.server_status) setServerStatus(changes.server_status.newValue);
     if (changes.server_messages) renderServerLogFromArray(changes.server_messages.newValue || []);
   });

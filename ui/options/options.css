@@ -119,6 +119,7 @@ button{border:0}
 .extensionStateTop strong{font-size:11px;color:#fff}
 .extensionStateTop small{font-size:9px;color:rgba(228,237,246,.54)}
 .switchControl{display:flex;align-items:center;gap:8px;color:rgba(255,255,255,.82);font-size:10.5px;cursor:pointer;user-select:none}
+.switchControl.isBusy{opacity:.64;cursor:progress}
 .switchControl input{position:absolute;opacity:0;pointer-events:none}
 .switchTrack{
   width:35px;height:19px;flex:0 0 auto;padding:2px;

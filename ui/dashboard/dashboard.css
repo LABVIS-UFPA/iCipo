@@ -245,6 +245,7 @@ body{
 .cardTitle{font-weight:900;font-size:13px;margin-bottom:10px;letter-spacing:0.2px}
 
 .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+#view_phases .toolbar > div{min-width:0;flex-wrap:wrap}
 
 .input,.select{
   border:1px solid var(--border);
@@ -557,17 +558,45 @@ svg .axis line, svg .axis path{stroke: rgba(234,240,255,0.18)}
 }
 
 /* ====== Phases UI ====== */
-.phasesRow{padding:8px 6px}
-.phasesList{
+.phasesRow{
   display:flex;
-  gap:48px; /* aumentado mais para dar ainda mais espaço entre cards */
-  align-items:flex-start;
-  padding:12px;
-  overflow-x:auto;
+  flex:1 1 auto;
+  min-width:0;
+  min-height:0;
+  padding:8px 6px;
+  overflow:hidden;
 }
+.phasesList{
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(250px, 1fr));
+  grid-auto-rows:220px;
+  gap:16px;
+  align-content:start;
+  align-items:stretch;
+  width:100%;
+  min-width:0;
+  height:100%;
+  padding:12px;
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
+  scrollbar-width:thin;
+  scrollbar-color:#b8c2cf transparent;
+}
+.phasesList::-webkit-scrollbar{width:8px;height:8px}
+.phasesList::-webkit-scrollbar-track{background:transparent}
+.phasesList::-webkit-scrollbar-thumb{
+  border:2px solid transparent;
+  border-radius:999px;
+  background:#b8c2cf;
+  background-clip:padding-box;
+}
+.phasesList::-webkit-scrollbar-thumb:hover{background:#98a5b5;background-clip:padding-box}
 .phaseCard{
-  min-width:220px;
-  max-width:320px;
+  width:100%;
+  min-width:0;
+  max-width:none;
   background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
   border:1px solid rgba(255,255,255,0.04);
   border-radius:12px;
@@ -585,28 +614,12 @@ svg .axis line, svg .axis path{stroke: rgba(234,240,255,0.18)}
 }
 .phaseCard{position:relative}
 
-/* Arrow indicator between phase cards (visual progression) */
-.phaseCard:not(:last-child)::after{
-  content: '➜';
-  position:absolute;
-  right:-44px; /* deslocado para acompanhar o gap maior */
-  top:50%;
-  transform:translateY(-50%);
-  background: rgba(255,255,255,0.03);
-  color: var(--muted);
-  border-radius:999px;
-  padding:6px 8px;
-  font-size:13px;
-  box-shadow: 0 6px 14px rgba(0,0,0,0.12);
-  pointer-events:none;
-}
-
-@media (max-width:980px){
-  .phaseCard:not(:last-child)::after{display:none}
-}
+/* A ordem da grade representa a progressão. Setas externas foram removidas
+   para que nenhuma decoração ultrapasse a largura disponível. */
+.phaseCard:not(:last-child)::after{display:none}
 .phaseCardHeader{display:flex;gap:10px;align-items:center}
 .statusDot{width:12px;height:12px;border-radius:50%;background: transparent;border:1px solid rgba(255,255,255,0.06);box-shadow:none}
-.phaseHeadText{display:flex;flex-direction:column}
+.phaseHeadText{display:flex;flex:1;min-width:0;flex-direction:column}
 .phaseCard .phaseTitle{font-weight:900;font-size:15px;line-height:1.2;margin:0}
 /* prevent long titles from expanding card: clamp to 2 lines with ellipsis */
 .phaseCard .phaseTitle{
@@ -803,10 +816,22 @@ body.no-scroll{overflow:hidden}
 /* icon removed */
 .fieldError.visible{opacity:1;transform:translateY(0)}
 
-/* Make phases list look fine on small screens */
+/* Make phases list look fine on smaller screens */
 @media (max-width: 980px){
-  .phasesList{padding-bottom:40px}
+  .phasesList{
+    grid-template-columns:repeat(auto-fill, minmax(230px, 1fr));
+    padding:10px;
+  }
   .sidePanel{width:100%;}
+}
+
+@media (max-width: 620px){
+  .phasesRow{padding-inline:0}
+  .phasesList{
+    grid-template-columns:minmax(0, 1fr);
+    gap:12px;
+    padding:8px 2px 24px;
+  }
 }
 
 /* ===== Category CRUD side panel ===== */

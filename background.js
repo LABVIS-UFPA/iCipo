@@ -2,6 +2,58 @@ import {hashId, inferFromCategory, normalizeMetricType} from './core/utils.mjs';
 import {storage} from './infrastructure/storage.mjs';
 import { wsManager } from './infrastructure/socketManager.mjs';
 
+const EXTENSION_ACTIVE_KEY = 'active';
+
+function getChromeLocal(keys) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(keys, (result) => {
+      if (chrome.runtime.lastError) {
+        console.warn('iCipo: falha ao ler o estado da extensão.', chrome.runtime.lastError.message);
+        resolve({});
+        return;
+      }
+      resolve(result || {});
+    });
+  });
+}
+
+function setChromeLocal(items) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set(items, () => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+async function getExtensionActive() {
+  const data = await getChromeLocal([EXTENSION_ACTIVE_KEY]);
+  // Compatibilidade com instalações anteriores: ausência do campo significa
+  // extensão ligada. Somente o valor booleano false a desativa.
+  return data[EXTENSION_ACTIVE_KEY] !== false;
+}
+
+async function ensureExtensionActiveSetting() {
+  const data = await getChromeLocal([EXTENSION_ACTIVE_KEY]);
+  if (typeof data[EXTENSION_ACTIVE_KEY] === 'boolean') {
+    return data[EXTENSION_ACTIVE_KEY];
+  }
+
+  await setChromeLocal({ [EXTENSION_ACTIVE_KEY]: true });
+  return true;
+}
+
+async function applyExtensionActiveState(active) {
+  const nextActive = active !== false;
+  await setChromeLocal({ [EXTENSION_ACTIVE_KEY]: nextActive });
+  await createContextMenu();
+  await broadcastHighlightsRefresh();
+  return nextActive;
+}
+
 // Adiciona um listener para sincronizar os dados sempre que a conexão com o servidor for (re)estabelecida.
 // Isso garante que, ao iniciar o navegador ou reconectar, os links marcados sejam atualizados.
 wsManager.addOnOpenListener(async () => {
@@ -34,6 +86,11 @@ async function createContextMenu() {
       resolve();
     });
   });
+
+  // Ao desligar a extensão, todos os comandos de marcação são removidos.
+  // O dashboard e as configurações continuam acessíveis para permitir a
+  // reativação sem depender da página chrome://extensions.
+  if (!(await getExtensionActive())) return;
 
   const safeCreate = (opts) => {
     return new Promise((resolve) => {
@@ -90,12 +147,16 @@ async function createContextMenu() {
 }
 
 chrome.runtime.onInstalled.addListener(async () => {
+  await ensureExtensionActiveSetting();
   await createContextMenu();
 });
 
 // Try connect on startup once if configured
 chrome.runtime.onStartup.addListener(async () => {
-  wsManager.tryAutoConnect();
+  const active = await ensureExtensionActiveSetting();
+  await createContextMenu();
+  if (active) wsManager.tryAutoConnect();
+  await broadcastHighlightsRefresh();
 });
 
 // Abre o dashboard diretamente ao clicar no ícone da extensão.
@@ -107,6 +168,21 @@ chrome.action.onClicked.addListener(() => {
 
 // Allow options page to trigger menu rebuild.
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg && msg.action === 'getExtensionState') {
+    getExtensionActive()
+      .then((active) => sendResponse({ ok: true, active }))
+      .catch((error) => sendResponse({ ok: false, active: true, message: error?.message || String(error) }));
+    return true;
+  }
+  if (msg && msg.action === 'setExtensionActive') {
+    applyExtensionActiveState(msg.active)
+      .then((active) => sendResponse({ ok: true, active }))
+      .catch((error) => {
+        console.warn('iCipo: falha ao alterar o estado da extensão.', error);
+        sendResponse({ ok: false, message: error?.message || String(error) });
+      });
+    return true;
+  }
   if (msg && msg.action === 'getHighlightsFromWs') {
     getHighlightsSnapshotFromWs().then(sendResponse);
     return true;
@@ -203,6 +279,11 @@ function nowIso() {
 
 
 async function getHighlightsSnapshotFromWs() {
+  const active = await getExtensionActive();
+  if (!active) {
+    return { highlightedLinks: {}, active: false };
+  }
+
   try {
     const data = await storage.getAllHighlightedLinksForActiveProject();
     return {
@@ -211,17 +292,24 @@ async function getHighlightsSnapshotFromWs() {
     };
   } catch (error) {
     console.warn('iCipo: falha ao buscar highlights via WebSocket.', error);
-    return { highlightedLinks: {}, active: false, error: error?.message || String(error) };
+    // Falha de conexão não equivale a desligar a extensão.
+    return { highlightedLinks: {}, active: true, error: error?.message || String(error) };
   }
 }
 
 async function broadcastHighlightsRefresh() {
   if (typeof chrome === 'undefined' || !chrome.tabs) return;
-  const tabs = await chrome.tabs.query({});
-  await Promise.all(tabs.map((targetTab) => {
-    if (!targetTab?.id) return Promise.resolve();
-    return chrome.tabs.sendMessage(targetTab.id, { action: 'refreshHighlights' }).catch(() => undefined);
-  }));
+  try {
+    const tabs = await chrome.tabs.query({});
+    await Promise.all(tabs.map((targetTab) => {
+      if (!targetTab?.id) return Promise.resolve();
+      return chrome.tabs.sendMessage(targetTab.id, { action: 'refreshHighlights' }).catch(() => undefined);
+    }));
+  } catch (error) {
+    // Páginas internas do navegador ou uma aba sendo fechada não devem fazer
+    // a troca de estado da extensão falhar para o usuário.
+    console.warn('iCipo: não foi possível atualizar todas as abas abertas.', error);
+  }
 }
 
 
@@ -229,6 +317,8 @@ async function broadcastHighlightsRefresh() {
 
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (!(await getExtensionActive())) return;
+
   if (info.menuItemId.startsWith("highlight_")) {
     const category_label = info.menuItemId.replace("highlight_", "");
     const data = await storage.get(["highlightedLinks", "svat_project", "svat_papers"]);
@@ -437,12 +527,14 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
 function highlightLink(linkUrl, color) {
   document.querySelectorAll(`a[href^='${linkUrl}']`).forEach(link => {
+    link.classList.add('ic-highlighted-link');
     link.style.backgroundColor = color;
   });
 }
 
 function removeHighlight(linkUrl) {
   document.querySelectorAll(`a[href^='${linkUrl}']`).forEach(link => {
+    link.classList.remove('ic-highlighted-link');
     link.style.backgroundColor = "";
   });
 }
