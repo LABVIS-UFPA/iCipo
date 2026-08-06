@@ -370,6 +370,9 @@ function removePaperFromPhase(paper, phaseLabel, project = null) {
       categoryLabel: null,
       status: paper.autoDuplicate ? 'duplicate' : 'pending',
       duplicateOfId: paper.autoDuplicate ? (paper.duplicateOfId || null) : null,
+      inherited: false,
+      entryType: 'new',
+      inheritedFromPhaseLabel: null,
       visited: false,
       updatedAt,
       history,
@@ -404,6 +407,11 @@ function removePaperFromPhase(paper, phaseLabel, project = null) {
     categoryLabel,
     status,
     duplicateOfId: paper.autoDuplicate ? (paper.duplicateOfId || null) : null,
+    inherited: latestClassification?.inherited === true
+      || String(latestClassification?.entryType || '').toLowerCase() === 'inherited',
+    entryType: latestClassification?.entryType
+      || (latestClassification?.inherited ? 'inherited' : 'new'),
+    inheritedFromPhaseLabel: latestClassification?.inheritedFromPhaseLabel || null,
     tags,
     visited: true,
     updatedAt,
@@ -577,6 +585,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             classifiedAt,
             duplicateOfId: originalId,
             automatic: true,
+            inherited: false,
+            entryType: 'new',
+            inheritedFromPhaseLabel: null,
           },
         },
         duplicateOfId: originalId,
@@ -585,6 +596,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         iterationId: phaseLabel,
         criteriaId: null,
         tags: ["duplicado-automatico"],
+        inherited: false,
+        entryType: 'new',
+        inheritedFromPhaseLabel: null,
         visited: true,
         createdAt: classifiedAt,
         updatedAt: classifiedAt,
@@ -640,14 +654,26 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     };
     const inferred = inferFromCategory(selectedCategory);
     const status = normalizeCategoryMetricType(selectedCategory.metricType, inferred.status);
+    const previousPhaseClassification = previousPaper.classifications?.[phaseLabel]
+      && typeof previousPaper.classifications[phaseLabel] === 'object'
+      ? previousPaper.classifications[phaseLabel]
+      : {};
+    const inheritedInCurrentPhase = previousPhaseClassification.inherited === true
+      || String(previousPhaseClassification.entryType || '').toLowerCase() === 'inherited'
+      || Boolean(previousPhaseClassification.inheritedFromPhaseLabel);
+    const entryType = previousPhaseClassification.entryType
+      || (inheritedInCurrentPhase ? 'inherited' : 'new');
     const classifications = {
       ...previousPaper.classifications,
       [phaseLabel]: {
-        ...(previousPaper.classifications?.[phaseLabel] || {}),
+        ...previousPhaseClassification,
         phaseLabel,
         categoryLabel,
         outcome: status,
         classifiedAt,
+        inherited: inheritedInCurrentPhase,
+        entryType,
+        inheritedFromPhaseLabel: previousPhaseClassification.inheritedFromPhaseLabel || null,
       },
     };
     const projectCategoryLabels = new Set(
@@ -694,6 +720,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       iterationId: phaseLabel,
       criteriaId: previousPaper.criteriaId || null,
       tags,
+      inherited: inheritedInCurrentPhase,
+      entryType,
+      inheritedFromPhaseLabel: previousPhaseClassification.inheritedFromPhaseLabel || null,
       visited: true,
       createdAt: previousPaper.createdAt || classifiedAt,
       updatedAt: classifiedAt,

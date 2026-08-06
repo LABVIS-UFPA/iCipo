@@ -402,7 +402,10 @@
             <div id="phaseCriteriaError" class="fieldError" aria-live="polite"></div>
 
             <label for="phaseCategories" class="phaseFieldLabel">Categorias usadas nesta fase</label>
-            <div class="categoryMetricHelp">Somente as categorias selecionadas aqui aparecerão no menu de marcação enquanto esta fase estiver ativa.</div>
+            <div class="categoryMetricHelp phaseTriageHelp">
+              <strong>Controle da triagem:</strong> somente as categorias selecionadas aparecem no menu de marcação e somente os links classificados com elas são realçados no Scholar. Na fase seguinte, os artigos incluídos na fase anterior entram novamente como <strong>Pendentes</strong>.
+              <span>Pendente → fila da triagem · Incluído → selecionado para a próxima fase · Excluído → removido da progressão.</span>
+            </div>
             <div id="phaseCategories" class="categoriesList" aria-live="polite"></div>
             <div id="phaseCategoriesError" class="fieldError" aria-live="polite"></div>
 

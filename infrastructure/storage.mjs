@@ -9,7 +9,11 @@
  */
 
 import { Project, Paper } from '../core/entities.mjs';
-import { normalizeCategoryMetricType, normalizeMetricType } from '../core/utils.mjs';
+import {
+  normalizeArticleUrl,
+  normalizeCategoryMetricType,
+  normalizeMetricType,
+} from '../core/utils.mjs';
 import { wsManager } from './socketManager.mjs';
 
 const ICIPO_DATA_REVISION_KEY = 'icipo_data_revision';
@@ -92,14 +96,32 @@ class NodeFsStrategy {
     const categoryLabels = new Set(
       normalized.categories.map(category => category?.label).filter(Boolean)
     );
-    normalized.phases = rawPhases.map((phase) => ({
-      ...(phase || {}),
-      completed: !!phase?.completed,
-      categories: [...new Set(
+    normalized.phases = rawPhases.map((phase) => {
+      const categories = [...new Set(
         (Array.isArray(phase?.categories) ? phase.categories : [])
           .filter(label => categoryLabels.has(label))
-      )],
-    }));
+      )];
+      const rawPapers = phase?.papers && typeof phase.papers === 'object'
+        ? phase.papers
+        : {};
+      const inheritanceCategoryLabel = categories.includes(phase?.inheritanceCategoryLabel)
+        ? phase.inheritanceCategoryLabel
+        : null;
+
+      return {
+        ...(phase || {}),
+        completed: !!phase?.completed,
+        categories,
+        inheritanceCategoryLabel,
+        papers: {
+          inheritedAccumulated: Array.isArray(rawPapers.inheritedAccumulated) ? rawPapers.inheritedAccumulated : [],
+          inherited: Array.isArray(rawPapers.inherited) ? rawPapers.inherited : [],
+          new: Array.isArray(rawPapers.new) ? rawPapers.new : [],
+          removed: Array.isArray(rawPapers.removed) ? rawPapers.removed : [],
+          selected: Array.isArray(rawPapers.selected) ? rawPapers.selected : [],
+        },
+      };
+    });
 
     // Migração de projetos que ainda guardavam a relação somente na categoria.
     for (const rawCategory of rawCategories) {
@@ -135,7 +157,379 @@ class NodeFsStrategy {
       }
     }
 
+    const categoryByLabel = new Map(
+      normalized.categories.map(category => [category?.label, category])
+    );
+    for (const phase of normalized.phases) {
+      const configuredInheritanceCategory = categoryByLabel.get(phase.inheritanceCategoryLabel);
+      if (
+        configuredInheritanceCategory
+        && phase.categories.includes(configuredInheritanceCategory.label)
+        && normalizeCategoryMetricType(configuredInheritanceCategory.metricType, 'pending') === 'pending'
+      ) {
+        continue;
+      }
+
+      const pendingCategory = phase.categories
+        .map(label => categoryByLabel.get(label))
+        .find(category => normalizeCategoryMetricType(category?.metricType, 'pending') === 'pending');
+      phase.inheritanceCategoryLabel = pendingCategory?.label || null;
+    }
+
     return normalized;
+  }
+
+  getPhaseScopedStoragePath(projectID, phaseLabel) {
+    if (!projectID || !phaseLabel) return null;
+    return this.path.join(projectID, 'phases', phaseLabel, 'storage.json');
+  }
+
+  normalizePaperReference(value) {
+    if (value && typeof value === 'object') {
+      if (value.id || value.id === 0) return String(value.id);
+      const normalizedUrl = normalizeArticleUrl(value.url || '');
+      return normalizedUrl || '';
+    }
+    if (value || value === 0) return String(value);
+    return '';
+  }
+
+  readProjectPaperEntries(projectID) {
+    const papersDir = this.path.join(this.baseDir, projectID, 'papers');
+    if (!this.fs.existsSync(papersDir)) return [];
+
+    const entries = [];
+    for (const filename of this.fs.readdirSync(papersDir)) {
+      if (!filename.endsWith('.json')) continue;
+      const relPath = this.path.join(projectID, 'papers', filename);
+      const paper = this.readJson(relPath);
+      if (!paper || typeof paper !== 'object') continue;
+      if (!paper.id && paper.id !== 0) paper.id = filename.replace(/\.json$/i, '');
+      entries.push({ filename, relPath, paper });
+    }
+    return entries;
+  }
+
+  getPaperClassificationForPhase(paper, phaseLabel) {
+    if (!paper || !phaseLabel) return null;
+    const classifications = paper.classifications
+      && typeof paper.classifications === 'object'
+      && !Array.isArray(paper.classifications)
+      ? paper.classifications
+      : {};
+    if (classifications[phaseLabel] && typeof classifications[phaseLabel] === 'object') {
+      return classifications[phaseLabel];
+    }
+
+    const paperPhaseLabel = paper.phaseLabel || paper.phaseId || paper.iterationId || null;
+    if (paperPhaseLabel !== phaseLabel) return null;
+    return {
+      phaseLabel,
+      categoryLabel: paper.categoryLabel || null,
+      outcome: normalizeMetricType(paper.status, 'pending'),
+      classifiedAt: paper.updatedAt || paper.createdAt || null,
+      inherited: !!paper.inherited,
+      entryType: paper.entryType || (paper.inherited ? 'inherited' : 'new'),
+      inheritedFromPhaseLabel: paper.inheritedFromPhaseLabel || null,
+    };
+  }
+
+  getCategoryMap(project = {}) {
+    return new Map(
+      (Array.isArray(project.categories) ? project.categories : [])
+        .filter(category => category?.label)
+        .map(category => [category.label, category])
+    );
+  }
+
+  getPhasePendingCategory(project, phase) {
+    if (!phase) return null;
+    const categoryMap = this.getCategoryMap(project);
+    const phaseCategoryLabels = Array.isArray(phase.categories) ? phase.categories : [];
+
+    const configured = categoryMap.get(phase.inheritanceCategoryLabel);
+    if (
+      configured
+      && phaseCategoryLabels.includes(configured.label)
+      && normalizeCategoryMetricType(configured.metricType, 'pending') === 'pending'
+    ) {
+      return configured;
+    }
+
+    return phaseCategoryLabels
+      .map(label => categoryMap.get(label))
+      .find(category => normalizeCategoryMetricType(category?.metricType, 'pending') === 'pending')
+      || null;
+  }
+
+  syncPhasePaperBuckets(projectID, project, { persist = false } = {}) {
+    if (!project || !Array.isArray(project.phases)) return project;
+
+    const paperEntries = this.readProjectPaperEntries(projectID);
+    let accumulatedInherited = new Set();
+
+    for (const phase of project.phases) {
+      const existingPapers = phase?.papers && typeof phase.papers === 'object'
+        ? phase.papers
+        : {};
+      const inherited = new Set();
+      const pending = new Set();
+      const selected = new Set();
+      const removed = new Set();
+      let classifiedRecords = 0;
+
+      for (const { paper } of paperEntries) {
+        if (paper?.visited === false) continue;
+        const classification = this.getPaperClassificationForPhase(paper, phase.label);
+        if (!classification) continue;
+
+        classifiedRecords += 1;
+        const reference = this.normalizePaperReference(paper);
+        if (!reference) continue;
+
+        const entryType = String(classification.entryType || '').toLowerCase();
+        if (
+          classification.inherited === true
+          || entryType === 'inherited'
+          || classification.inheritedFromPhaseLabel
+        ) {
+          inherited.add(reference);
+        }
+
+        const outcome = normalizeMetricType(classification.outcome ?? paper.status, 'pending');
+        if (outcome === 'included') selected.add(reference);
+        else if (outcome === 'excluded' || outcome === 'duplicate') removed.add(reference);
+        else pending.add(reference);
+      }
+
+      // Compatibilidade com projetos anteriores, cujos contadores existiam
+      // somente em Phase.papers. Assim que houver classificações persistidas,
+      // os quatro grupos passam a ser integralmente derivados dos artigos.
+      if (classifiedRecords === 0) {
+        for (const value of Array.isArray(existingPapers.inherited) ? existingPapers.inherited : []) {
+          const reference = this.normalizePaperReference(value);
+          if (reference) inherited.add(reference);
+        }
+        for (const value of Array.isArray(existingPapers.new) ? existingPapers.new : []) {
+          const reference = this.normalizePaperReference(value);
+          if (reference) pending.add(reference);
+        }
+        for (const value of Array.isArray(existingPapers.selected) ? existingPapers.selected : []) {
+          const reference = this.normalizePaperReference(value);
+          if (reference) selected.add(reference);
+        }
+        for (const value of Array.isArray(existingPapers.removed) ? existingPapers.removed : []) {
+          const reference = this.normalizePaperReference(value);
+          if (reference) removed.add(reference);
+        }
+      }
+
+      const legacyAccumulated = (Array.isArray(existingPapers.inheritedAccumulated)
+        ? existingPapers.inheritedAccumulated
+        : [])
+        .map(value => this.normalizePaperReference(value))
+        .filter(Boolean);
+      accumulatedInherited = new Set([
+        ...accumulatedInherited,
+        ...legacyAccumulated,
+        ...inherited,
+      ]);
+
+      phase.papers = {
+        inheritedAccumulated: [...accumulatedInherited],
+        inherited: [...inherited],
+        // "new" é a fila da triagem atual: artigos novos ou herdados que ainda
+        // estão classificados por uma categoria de impacto Pendente.
+        new: [...pending],
+        selected: [...selected],
+        // Excluídos e duplicatas automáticas deixam a fila e são removidos da
+        // progressão para a fase seguinte.
+        removed: [...removed],
+      };
+    }
+
+    if (persist) {
+      project.updatedAt = new Date().toISOString();
+      this.writeJson(this.path.join(projectID, 'project.json'), project);
+      if (this.activeProjectID === projectID) this.activeProjectData = project;
+    }
+
+    return project;
+  }
+
+  collectIncludedPapersForPhase(projectID, phaseLabel) {
+    if (!phaseLabel) return [];
+
+    const byIdentity = new Map();
+    const mergePaper = (paper) => {
+      if (!paper || typeof paper !== 'object' || paper.visited === false || paper.autoDuplicate) return;
+      const identity = (paper.id || paper.id === 0)
+        ? `id:${String(paper.id)}`
+        : `url:${normalizeArticleUrl(paper.url || '')}`;
+      if (!identity || identity === 'url:') return;
+
+      const existing = byIdentity.get(identity) || {};
+      const mergedClassifications = {
+        ...(existing.classifications && typeof existing.classifications === 'object' ? existing.classifications : {}),
+        ...(paper.classifications && typeof paper.classifications === 'object' ? paper.classifications : {}),
+      };
+      byIdentity.set(identity, {
+        ...existing,
+        ...paper,
+        classifications: mergedClassifications,
+      });
+    };
+
+    for (const { paper } of this.readProjectPaperEntries(projectID)) mergePaper(paper);
+
+    const previousScopedPath = this.getPhaseScopedStoragePath(projectID, phaseLabel);
+    const previousScoped = previousScopedPath ? (this.readJson(previousScopedPath) || {}) : {};
+    for (const paper of Array.isArray(previousScoped.svat_papers) ? previousScoped.svat_papers : []) {
+      mergePaper(paper);
+    }
+
+    return [...byIdentity.values()].filter((paper) => {
+      const classification = this.getPaperClassificationForPhase(paper, phaseLabel);
+      return classification
+        && normalizeMetricType(classification.outcome ?? paper.status, 'pending') === 'included';
+    });
+  }
+
+  inheritIncludedPapers(projectID, project, previousPhase, nextPhase) {
+    const inheritedPapers = previousPhase
+      ? this.collectIncludedPapersForPhase(projectID, previousPhase.label)
+      : [];
+    const pendingCategory = this.getPhasePendingCategory(project, nextPhase);
+
+    if (inheritedPapers.length && !pendingCategory) {
+      return {
+        status: 'error',
+        message: 'Selecione nesta fase pelo menos uma categoria com impacto "Pendente" para receber os artigos herdados.',
+      };
+    }
+
+    nextPhase.inheritanceCategoryLabel = pendingCategory?.label || null;
+    const inheritedAt = new Date().toISOString();
+    const categoryLabels = new Set(
+      (Array.isArray(project.categories) ? project.categories : [])
+        .map(category => category?.label)
+        .filter(Boolean)
+    );
+    const scopedPapers = [];
+    const highlightedLinks = {};
+    const inheritedReferences = [];
+
+    for (const sourcePaper of inheritedPapers) {
+      const paperId = sourcePaper.id || sourcePaper.id === 0
+        ? sourcePaper.id
+        : this.normalizePaperReference(sourcePaper);
+      if (!paperId && paperId !== 0) continue;
+
+      const classifications = sourcePaper.classifications
+        && typeof sourcePaper.classifications === 'object'
+        && !Array.isArray(sourcePaper.classifications)
+        ? { ...sourcePaper.classifications }
+        : {};
+      classifications[nextPhase.label] = {
+        phaseLabel: nextPhase.label,
+        categoryLabel: pendingCategory?.label || null,
+        outcome: 'pending',
+        classifiedAt: inheritedAt,
+        inherited: true,
+        entryType: 'inherited',
+        inheritedFromPhaseLabel: previousPhase?.label || null,
+      };
+
+      const baseTags = (Array.isArray(sourcePaper.tags) ? sourcePaper.tags : [])
+        .filter(tag => !categoryLabels.has(tag) && tag !== 'duplicado-automatico');
+      const tags = pendingCategory?.label
+        ? [...new Set([...baseTags, pendingCategory.label])]
+        : baseTags;
+      const history = Array.isArray(sourcePaper.history) ? [...sourcePaper.history] : [];
+      history.push({
+        ts: inheritedAt,
+        action: 'inherit',
+        details: {
+          fromPhaseLabel: previousPhase?.label || null,
+          toPhaseLabel: nextPhase.label,
+          category: pendingCategory?.label || null,
+          metricType: 'pending',
+        },
+      });
+
+      const inheritedPaper = {
+        ...sourcePaper,
+        id: paperId,
+        status: 'pending',
+        categoryLabel: pendingCategory?.label || null,
+        phaseLabel: nextPhase.label,
+        iterationId: nextPhase.label,
+        classifications,
+        duplicateOfId: null,
+        autoDuplicate: false,
+        duplicateSequence: null,
+        tags,
+        visited: true,
+        inherited: true,
+        entryType: 'inherited',
+        inheritedFromPhaseLabel: previousPhase?.label || null,
+        updatedAt: inheritedAt,
+        history,
+      };
+
+      const relPath = this.path.join(projectID, 'papers', `${paperId}.json`);
+      this.writeJson(relPath, inheritedPaper);
+      scopedPapers.push(inheritedPaper);
+      inheritedReferences.push(String(paperId));
+      if (inheritedPaper.url && pendingCategory?.color) {
+        highlightedLinks[inheritedPaper.url] = pendingCategory.color;
+      }
+    }
+
+    const previousScopedPath = previousPhase
+      ? this.getPhaseScopedStoragePath(projectID, previousPhase.label)
+      : null;
+    const previousScoped = previousScopedPath ? (this.readJson(previousScopedPath) || {}) : {};
+    const previousScopedProject = previousScoped.svat_project
+      && typeof previousScoped.svat_project === 'object'
+      ? previousScoped.svat_project
+      : {};
+    const scopedProject = {
+      ...previousScopedProject,
+      id: project.id || projectID,
+      title: project.name || project.title || previousScopedProject.title || 'Projeto',
+      activePhaseLabel: nextPhase.label,
+      currentIterationId: nextPhase.label,
+      updatedAt: inheritedAt,
+    };
+
+    const nextScopedPath = this.getPhaseScopedStoragePath(projectID, nextPhase.label);
+    this.writeJson(nextScopedPath, {
+      highlightedLinks,
+      svat_papers: scopedPapers,
+      svat_project: scopedProject,
+    });
+
+    nextPhase.papers = {
+      inheritedAccumulated: [
+        ...new Set([
+          ...(Array.isArray(previousPhase?.papers?.inheritedAccumulated)
+            ? previousPhase.papers.inheritedAccumulated.map(value => this.normalizePaperReference(value))
+            : []),
+          ...inheritedReferences,
+        ].filter(Boolean)),
+      ],
+      inherited: inheritedReferences,
+      new: inheritedReferences,
+      removed: [],
+      selected: [],
+    };
+
+    return {
+      status: 'ok',
+      inheritedCount: inheritedReferences.length,
+      pendingCategoryLabel: pendingCategory?.label || null,
+    };
   }
 
   cleanupDeletedPhasePaperReferences(projectID, deletedPhaseLabel, fallbackPhaseLabel = null) {
@@ -174,6 +568,10 @@ class NodeFsStrategy {
         paper.iterationId = paper.phaseLabel;
         paper.categoryLabel = latestClassification?.categoryLabel || null;
         paper.status = normalizeMetricType(latestClassification?.outcome, 'pending');
+        paper.inherited = latestClassification?.inherited === true
+          || String(latestClassification?.entryType || '').toLowerCase() === 'inherited';
+        paper.entryType = latestClassification?.entryType || (paper.inherited ? 'inherited' : 'new');
+        paper.inheritedFromPhaseLabel = latestClassification?.inheritedFromPhaseLabel || null;
         paper.updatedAt = new Date().toISOString();
         changed = true;
       }
@@ -190,6 +588,9 @@ class NodeFsStrategy {
         paper.iterationId = null;
         paper.categoryLabel = null;
         paper.status = 'pending';
+        paper.inherited = false;
+        paper.entryType = 'new';
+        paper.inheritedFromPhaseLabel = null;
         paper.visited = false;
         paper.updatedAt = new Date().toISOString();
         changed = true;
@@ -229,6 +630,7 @@ class NodeFsStrategy {
 
     // Merge: preserve existing properties, override/add with incoming projectData
     const merged = this.normalizeProjectPhaseCategoryModel({ ...existing, ...project });
+    this.syncPhasePaperBuckets(projectID, merged);
 
     console.log(`Saving project ${projectID} to disk at ${relPath}...`, merged);
 
@@ -268,20 +670,25 @@ class NodeFsStrategy {
 
   async loadProject(projectID) {
     const relPath = this.path.join(projectID, 'project.json');
-    try{
-      return { status: 'ok', data: this.readJson(relPath) };
-    }catch(e){
+    try {
+      const rawData = this.readJson(relPath);
+      if (!rawData) return { status: 'error', message: 'Projeto não encontrado.' };
+      const data = this.normalizeProjectPhaseCategoryModel(rawData);
+      this.syncPhasePaperBuckets(projectID, data);
+      if (JSON.stringify(rawData) !== JSON.stringify(data)) this.writeJson(relPath, data);
+      return { status: 'ok', data };
+    } catch (e) {
       return { status: 'error', message: e.message };
     }
-    
   }
 
   // Keep a project loaded in memory as "active"
   async openProject(projectID) {
-    // load project data
     const relPath = this.path.join(projectID, 'project.json');
-    const rawData = this.readJson(relPath) || {};
+    const rawData = this.readJson(relPath);
+    if (!rawData) return { status: 'error', message: 'Projeto não encontrado.' };
     const data = this.normalizeProjectPhaseCategoryModel(rawData);
+    this.syncPhasePaperBuckets(projectID, data);
     if (JSON.stringify(rawData) !== JSON.stringify(data)) {
       this.writeJson(relPath, data);
     }
@@ -348,12 +755,20 @@ class NodeFsStrategy {
   async savePaper(paper) {
     if (!paper || (!paper.id && !(paper.id === 0))) return { status: 'error', message: 'Paper JSON must include an id.' };
     const paperId = paper.id;
-    
+
     const projectID = this.activeProjectID || (paper.projectID || null);
     if (!projectID) return { status: 'error', message: 'Nenhum projeto está aberto no momento.' };
-    
+
     const relPath = this.path.join(projectID, 'papers', `${paperId}.json`);
     this.writeJson(relPath, paper);
+
+    const projectPath = this.path.join(projectID, 'project.json');
+    const rawProject = this.readJson(projectPath);
+    if (rawProject) {
+      const project = this.normalizeProjectPhaseCategoryModel(rawProject);
+      this.syncPhasePaperBuckets(projectID, project, { persist: true });
+    }
+
     return { status: "ok", message: "Paper saved." };
   }
 
@@ -366,9 +781,15 @@ class NodeFsStrategy {
 
   async deletePaper(paperId) {
     if (!this.activeProjectID) return { status: 'error', message: 'Nenhum projeto está aberto no momento.' };
-    const full = this.path.join(this.baseDir, this.activeProjectID, 'papers', `${paperId}.json`);
+    const projectID = this.activeProjectID;
+    const full = this.path.join(this.baseDir, projectID, 'papers', `${paperId}.json`);
     if (this.fs.existsSync(full)) {
       this.fs.unlinkSync(full);
+      const rawProject = this.readJson(this.path.join(projectID, 'project.json'));
+      if (rawProject) {
+        const project = this.normalizeProjectPhaseCategoryModel(rawProject);
+        this.syncPhasePaperBuckets(projectID, project, { persist: true });
+      }
       return { status: "ok", message: "Paper deleted." };
     }
     return { status: "error", message: "Paper not found." };
@@ -478,25 +899,83 @@ class NodeFsStrategy {
       return { status: 'error', message: 'Nenhum projeto ativo.', data: {} };
     }
 
-    // Fases são escopos independentes. O Google Scholar e a aba Artigos devem
-    // refletir somente a fase ativa; ao criar/remover a fase atual, a próxima
-    // atualização troca simultaneamente links, cores e artigos exibidos.
-    const scopedPath = this.getScopedStoragePath();
+    const rawProject = this.readJson(this.path.join(this.activeProjectID, 'project.json'))
+      || this.activeProjectData
+      || {};
+    const project = this.normalizeProjectPhaseCategoryModel(rawProject);
+    const phases = Array.isArray(project.phases) ? project.phases : [];
+    const activePhase = phases.find(phase => phase?.label === project.activePhaseLabel)
+      || phases.at(-1)
+      || null;
+    if (!activePhase) {
+      return {
+        status: 'ok',
+        data: { highlightedLinks: {}, svat_papers: [], svat_project: null },
+      };
+    }
+
+    const scopedPath = this.getPhaseScopedStoragePath(this.activeProjectID, activePhase.label);
     const activeScoped = scopedPath ? (this.readJson(scopedPath) || {}) : {};
-    const activeLinks = activeScoped.highlightedLinks;
-    const highlightedLinks = activeLinks
-      && typeof activeLinks === 'object'
-      && !Array.isArray(activeLinks)
-      ? activeLinks
+    const scopedPapers = Array.isArray(activeScoped.svat_papers) ? activeScoped.svat_papers : [];
+    const rawLinks = activeScoped.highlightedLinks
+      && typeof activeScoped.highlightedLinks === 'object'
+      && !Array.isArray(activeScoped.highlightedLinks)
+      ? activeScoped.highlightedLinks
       : {};
+
+    const selectedCategoryLabels = new Set(
+      (Array.isArray(activePhase.categories) ? activePhase.categories : []).filter(Boolean)
+    );
+    const categoryMap = this.getCategoryMap(project);
+    const highlightedLinks = {};
+    const paperUrls = new Set();
+
+    // A categoria escolhida no painel da fase é a fonte única da visibilidade no
+    // Scholar. O artigo continua persistido na fase, mas só é pintado quando sua
+    // classificação atual pertence a uma das categorias marcadas na fase ativa.
+    for (const paper of scopedPapers) {
+      if (!paper || typeof paper !== 'object' || paper.visited === false) continue;
+      const normalizedUrl = normalizeArticleUrl(paper.url || '');
+      if (normalizedUrl) paperUrls.add(normalizedUrl);
+      if (!normalizedUrl || paper.autoDuplicate) continue;
+
+      const classification = this.getPaperClassificationForPhase(paper, activePhase.label);
+      const categoryLabel = classification?.categoryLabel
+        || ((paper.phaseLabel || paper.iterationId) === activePhase.label ? paper.categoryLabel : null);
+      if (!categoryLabel || !selectedCategoryLabels.has(categoryLabel)) continue;
+
+      const category = categoryMap.get(categoryLabel);
+      if (!category) continue;
+      const outcome = normalizeMetricType(classification?.outcome ?? paper.status, 'pending');
+      if (outcome === 'duplicate') continue;
+
+      const rawUrl = String(paper.url || '').trim();
+      if (!rawUrl) continue;
+      highlightedLinks[rawUrl] = category.color || rawLinks[rawUrl] || 'yellow';
+    }
+
+    // Compatibilidade com marcações antigas que ainda não possuem um registro
+    // de artigo. Nelas, a cor é usada apenas para localizar uma categoria ativa;
+    // registros atuais nunca dependem da cor para determinar sua categoria.
+    const selectedColors = new Set(
+      [...selectedCategoryLabels]
+        .map(label => String(categoryMap.get(label)?.color || '').trim().toLowerCase())
+        .filter(Boolean)
+    );
+    for (const [url, color] of Object.entries(rawLinks)) {
+      const normalizedUrl = normalizeArticleUrl(url);
+      if (!normalizedUrl || paperUrls.has(normalizedUrl)) continue;
+      if (!selectedColors.has(String(color || '').trim().toLowerCase())) continue;
+      highlightedLinks[url] = color;
+    }
 
     return {
       status: 'ok',
       data: {
         highlightedLinks,
-        svat_papers: Array.isArray(activeScoped.svat_papers) ? activeScoped.svat_papers : [],
-        svat_project: activeScoped.svat_project || null
-      }
+        svat_papers: scopedPapers,
+        svat_project: activeScoped.svat_project || null,
+      },
     };
   }
 
@@ -515,56 +994,76 @@ class NodeFsStrategy {
       : typeof phaseData.criteria === 'string'
         ? phaseData.criteria.split(/\r?\n|,/).map((v) => v.trim()).filter(Boolean)
         : Array.isArray(existing.criteria) ? existing.criteria : [];
+    const categories = [...new Set(
+      (Array.isArray(phaseData.categories)
+        ? phaseData.categories
+        : (Array.isArray(existing.categories) ? existing.categories : []))
+        .filter(Boolean)
+    )];
+    const requestedInheritanceCategory = phaseData.inheritanceCategoryLabel
+      ?? existing.inheritanceCategoryLabel
+      ?? null;
+    const existingPapers = existing?.papers && typeof existing.papers === 'object'
+      ? existing.papers
+      : {};
 
     return {
       label,
       title,
       description: phaseData.description ?? existing.description ?? '',
       completed: typeof phaseData.completed === 'boolean' ? phaseData.completed : !!existing.completed,
-      categories: [...new Set(
-        (Array.isArray(phaseData.categories)
-          ? phaseData.categories
-          : (Array.isArray(existing.categories) ? existing.categories : []))
-          .filter(Boolean)
-      )],
+      categories,
+      inheritanceCategoryLabel: categories.includes(requestedInheritanceCategory)
+        ? requestedInheritanceCategory
+        : null,
       criteria,
       papers: {
-        inheritedAccumulated: existing?.papers?.inheritedAccumulated || [],
-        inherited: existing?.papers?.inherited || [],
-        new: existing?.papers?.new || [],
-        removed: existing?.papers?.removed || [],
-        selected: existing?.papers?.selected || []
-      }
+        inheritedAccumulated: Array.isArray(existingPapers.inheritedAccumulated) ? existingPapers.inheritedAccumulated : [],
+        inherited: Array.isArray(existingPapers.inherited) ? existingPapers.inherited : [],
+        new: Array.isArray(existingPapers.new) ? existingPapers.new : [],
+        removed: Array.isArray(existingPapers.removed) ? existingPapers.removed : [],
+        selected: Array.isArray(existingPapers.selected) ? existingPapers.selected : [],
+      },
     };
   }
 
   async savePhase(projectID, phaseData) {
     const relPath = this.path.join(projectID, 'project.json');
-    const project = this.readJson(relPath);
+    const rawProject = this.readJson(relPath);
 
     console.log('🧭 NodeFsStrategy.savePhase', { projectID, phaseData, relPath });
 
-    if (!project) {
+    if (!rawProject) {
       return { status: 'error', message: 'Projeto não encontrado.' };
     }
 
+    const project = this.normalizeProjectPhaseCategoryModel(rawProject);
     if (!Array.isArray(project.phases)) project.phases = [];
     if (!Array.isArray(project.categories)) project.categories = [];
+    this.syncPhasePaperBuckets(projectID, project);
 
     const latestPhase = project.phases.at(-1) || null;
     if (latestPhase && !latestPhase.completed) {
       return {
         status: 'error',
-        message: `Conclua a fase "${latestPhase.title || latestPhase.label}" antes de criar uma nova fase.`
+        message: `Conclua a fase "${latestPhase.title || latestPhase.label}" antes de criar uma nova fase.`,
+      };
+    }
+    const latestPendingCount = Array.isArray(latestPhase?.papers?.new)
+      ? latestPhase.papers.new.length
+      : 0;
+    if (latestPhase && latestPendingCount > 0) {
+      return {
+        status: 'error',
+        message: `A fase "${latestPhase.title || latestPhase.label}" ainda possui ${latestPendingCount} artigo(s) pendente(s). Conclua a triagem antes de criar a próxima fase.`,
       };
     }
 
     const phase = this.normalizePhase(phaseData);
-    // A criação nunca aceita uma fase previamente concluída. O usuário precisa
-    // salvá-la em análise e, depois, alterar explicitamente o rótulo da etapa
-    // mais recente para “Concluído”.
+    // Toda nova fase inicia em análise. Os artigos incluídos na etapa anterior
+    // são copiados para esta fase como pendentes e precisam ser triados de novo.
     phase.completed = false;
-    if (project.phases.some((p) => p.label === phase.label)) {
+    if (project.phases.some((item) => item.label === phase.label)) {
       return { status: 'error', message: `Já existe uma fase com o rótulo "${phase.label}".` };
     }
 
@@ -577,26 +1076,41 @@ class NodeFsStrategy {
       return { status: 'error', message: 'Selecione pelo menos uma categoria para a nova fase.' };
     }
 
+    const inheritanceResult = this.inheritIncludedPapers(projectID, project, latestPhase, phase);
+    if (inheritanceResult?.status === 'error') return inheritanceResult;
+
     project.phases.push(phase);
     project.activePhaseLabel = phase.label;
     project.updatedAt = new Date().toISOString();
+    this.syncPhasePaperBuckets(projectID, project);
 
     this.writeJson(relPath, project);
     if (this.activeProjectID === projectID) this.activeProjectData = project;
 
     console.log('✅ Fase salva no project.json:', phase);
-    return { status: 'ok', message: 'Fase salva com sucesso.', data: phase };
+    return {
+      status: 'ok',
+      message: inheritanceResult?.inheritedCount
+        ? `Fase salva com ${inheritanceResult.inheritedCount} artigo(s) herdado(s) para nova triagem.`
+        : 'Fase salva com sucesso.',
+      data: {
+        ...phase,
+        inheritedCount: inheritanceResult?.inheritedCount || 0,
+      },
+    };
   }
 
   async updatePhase(projectID, phaseLabel, phaseData) {
     const relPath = this.path.join(projectID, 'project.json');
-    const project = this.readJson(relPath);
+    const rawProject = this.readJson(relPath);
 
     console.log('🧭 NodeFsStrategy.updatePhase', { projectID, phaseLabel, phaseData, relPath });
 
-    if (!project) return { status: 'error', message: 'Projeto não encontrado.' };
+    if (!rawProject) return { status: 'error', message: 'Projeto não encontrado.' };
+    const project = this.normalizeProjectPhaseCategoryModel(rawProject);
     if (!Array.isArray(project.phases)) project.phases = [];
     if (!Array.isArray(project.categories)) project.categories = [];
+    this.syncPhasePaperBuckets(projectID, project);
 
     const idx = project.phases.findIndex((p) => p.label === phaseLabel);
     if (idx === -1) return { status: 'error', message: 'Fase não encontrada.' };
@@ -614,6 +1128,15 @@ class NodeFsStrategy {
     }
     if (project.categories.length && !phase.categories.length) {
       return { status: 'error', message: 'A fase deve manter pelo menos uma categoria ativa.' };
+    }
+
+    phase.inheritanceCategoryLabel = this.getPhasePendingCategory(project, phase)?.label || null;
+    const pendingCount = Array.isArray(phase?.papers?.new) ? phase.papers.new.length : 0;
+    if (phase.completed && pendingCount > 0) {
+      return {
+        status: 'error',
+        message: `Classifique os ${pendingCount} artigo(s) pendente(s) como incluídos ou excluídos antes de concluir esta fase.`,
+      };
     }
 
     const isLatestPhase = idx === project.phases.length - 1;
@@ -730,6 +1253,7 @@ class NodeFsStrategy {
       }
     }
 
+    this.syncPhasePaperBuckets(projectID, project);
     this.writeJson(relPath, project);
     if (this.activeProjectID === projectID) this.activeProjectData = project;
 
@@ -771,6 +1295,7 @@ class NodeFsStrategy {
     this.cleanupDeletedPhasePaperReferences(projectID, phaseLabel, previousPhase.label);
 
     project.updatedAt = new Date().toISOString();
+    this.syncPhasePaperBuckets(projectID, project);
     this.writeJson(relPath, project);
     if (this.activeProjectID === projectID) this.activeProjectData = project;
 

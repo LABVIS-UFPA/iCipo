@@ -735,7 +735,42 @@ button:disabled{
   border-color: transparent; background: linear-gradient(135deg,var(--accent),var(--accent2));
 }
 .phaseCategoryItem input[type=checkbox]:checked:after{opacity:1;transform:scale(1);background: rgba(255,255,255,0.95)}
-.phaseCategoryItem span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}
+.phaseCategoryItem > span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
+.phaseCategoryText{
+  display:flex;
+  min-width:0;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:2px;
+  line-height:1.15;
+}
+.phaseCategoryName{
+  display:block;
+  max-width:180px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.phaseCategoryMetric{
+  display:inline-flex;
+  align-items:center;
+  width:max-content;
+  max-width:100%;
+  padding:2px 6px;
+  border-radius:999px;
+  font-size:10px;
+  font-weight:900;
+  letter-spacing:.01em;
+  white-space:nowrap;
+}
+.phaseCategoryMetric--included{background:rgba(22,163,74,.12);color:#166534}
+.phaseCategoryMetric--excluded{background:rgba(220,38,38,.11);color:#991b1b}
+.phaseCategoryMetric--pending{background:rgba(217,119,6,.13);color:#92400e}
+.phaseTriageHelp{display:grid;gap:5px;line-height:1.45}
+.phaseTriageHelp > span{display:block;font-size:11px;opacity:.88}
+.sidePanel .phaseCategoryMetric--included{background:rgba(59,225,155,.13);color:#8ff0c7}
+.sidePanel .phaseCategoryMetric--excluded{background:rgba(255,112,112,.14);color:#ffb0b0}
+.sidePanel .phaseCategoryMetric--pending{background:rgba(255,209,102,.13);color:#ffe39b}
 
 /* For many categories, show two-column grid on wider panels */
 @media (min-width:700px){

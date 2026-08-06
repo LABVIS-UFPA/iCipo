@@ -221,6 +221,7 @@ function getPaperClassificationForPhase(paper, phaseLabel) {
 function getDynamicPhaseStats(phaseLabel) {
   const stats = {
     total: 0,
+    inherited: 0,
     included: 0,
     excluded: 0,
     duplicate: 0,
@@ -234,6 +235,14 @@ function getDynamicPhaseStats(phaseLabel) {
     if (!classification) continue;
 
     stats.total += 1;
+    const entryType = String(classification.entryType || "").toLowerCase();
+    if (
+      classification.inherited === true
+      || entryType === "inherited"
+      || classification.inheritedFromPhaseLabel
+    ) {
+      stats.inherited += 1;
+    }
     const outcome = normalizeMetricType(classification.outcome ?? paper.status, "pending");
     if (outcome === "included") stats.included += 1;
     else if (outcome === "excluded") stats.excluded += 1;
@@ -250,8 +259,8 @@ function getPaperCategory(paper, highlightedLinks = {}) {
   const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
   const classification = getPaperClassification(paper);
   const explicitCategoryCandidates = [
-    paper?.categoryLabel,
     classification?.categoryLabel,
+    paper?.categoryLabel,
     paper?.categoryId,
     typeof paper?.category === "string" ? paper.category : "",
   ].map(value => String(value || "").trim().toLowerCase()).filter(Boolean);
@@ -1223,12 +1232,18 @@ async function loadOverviewContext() {
     ...(activeScope.highlightedLinks || {}),
   };
 
+  const activePhaseLabel = state?.project?.activePhaseLabel
+    || state?.project?.phases?.at?.(-1)?.label
+    || null;
+  const activeConsolidatedPapers = (Array.isArray(state?.papers) ? state.papers : [])
+    .filter(paper => !activePhaseLabel || getPaperClassificationForPhase(paper, activePhaseLabel));
   const sources = [
     ...(Array.isArray(projectScope.svat_papers) ? projectScope.svat_papers : []),
     ...(Array.isArray(activeScope.svat_papers) ? activeScope.svat_papers : []),
-    // O registro individual consolidado entra por último e prevalece na Visão
-    // Geral, sem perder a classificação específica guardada em cada fase.
-    ...(Array.isArray(state?.papers) ? state.papers : []),
+    // O registro consolidado entra por último apenas quando pertence à fase
+    // ativa. Isso impede que decisões de fases anteriores contaminem as métricas
+    // e a distribuição visual da triagem corrente.
+    ...activeConsolidatedPapers,
   ];
 
   const byKey = new Map();
@@ -1446,7 +1461,7 @@ function getPhaseOverviewStats(phase, paperCount) {
   const added = Array.isArray(phasePapers.new) ? phasePapers.new : [];
   const selected = Array.isArray(phasePapers.selected) ? phasePapers.selected : [];
   const removed = Array.isArray(phasePapers.removed) ? phasePapers.removed : [];
-  const totalSet = new Set([...inherited, ...added].map(item => typeof item === "object" ? item.id || item.url : item).filter(Boolean));
+  const totalSet = new Set([...inherited, ...added, ...selected, ...removed].map(item => typeof item === "object" ? item.id || item.url : item).filter(Boolean));
   const processedSet = new Set([...selected, ...removed].map(item => typeof item === "object" ? item.id || item.url : item).filter(Boolean));
   let total = totalSet.size;
   let processed = processedSet.size;
@@ -2418,6 +2433,14 @@ function bindEvents() {
         alert('Somente a fase atual mais recente pode ter o rótulo alterado. Para retornar a uma fase anterior, remova a fase atual.');
         return;
       }
+      if (phaseLabelStatus !== 'done') {
+        const currentPhase = getProjectPhases().find(phase => phase?.label === phaseEditingLabel);
+        const currentStats = getPhaseStats(currentPhase || {});
+        if (currentStats.pending > 0) {
+          alert(`Ainda existem ${currentStats.pending} artigo(s) pendente(s). Classifique-os antes de concluir a fase.`);
+          return;
+        }
+      }
       phaseLabelStatus = (phaseLabelStatus === 'done') ? 'pending' : 'done';
       updateToggleButtonUI();
     });
@@ -2439,7 +2462,11 @@ function bindEvents() {
         .map((c) => ({
           title: c.title || c.label || String(c),
           label: c.label || c.title || String(c),
-          color: c.color || 'transparent'
+          color: c.color || 'transparent',
+          metricType: normalizeCategoryMetricType(
+            c.metricType,
+            inferMetricTypeFromCategory(c || {})
+          ),
         }))
         .sort((a,b)=>(a.title || '').localeCompare(b.title || ''));
 
@@ -2460,6 +2487,7 @@ function bindEvents() {
         cb.type = 'checkbox';
         cb.value = value;
         cb.id = id;
+        cb.dataset.metricType = cat.metricType;
         if(Array.isArray(selected) && selected.includes(value)) cb.checked = true;
         cb.addEventListener('change', () => {
           if (phaseCategoriesError && phaseCategoriesInput.querySelector('input[type=checkbox]:checked')) {
@@ -2475,11 +2503,18 @@ function bindEvents() {
         pill.style.flex = '0 0 auto';
         pill.style.background = cat.color || 'transparent';
         pill.style.border = '1px solid rgba(0,0,0,0.12)';
+        const textWrap = document.createElement('span');
+        textWrap.className = 'phaseCategoryText';
         const txt = document.createElement('span');
+        txt.className = 'phaseCategoryName';
         txt.textContent = cat.title || value;
+        const metric = document.createElement('small');
+        metric.className = `phaseCategoryMetric phaseCategoryMetric--${cat.metricType}`;
+        metric.textContent = getPaperMetricLabel(cat.metricType);
+        textWrap.append(txt, metric);
         wrap.appendChild(cb);
         wrap.appendChild(pill);
-        wrap.appendChild(txt);
+        wrap.appendChild(textWrap);
         phaseCategoriesInput.appendChild(wrap);
       }
     };
@@ -2514,8 +2549,11 @@ function bindEvents() {
     const papers = phase.papers || {};
     const dynamic = getDynamicPhaseStats(phase.label);
     return {
-      inherited: Array.isArray(papers.inherited) ? papers.inherited.length : 0,
-      added: Math.max(Array.isArray(papers.new) ? papers.new.length : 0, dynamic.total),
+      inherited: Math.max(
+        Array.isArray(papers.inherited) ? papers.inherited.length : 0,
+        dynamic.inherited
+      ),
+      pending: Math.max(Array.isArray(papers.new) ? papers.new.length : 0, dynamic.pending),
       selected: Math.max(Array.isArray(papers.selected) ? papers.selected.length : 0, dynamic.included),
       removed: Math.max(
         Array.isArray(papers.removed) ? papers.removed.length : 0,
@@ -2549,7 +2587,7 @@ function bindEvents() {
     el.dataset.categories = JSON.stringify(categories);
 
     const safeTitle = escapeHtml(title || '(sem título)');
-    const s = stats || { inherited:0, added:0, selected:0, removed:0, utilization:0 };
+    const s = stats || { inherited:0, pending:0, selected:0, removed:0, utilization:0 };
 
     el.innerHTML = `
       <div class="phaseCardHeader">
@@ -2560,12 +2598,12 @@ function bindEvents() {
       </div>
       <div class="phaseCardBody">
         <div class="papersSection">
-          <div class="papersTitle">📊 Papers</div>
+          <div class="papersTitle">📊 Triagem de artigos</div>
           <div class="papersGrid">
-            ${isFirstPhase ? '' : `<div><span class="muted">Herdados:</span> <strong>${s.inherited}</strong></div>`}
-            <div><span class="muted">Novos:</span> <strong>${s.added}</strong></div>
-            <div><span class="muted">Selecionados:</span> <strong>${s.selected}</strong></div>
-            <div><span class="muted">Removidos:</span> <strong>${s.removed}</strong></div>
+            ${isFirstPhase ? '' : `<div title="Artigos incluídos na fase anterior"><span class="muted">Herdados:</span> <strong>${s.inherited}</strong></div>`}
+            <div title="Artigos ainda classificados como pendentes"><span class="muted">Pendentes:</span> <strong>${s.pending}</strong></div>
+            <div title="Artigos classificados por categorias de inclusão"><span class="muted">Selecionados:</span> <strong>${s.selected}</strong></div>
+            <div title="Artigos excluídos ou identificados como duplicados"><span class="muted">Removidos:</span> <strong>${s.removed}</strong></div>
           </div>
           <div class="papersUtil">Rótulo: <strong class="phaseLabelStatus ${labelStatus === 'done' ? 'done' : 'pending'}">${labelStatus === 'done' ? 'Concluído' : 'Em análise'}</strong></div>
         </div>
@@ -2943,6 +2981,34 @@ function bindEvents() {
       return;
     }
 
+    const selectedCategoryObjects = (Array.isArray(state?.project?.categories) ? state.project.categories : [])
+      .filter(category => categories.includes(category?.label));
+    const inheritanceCategory = selectedCategoryObjects.find(category => (
+      normalizeCategoryMetricType(category?.metricType, 'pending') === 'pending'
+    ));
+
+    if (!phaseEditingLabel) {
+      const previousPhase = getLatestPhase();
+      const previousStats = previousPhase ? getPhaseStats(previousPhase) : null;
+      if (previousPhase && previousStats?.selected > 0 && !inheritanceCategory) {
+        if (phaseCategoriesError) {
+          phaseCategoriesError.textContent = `Selecione uma categoria com impacto Pendente para receber os ${previousStats.selected} artigo(s) incluído(s) da fase anterior.`;
+          phaseCategoriesError.classList.add('visible');
+        }
+        phaseCategoriesInput?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+    }
+
+    if (phaseEditingLabel && phaseLabelStatus === 'done') {
+      const editedPhase = getProjectPhases().find(phase => phase?.label === phaseEditingLabel);
+      const editedStats = getPhaseStats(editedPhase || {});
+      if (editedStats.pending > 0) {
+        alert(`Classifique os ${editedStats.pending} artigo(s) pendente(s) antes de concluir esta fase.`);
+        return;
+      }
+    }
+
     if (phaseEditingLabel && !isLatestPhaseLabel(phaseEditingLabel) && phaseLabelStatus !== 'done') {
       alert('Fases anteriores permanecem concluídas enquanto existir uma fase posterior. Para retornar, remova a fase atual.');
       return;
@@ -2953,6 +3019,7 @@ function bindEvents() {
       description: desc,
       completed: phaseLabelStatus === 'done',
       categories,
+      inheritanceCategoryLabel: inheritanceCategory?.label || null,
       criteria: phaseTextToCriteria(criteriaText)
     };
 

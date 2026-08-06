@@ -231,7 +231,7 @@ class Project {
   }
 
   _syncCategoryMetricReferences(categoryLabel, metricType) {
-    const normalizedMetricType = normalizeMetricType(metricType, "pending");
+    const normalizedMetricType = normalizeCategoryMetricType(metricType, "pending");
     for (const paper of checkArray(this.papers)) {
       const matchesTopLevel = paper.categoryLabel === categoryLabel;
       const matchesTag = checkArray(paper.tags).includes(categoryLabel);
@@ -317,6 +317,11 @@ class Project {
       throw new Error("Selecione pelo menos uma categoria para a nova fase.");
     }
 
+    const pendingCategory = phase.categories
+      .map(categoryLabel => this.getCategoryByLabel(categoryLabel))
+      .find(category => normalizeCategoryMetricType(category?.metricType, "pending") === "pending");
+    phase.inheritanceCategoryLabel = pendingCategory?.label || null;
+
     this.phases.push(phase);
     this.activePhaseLabel = phase.label;
     this._touch();
@@ -341,6 +346,15 @@ class Project {
 
     if (this.categories.length && !nextPhase.categories.length) {
       throw new Error("A fase deve manter pelo menos uma categoria ativa.");
+    }
+
+    const pendingCategory = nextPhase.categories
+      .map(categoryLabel => this.getCategoryByLabel(categoryLabel))
+      .find(category => normalizeCategoryMetricType(category?.metricType, "pending") === "pending");
+    nextPhase.inheritanceCategoryLabel = pendingCategory?.label || null;
+    const pendingCount = checkArray(nextPhase.papers?.new).length;
+    if (nextPhase.completed && pendingCount > 0) {
+      throw new Error(`Classifique os ${pendingCount} artigo(s) pendente(s) antes de concluir esta fase.`);
     }
 
     const isLatestPhase = phaseIndex === this.phases.length - 1;
@@ -413,6 +427,11 @@ class Project {
       throw new Error(`A phase \"${label}\" não é a fase ativa atual.`);
     }
 
+    const pendingCount = checkArray(phase.papers?.new).length;
+    if (pendingCount > 0) {
+      throw new Error(`Classifique os ${pendingCount} artigo(s) pendente(s) antes de concluir esta fase.`);
+    }
+
     phase.completed = true;
     this.activePhaseLabel = phase.label;
     this._touch();
@@ -474,6 +493,9 @@ class Paper {
     this.iterationId = data.iterationId || null;
     this.criteriaId = data.criteriaId || null;
     this.tags = checkArray(data.tags);
+    this.inherited = !!data.inherited;
+    this.entryType = data.entryType || (this.inherited ? "inherited" : "new");
+    this.inheritedFromPhaseLabel = data.inheritedFromPhaseLabel || null;
     this.visited = data.visited === undefined ? true : !!data.visited;
     this.createdAt = data.createdAt || new Date().toISOString();
     this.updatedAt = data.updatedAt || new Date().toISOString();
@@ -568,6 +590,9 @@ class Paper {
       iterationId: this.iterationId,
       criteriaId: this.criteriaId,
       tags: this.tags,
+      inherited: this.inherited,
+      entryType: this.entryType,
+      inheritedFromPhaseLabel: this.inheritedFromPhaseLabel,
       visited: this.visited,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
@@ -652,6 +677,7 @@ class Phase {
     this.description = data.description || "";
     this.completed = !!data.completed;
     this.categories = checkArray(data.categories);
+    this.inheritanceCategoryLabel = data.inheritanceCategoryLabel || null;
     this.criteria = checkArray(data.criteria);
     const papers = data.papers && typeof data.papers === "object" ? data.papers : {};
     this.papers = {
@@ -670,6 +696,7 @@ class Phase {
       description: this.description,
       completed: this.completed,
       categories: this.categories,
+      inheritanceCategoryLabel: this.inheritanceCategoryLabel,
       criteria: this.criteria,
       papers: {
         inherited: this.papers.inherited,
