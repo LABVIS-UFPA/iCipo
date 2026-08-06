@@ -4,7 +4,7 @@ import {
   normalizeMetricType,
   inferMetricTypeFromCategory,
 } from '../../core/utils.mjs';
-import { storage } from '../../infrastructure/storage.mjs';
+import { storage, ICIPO_DATA_REVISION_KEY } from '../../infrastructure/storage.mjs';
 
 let state = null;
 let dashboardAccessState = 'loading'; // loading | ready | project-required | offline
@@ -16,7 +16,15 @@ let overviewResizeTimer = null;
 let paperMetricFilter = "all";
 let paperCategoryFilter = "all";
 let renderedPapersById = new Map();
+let refreshPhaseCards = () => {};
+let syncRequirementViews = () => {};
+let dashboardRefreshTimer = null;
+let dashboardRefreshInFlight = null;
+let dashboardRefreshQueued = false;
+let liveSyncBound = false;
+let lastDataRevisionId = '';
 const TUTORIAL_TRANSITION_DELAY = 2000;
+const LIVE_REFRESH_DEBOUNCE_MS = 220;
 
 const PAPER_METRIC_LABELS = Object.freeze({
   included: "Incluídos",
@@ -183,6 +191,56 @@ function getPaperClassification(paper) {
     .filter(item => item && typeof item === "object")
     .sort((a, b) => String(b.classifiedAt || "").localeCompare(String(a.classifiedAt || "")))[0]
     || null;
+}
+
+function getPaperClassificationForPhase(paper, phaseLabel) {
+  if (!paper || !phaseLabel) return null;
+  const classifications = paper.classifications;
+  if (
+    classifications
+    && typeof classifications === "object"
+    && !Array.isArray(classifications)
+    && classifications[phaseLabel]
+    && typeof classifications[phaseLabel] === "object"
+  ) {
+    return classifications[phaseLabel];
+  }
+
+  const paperPhase = paper.phaseLabel || paper.phaseId || paper.iterationId;
+  if (paperPhase !== phaseLabel) return null;
+  return {
+    phaseLabel,
+    categoryLabel: paper.categoryLabel || null,
+    outcome: paper.status || "pending",
+    classifiedAt: paper.updatedAt || paper.createdAt || null,
+  };
+}
+
+function getDynamicPhaseStats(phaseLabel) {
+  const stats = {
+    total: 0,
+    included: 0,
+    excluded: 0,
+    duplicate: 0,
+    pending: 0,
+    processed: 0,
+  };
+
+  for (const paper of Array.isArray(state?.papers) ? state.papers : []) {
+    if (paper?.visited === false) continue;
+    const classification = getPaperClassificationForPhase(paper, phaseLabel);
+    if (!classification) continue;
+
+    stats.total += 1;
+    const outcome = normalizeMetricType(classification.outcome ?? paper.status, "pending");
+    if (outcome === "included") stats.included += 1;
+    else if (outcome === "excluded") stats.excluded += 1;
+    else if (outcome === "duplicate") stats.duplicate += 1;
+    else stats.pending += 1;
+  }
+
+  stats.processed = stats.included + stats.excluded + stats.duplicate;
+  return stats;
 }
 
 function getPaperCategory(paper, highlightedLinks = {}) {
@@ -369,7 +427,7 @@ function getPaperCategoryColor(paper, highlightedLinks = {}) {
   return normalizeHexColor(paper?.highlightedColor || paper?.highlightColor || paper?.color);
 }
 
-function loadCategories() {
+function loadCategories({ refreshContextMenu = true } = {}) {
   const categoryList = document.getElementById("categoryList");
   if (!categoryList) return;
 
@@ -477,7 +535,13 @@ function loadCategories() {
     categoryList.appendChild(li);
   }
 
-  chrome.runtime.sendMessage({ action: "updateContextMenu" });
+  if (refreshContextMenu && typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
+    chrome.runtime.sendMessage({ action: "updateContextMenu" }, () => {
+      // A ausência temporária do service worker não deve impedir a renderização
+      // das categorias no dashboard.
+      void chrome.runtime.lastError;
+    });
+  }
 }
 
 async function deleteMarkedLink(urlToDelete, done) {
@@ -513,11 +577,13 @@ async function deleteMarkedLink(urlToDelete, done) {
 
 function loadHighlightedLinks() {
   const highlightedList = document.getElementById("highlightedList");
-  if (!highlightedList) return;
-  storage.get(["highlightedLinks", "svat_papers"]).then((data) => {
+  if (!highlightedList) return Promise.resolve();
+  return storage.get(["highlightedLinks", "svat_papers"]).then((data) => {
     const links = (data && data.highlightedLinks) ? data.highlightedLinks : {};
     const papers = Array.isArray(data && data.svat_papers) ? data.svat_papers : [];
     renderHighlighted(links, papers);
+  }).catch((error) => {
+    console.warn("Não foi possível atualizar a lista de links marcados.", error);
   });
 
   function renderHighlighted(links, papers) {
@@ -686,6 +752,136 @@ async function loadState() {
   });
 
   
+}
+
+function getPaperCellBeingEdited() {
+  const activeElement = document.activeElement;
+  return activeElement instanceof HTMLElement
+    && activeElement.classList.contains("cellInput")
+    && activeElement.closest("#papersTable")
+    ? activeElement
+    : null;
+}
+
+async function refreshDashboardFromStorage(reason = "external_change") {
+  if (dashboardRefreshInFlight) {
+    dashboardRefreshQueued = true;
+    return dashboardRefreshInFlight;
+  }
+
+  const previousState = state;
+  dashboardRefreshInFlight = (async () => {
+    try {
+      await loadState();
+
+      if (dashboardAccessState === "project-required") {
+        window.location.replace('../projects/projects.html?dashboardRequiresProject=1');
+        return;
+      }
+
+      if (dashboardAccessState !== "ready") {
+        // Uma oscilação de conexão não deve apagar os dados que já estavam
+        // visíveis. Assim que o WebSocket reconectar, server_status dispara
+        // uma nova tentativa automaticamente.
+        if (previousState?.project?.id) state = previousState;
+        return;
+      }
+
+      renderHeader();
+      updatePaperFilterBar();
+      loadCategories({ refreshContextMenu: false });
+      refreshPhaseCards();
+      syncRequirementViews();
+
+      const renderTasks = [
+        renderOverview(),
+        loadHighlightedLinks(),
+      ];
+
+      const editingPaperCell = getPaperCellBeingEdited();
+      if (editingPaperCell) {
+        // Não substitui uma célula enquanto o usuário está digitando. O blur
+        // da própria célula salva o valor e uma nova revisão atualiza a tabela.
+        editingPaperCell.addEventListener(
+          "blur",
+          () => scheduleDashboardRefresh("paper_cell_blur", 60),
+          { once: true }
+        );
+      } else {
+        renderTasks.push(renderPapersTable());
+      }
+
+      await Promise.allSettled(renderTasks);
+      console.debug("iCipo: dashboard sincronizado.", reason);
+    } catch (error) {
+      if (previousState?.project?.id) state = previousState;
+      console.warn("Não foi possível atualizar automaticamente o dashboard.", error);
+    }
+  })();
+
+  try {
+    await dashboardRefreshInFlight;
+  } finally {
+    dashboardRefreshInFlight = null;
+    if (dashboardRefreshQueued) {
+      dashboardRefreshQueued = false;
+      scheduleDashboardRefresh("queued_change", 40);
+    }
+  }
+}
+
+function scheduleDashboardRefresh(reason = "external_change", delay = LIVE_REFRESH_DEBOUNCE_MS) {
+  clearTimeout(dashboardRefreshTimer);
+  dashboardRefreshTimer = setTimeout(() => {
+    dashboardRefreshTimer = null;
+    refreshDashboardFromStorage(reason);
+  }, Math.max(0, delay));
+}
+
+function bindLiveDataSync() {
+  if (liveSyncBound) return;
+  liveSyncBound = true;
+
+  if (typeof chrome !== "undefined" && chrome.storage?.local && chrome.storage?.onChanged) {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== "local") return;
+
+      const revision = changes[ICIPO_DATA_REVISION_KEY]?.newValue;
+      if (revision) {
+        const revisionId = String(revision.id || revision.at || "");
+        if (!revisionId || revisionId !== lastDataRevisionId) {
+          lastDataRevisionId = revisionId;
+          scheduleDashboardRefresh(revision.reason || "data_revision");
+        }
+      }
+
+      if (changes.server_status?.newValue === "Conectado") {
+        scheduleDashboardRefresh("server_reconnected", 80);
+      }
+    });
+
+    // Registra o listener antes de ler a revisão atual. Assim, uma marcação
+    // feita durante a abertura do dashboard não cai no intervalo entre a
+    // primeira leitura dos artigos e a ativação da sincronização ao vivo.
+    chrome.storage.local.get([ICIPO_DATA_REVISION_KEY], (data) => {
+      const revision = data?.[ICIPO_DATA_REVISION_KEY];
+      const revisionId = String(revision?.id || revision?.at || "");
+      if (revisionId && revisionId !== lastDataRevisionId) {
+        lastDataRevisionId = revisionId;
+        scheduleDashboardRefresh(revision?.reason || "initial_revision_sync", 80);
+      }
+    });
+  }
+
+  // Salvaguardas para páginas que ficaram congeladas ou suspensas pelo
+  // navegador enquanto o usuário trabalhava no Google Scholar.
+  window.addEventListener("focus", () => scheduleDashboardRefresh("window_focus", 60));
+  window.addEventListener("pageshow", () => scheduleDashboardRefresh("page_show", 60));
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      scheduleDashboardRefresh("tab_visible", 60);
+    }
+  });
 }
 
 function setActiveView(view) {
@@ -1118,6 +1314,12 @@ function getPhaseOverviewStats(phase, paperCount) {
   const processedSet = new Set([...selected, ...removed].map(item => typeof item === "object" ? item.id || item.url : item).filter(Boolean));
   let total = totalSet.size;
   let processed = processedSet.size;
+
+  const dynamic = getDynamicPhaseStats(phase?.label);
+  if (dynamic.total) {
+    total = Math.max(total, dynamic.total);
+    processed = Math.max(processed, dynamic.processed);
+  }
 
   if (!total && phase?.label === state?.project?.activePhaseLabel && paperCount) total = paperCount;
   if (phase?.completed && total) processed = total;
@@ -2147,12 +2349,18 @@ function bindEvents() {
 
   function getPhaseStats(phase = {}){
     const papers = phase.papers || {};
+    const dynamic = getDynamicPhaseStats(phase.label);
     return {
       inherited: Array.isArray(papers.inherited) ? papers.inherited.length : 0,
-      added: Array.isArray(papers.new) ? papers.new.length : 0,
-      selected: Array.isArray(papers.selected) ? papers.selected.length : 0,
-      removed: Array.isArray(papers.removed) ? papers.removed.length : 0,
-      utilization: phase.completed ? 100 : 0
+      added: Math.max(Array.isArray(papers.new) ? papers.new.length : 0, dynamic.total),
+      selected: Math.max(Array.isArray(papers.selected) ? papers.selected.length : 0, dynamic.included),
+      removed: Math.max(
+        Array.isArray(papers.removed) ? papers.removed.length : 0,
+        dynamic.excluded + dynamic.duplicate
+      ),
+      utilization: phase.completed
+        ? 100
+        : (dynamic.total ? Math.round((dynamic.processed / dynamic.total) * 100) : 0)
     };
   }
 
@@ -2257,6 +2465,7 @@ function bindEvents() {
     phases.forEach((phase) => phasesList.appendChild(createPhaseCard(phase)));
   }
 
+  refreshPhaseCards = renderPhasesFromProject;
   renderPhasesFromProject();
 
   function applyPhaseRequirementUI(required) {
@@ -2592,6 +2801,15 @@ function bindEvents() {
 
   applyPhaseRequirementUI(phaseCreationRequired);
   applyCategoryRequirementUI(categoryCreationRequired);
+  syncRequirementViews = () => {
+    const requiresPhase = !projectHasPhases();
+    const stage = getTutorialStage();
+    const requiresCategory = !requiresPhase
+      && !projectHasCategories()
+      && ['category-pending', 'category-required'].includes(stage);
+    applyPhaseRequirementUI(requiresPhase);
+    applyCategoryRequirementUI(requiresCategory);
+  };
   if (phaseCreationRequired) {
     if (dashboardIntroRequired) openDashboardIntro();
     else requireFirstPhase();
@@ -2619,6 +2837,7 @@ async function init() {
   }
 
   bindEvents();
+  bindLiveDataSync();
   renderAll();
   // Load moved features
   loadCategories();

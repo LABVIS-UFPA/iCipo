@@ -501,15 +501,45 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     delete highlightedLinks[url];
     await storage.set({ highlightedLinks });
 
-    // Keep the paper in SVAT (audit trail), but set visited=false
+    // Keep the paper in SVAT (audit trail), but set visited=false both in the
+    // active phase and in the consolidated paper file. Without this second
+    // update, the Dashboard could reintroduce the article from list_papers.
     const papers = Array.isArray(data.svat_papers) ? data.svat_papers : [];
     const id = hashId(url);
     const idx = papers.findIndex(p => p.id === id);
+    let persistedPaper = {};
+    try {
+      const loadedPaper = await storage.loadPaper(id);
+      persistedPaper = loadedPaper && typeof loadedPaper.toJSON === "function"
+        ? loadedPaper.toJSON()
+        : (loadedPaper || {});
+    } catch (_) {
+      persistedPaper = {};
+    }
+
+    const scopedPaper = idx >= 0 ? papers[idx] : {};
+    const previousPaper = { ...persistedPaper, ...scopedPaper };
+    const updatedAt = nowIso();
+    const history = Array.isArray(previousPaper.history) ? [...previousPaper.history] : [];
+    history.push({ ts: updatedAt, action: "unmark", details: { visited: false } });
+    const nextPaper = {
+      ...previousPaper,
+      id,
+      url: previousPaper.url || url,
+      visited: false,
+      updatedAt,
+      history,
+    };
+
     if (idx >= 0) {
-      const history = Array.isArray(papers[idx].history) ? papers[idx].history : [];
-      history.push({ ts: nowIso(), action: "unmark", details: { visited: false } });
-      papers[idx] = { ...papers[idx], visited: false, updatedAt: nowIso(), history };
+      papers[idx] = nextPaper;
       await storage.set({ svat_papers: papers });
+    }
+
+    if (previousPaper.id || previousPaper.url) {
+      await storage.savePaper(nextPaper).catch((error) => {
+        console.warn('iCipo: não foi possível atualizar o artigo consolidado removido.', error);
+      });
     }
 
     chrome.scripting.executeScript({
@@ -517,6 +547,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       function: removeHighlight,
       args: [url]
     });
+    await broadcastHighlightsRefresh();
   
   
   } else if (info.menuItemId === "activateProjectFromMenu") {

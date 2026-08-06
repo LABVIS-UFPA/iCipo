@@ -11,6 +11,8 @@
 import { Project, Paper } from '../core/entities.mjs';
 import { wsManager } from './socketManager.mjs';
 
+const ICIPO_DATA_REVISION_KEY = 'icipo_data_revision';
+
 // ============================================================================
 // STRATEGY PATTERN - Node.js Driver (fs-based)
 // ============================================================================
@@ -546,6 +548,7 @@ class WebSocketStrategy {
   constructor() {
     this.wsManager = null;
     this.BACKUP_FLAG_KEY = '__marcalink_has_backup__';
+    this.requestSequence = 0;
   }
 
   async init() {
@@ -592,18 +595,65 @@ class WebSocketStrategy {
     // 1. Aguarda a conexão ser estabelecida
     const isConnected = await this.ensureConnection();
 
+    const requestId = this.createRequestId(act);
+
     return new Promise((resolve, reject) => {
       if (isConnected && this.wsManager && this.wsManager.send) {
-        this.wsManager.send({ act, payload }, (response) => {
+        let settled = false;
+        const timeout = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          this.wsManager?.removeResponseHandler?.(requestId);
+          reject({ status: 'error', message: `Tempo esgotado aguardando resposta para ${act}.` });
+        }, 15000);
+
+        const sent = this.wsManager.send({ act, payload, requestId }, (response) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
           if(response && response.status === "ok") {
             resolve(response.data);
           } else {
-            reject(response);
+            reject(response || { status: 'error', message: `Resposta inválida para ${act}.` });
           }
         });
+
+        if (!sent && !settled) {
+          settled = true;
+          clearTimeout(timeout);
+          this.wsManager?.removeResponseHandler?.(requestId);
+          reject({ status: "error", message: "WebSocket not connected" });
+        }
       } else {
         reject({ status: "error", message: "WebSocket not connected" });
       }
+    });
+  }
+
+  createRequestId(act = 'request') {
+    this.requestSequence += 1;
+    const randomPart = globalThis.crypto?.randomUUID?.()
+      || Math.random().toString(36).slice(2);
+    return `${act}:${Date.now()}:${this.requestSequence}:${randomPart}`;
+  }
+
+  async notifyDataRefresh(reason = 'data_changed', details = {}) {
+    if (typeof chrome === 'undefined' || !chrome.storage?.local) return;
+
+    const revision = {
+      id: this.createRequestId('revision'),
+      at: new Date().toISOString(),
+      reason,
+      details,
+    };
+
+    await new Promise((resolve) => {
+      chrome.storage.local.set({ [ICIPO_DATA_REVISION_KEY]: revision }, () => {
+        if (chrome.runtime?.lastError) {
+          console.warn('iCipo: não foi possível publicar a atualização de dados.', chrome.runtime.lastError.message);
+        }
+        resolve();
+      });
     });
   }
 
@@ -611,13 +661,17 @@ class WebSocketStrategy {
   async saveProject(project) {
     if(project && project instanceof Project){
       const data = project.toJSON();
-      return this.send('save_project', { projectID: data.id, data });
+      const result = await this.send('save_project', { projectID: data.id, data });
+      await this.notifyDataRefresh('project_saved', { projectID: data.id });
+      return result;
     }
     return Promise.reject(new Error("O objeto a salvar deve ser uma instância de Project."));
   }
 
   async archiveProject(projectID) {
-    return this.send('archive_project', { projectID });
+    const result = await this.send('archive_project', { projectID });
+    await this.notifyDataRefresh('project_archived', { projectID });
+    return result;
   }
 
   // Returns a `Project` instance (or null)
@@ -637,6 +691,7 @@ class WebSocketStrategy {
     // O projeto ativo e todos os seus dados são mantidos pelo servidor.
     const result = await this.send('open_project', { projectID });
     await this.notifyScholarRefresh();
+    await this.notifyDataRefresh('project_opened', { projectID });
     return result;
   }
 
@@ -650,7 +705,9 @@ class WebSocketStrategy {
   }
 
   async deleteProject(projectID) {
-    return this.send('delete_project', { projectID });
+    const result = await this.send('delete_project', { projectID });
+    await this.notifyDataRefresh('project_deleted', { projectID });
+    return result;
   }
 
   async listProjects() {
@@ -669,7 +726,12 @@ class WebSocketStrategy {
       return Promise.reject(new Error("Paper JSON must include an id."));
     }
 
-    return this.send('save_paper', { paperId: data.id, data });
+    const result = await this.send('save_paper', { paperId: data.id, data });
+    await this.notifyDataRefresh('paper_saved', {
+      paperId: data.id,
+      phaseLabel: data.phaseLabel || data.iterationId || null,
+    });
+    return result;
   }
 
   // Returns a `Paper` instance (or null)
@@ -686,24 +748,33 @@ class WebSocketStrategy {
   }
 
   async deletePaper(paperId) {
-    return this.send('delete_paper', { paperId });
+    const result = await this.send('delete_paper', { paperId });
+    await this.notifyDataRefresh('paper_deleted', { paperId });
+    return result;
   }
 
   async savePhase(projectID, phaseData) {
-    return this.send('save_phase', { projectID, data: phaseData });
+    const result = await this.send('save_phase', { projectID, data: phaseData });
+    await this.notifyDataRefresh('phase_saved', { projectID, phaseLabel: result?.label || phaseData?.label || null });
+    return result;
   }
 
   async updatePhase(projectID, phaseLabel, phaseData) {
-    return this.send('update_phase', { projectID, phaseLabel, data: phaseData });
+    const result = await this.send('update_phase', { projectID, phaseLabel, data: phaseData });
+    await this.notifyDataRefresh('phase_updated', { projectID, phaseLabel });
+    return result;
   }
 
   async deletePhase(projectID, phaseLabel) {
-    return this.send('delete_phase', { projectID, phaseLabel });
+    const result = await this.send('delete_phase', { projectID, phaseLabel });
+    await this.notifyDataRefresh('phase_deleted', { projectID, phaseLabel });
+    return result;
   }
 
   async setActivePhase(projectID, phaseLabel) {
     const result = await this.send('set_active_phase', { projectID, phaseLabel });
     await this.notifyScholarRefresh();
+    await this.notifyDataRefresh('active_phase_changed', { projectID, phaseLabel });
     return result;
   }
 
@@ -760,6 +831,11 @@ class WebSocketStrategy {
 
     if (affectsScholar) {
       await this.notifyScholarRefresh();
+    }
+
+    const changedKeys = Object.keys(items || {});
+    if (changedKeys.length) {
+      await this.notifyDataRefresh('storage_updated', { keys: changedKeys });
     }
 
     return result;
@@ -1051,4 +1127,4 @@ class StorageService {
 export const storage = new StorageService();
 
 // Optional: export Strategy classes for advanced use cases
-export { StorageService, NodeFsStrategy, WebSocketStrategy };
+export { StorageService, NodeFsStrategy, WebSocketStrategy, ICIPO_DATA_REVISION_KEY };

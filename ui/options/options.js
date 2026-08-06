@@ -1,4 +1,4 @@
-import { storage } from '../../infrastructure/storage.mjs';
+import { storage, ICIPO_DATA_REVISION_KEY } from '../../infrastructure/storage.mjs';
 
 document.addEventListener("DOMContentLoaded", () => {
   const categoryNameInput = document.getElementById("categoryName");
@@ -423,6 +423,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (changes.server_status) setServerStatus(changes.server_status.newValue);
     if (changes.server_messages) renderServerLogFromArray(changes.server_messages.newValue || []);
+    if (areaName === "local" && changes[ICIPO_DATA_REVISION_KEY]) {
+      loadCategories();
+      loadHighlightedLinks();
+    }
   });
 
   // Also refresh state when the page/tab becomes visible or focused
@@ -504,4 +508,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // Init loads
   // =====================
   loadOnOff();
+  loadCategories();
+  loadHighlightedLinks();
 });
