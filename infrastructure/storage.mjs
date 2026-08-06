@@ -9,6 +9,7 @@
  */
 
 import { Project, Paper } from '../core/entities.mjs';
+import { normalizeCategoryMetricType, normalizeMetricType } from '../core/utils.mjs';
 import { wsManager } from './socketManager.mjs';
 
 const ICIPO_DATA_REVISION_KEY = 'icipo_data_revision';
@@ -71,6 +72,133 @@ class NodeFsStrategy {
     }
   }
 
+  normalizeProjectPhaseCategoryModel(project = {}) {
+    const normalized = { ...project };
+    const rawCategories = Array.isArray(normalized.categories) ? normalized.categories : [];
+    const rawPhases = Array.isArray(normalized.phases) ? normalized.phases : [];
+
+    normalized.categories = rawCategories.map((category) => {
+      const next = { ...(category || {}) };
+      next.metricType = normalizeCategoryMetricType(
+        next.metricType ?? next.metric ?? next.outcome,
+        'pending'
+      );
+      // Phase.categories é a fonte única do vínculo. Category.phases existia
+      // em versões anteriores e é migrado abaixo antes de ser descartado.
+      delete next.phases;
+      return next;
+    });
+
+    const categoryLabels = new Set(
+      normalized.categories.map(category => category?.label).filter(Boolean)
+    );
+    normalized.phases = rawPhases.map((phase) => ({
+      ...(phase || {}),
+      completed: !!phase?.completed,
+      categories: [...new Set(
+        (Array.isArray(phase?.categories) ? phase.categories : [])
+          .filter(label => categoryLabels.has(label))
+      )],
+    }));
+
+    // Migração de projetos que ainda guardavam a relação somente na categoria.
+    for (const rawCategory of rawCategories) {
+      const categoryLabel = rawCategory?.label;
+      if (!categoryLabel || !categoryLabels.has(categoryLabel)) continue;
+      for (const phaseLabel of Array.isArray(rawCategory?.phases) ? rawCategory.phases : []) {
+        const phase = normalized.phases.find(item => item?.label === phaseLabel);
+        if (phase && !phase.categories.includes(categoryLabel)) {
+          phase.categories.push(categoryLabel);
+        }
+      }
+    }
+
+    if (!normalized.phases.length) {
+      normalized.activePhaseLabel = null;
+      return normalized;
+    }
+
+    // O fluxo é sequencial: a fase mais recente é sempre a fase ativa e todas
+    // as anteriores permanecem concluídas enquanto houver uma posterior.
+    const latestIndex = normalized.phases.length - 1;
+    normalized.phases.forEach((phase, index) => {
+      if (index < latestIndex) phase.completed = true;
+    });
+    normalized.activePhaseLabel = normalized.phases[latestIndex].label;
+
+    // Projetos antigos podem chegar sem categorias vinculadas. Quando já há
+    // categorias no projeto, garante ao menos uma opção ativa em cada fase.
+    const fallbackCategory = normalized.categories[0]?.label || null;
+    if (fallbackCategory) {
+      for (const phase of normalized.phases) {
+        if (!phase.categories.length) phase.categories = [fallbackCategory];
+      }
+    }
+
+    return normalized;
+  }
+
+  cleanupDeletedPhasePaperReferences(projectID, deletedPhaseLabel, fallbackPhaseLabel = null) {
+    const papersDir = this.path.join(this.baseDir, projectID, 'papers');
+    if (!this.fs.existsSync(papersDir)) return;
+
+    for (const filename of this.fs.readdirSync(papersDir)) {
+      if (!filename.endsWith('.json')) continue;
+      const relPath = this.path.join(projectID, 'papers', filename);
+      const paper = this.readJson(relPath);
+      if (!paper || typeof paper !== 'object') continue;
+
+      let changed = false;
+      const classifications = paper.classifications
+        && typeof paper.classifications === 'object'
+        && !Array.isArray(paper.classifications)
+        ? { ...paper.classifications }
+        : {};
+
+      if (Object.prototype.hasOwnProperty.call(classifications, deletedPhaseLabel)) {
+        delete classifications[deletedPhaseLabel];
+        paper.classifications = classifications;
+        changed = true;
+      }
+
+      if (paper.phaseLabel === deletedPhaseLabel || paper.iterationId === deletedPhaseLabel) {
+        const fallbackClassification = fallbackPhaseLabel
+          ? classifications[fallbackPhaseLabel]
+          : null;
+        const latestClassification = fallbackClassification || Object.values(classifications)
+          .filter(item => item && typeof item === 'object')
+          .sort((a, b) => String(b.classifiedAt || '').localeCompare(String(a.classifiedAt || '')))[0]
+          || null;
+
+        paper.phaseLabel = latestClassification?.phaseLabel || fallbackPhaseLabel || null;
+        paper.iterationId = paper.phaseLabel;
+        paper.categoryLabel = latestClassification?.categoryLabel || null;
+        paper.status = normalizeMetricType(latestClassification?.outcome, 'pending');
+        paper.updatedAt = new Date().toISOString();
+        changed = true;
+      }
+
+      if (!Object.keys(classifications).length && paper.autoDuplicate) {
+        try {
+          this.fs.unlinkSync(this.path.join(papersDir, filename));
+        } catch (_) { /* arquivo já removido */ }
+        continue;
+      }
+
+      if (!Object.keys(classifications).length) {
+        paper.phaseLabel = null;
+        paper.iterationId = null;
+        paper.categoryLabel = null;
+        paper.status = 'pending';
+        paper.visited = false;
+        paper.updatedAt = new Date().toISOString();
+        changed = true;
+      }
+
+      if (changed) this.writeJson(relPath, paper);
+    }
+  }
+
   // CRUD methods for Project
   //TODO: verificar se pelo id se o projeto se encontra arquivado. Pois isso, da forma como está, vai sobreescrever projetos arquivados.
   // Now accepts a single `project` object that must contain `id` (or returns error)
@@ -81,8 +209,26 @@ class NodeFsStrategy {
     // Read existing project if present
     let existing = this.readJson(relPath) || {};
 
+    if (
+      Array.isArray(existing.phases)
+      && existing.phases.length > 0
+      && Array.isArray(project.phases)
+      && project.phases.length === 0
+    ) {
+      return { status: 'error', message: 'O projeto deve manter pelo menos uma fase.' };
+    }
+
+    if (
+      Array.isArray(existing.categories)
+      && existing.categories.length > 0
+      && Array.isArray(project.categories)
+      && project.categories.length === 0
+    ) {
+      return { status: 'error', message: 'O projeto deve manter pelo menos uma categoria.' };
+    }
+
     // Merge: preserve existing properties, override/add with incoming projectData
-    const merged = { ...existing, ...project };
+    const merged = this.normalizeProjectPhaseCategoryModel({ ...existing, ...project });
 
     console.log(`Saving project ${projectID} to disk at ${relPath}...`, merged);
 
@@ -134,7 +280,11 @@ class NodeFsStrategy {
   async openProject(projectID) {
     // load project data
     const relPath = this.path.join(projectID, 'project.json');
-    const data = this.readJson(relPath) || {};
+    const rawData = this.readJson(relPath) || {};
+    const data = this.normalizeProjectPhaseCategoryModel(rawData);
+    if (JSON.stringify(rawData) !== JSON.stringify(data)) {
+      this.writeJson(relPath, data);
+    }
     this.activeProjectID = projectID;
     this.activeProjectData = data;
     this.migrateLegacyScopedData();
@@ -328,67 +478,24 @@ class NodeFsStrategy {
       return { status: 'error', message: 'Nenhum projeto ativo.', data: {} };
     }
 
-    // O Google Scholar deve exibir os highlights de todas as fases do projeto.
-    // Já a aba Artigos continua recebendo apenas os artigos da fase ativa.
-    const phasesDir = this.path.join(this.baseDir, this.activeProjectID, 'phases');
-    const activePhaseLabel = this.activeProjectData?.activePhaseLabel || '_sem_fase';
-    const mergedHighlightedLinks = {};
-    let activeScoped = {};
-    let fallbackProject = null;
-
-    try {
-      if (this.fs.existsSync(phasesDir)) {
-        const phaseLabels = this.fs.readdirSync(phasesDir, { withFileTypes: true })
-          .filter((entry) => entry.isDirectory())
-          .map((entry) => entry.name);
-
-        // Processa a fase ativa por último. Caso a mesma URL esteja marcada em
-        // mais de uma fase, a cor da fase ativa prevalece enquanto ela estiver ativa.
-        phaseLabels.sort((a, b) => {
-          if (a === activePhaseLabel) return 1;
-          if (b === activePhaseLabel) return -1;
-          return a.localeCompare(b);
-        });
-
-        for (const phaseLabel of phaseLabels) {
-          const storagePath = this.path.join(this.activeProjectID, 'phases', phaseLabel, 'storage.json');
-          const phaseScoped = this.readJson(storagePath) || {};
-          const phaseLinks = phaseScoped.highlightedLinks;
-
-          if (phaseLinks && typeof phaseLinks === 'object' && !Array.isArray(phaseLinks)) {
-            Object.assign(mergedHighlightedLinks, phaseLinks);
-          }
-
-          if (!fallbackProject && phaseScoped.svat_project) {
-            fallbackProject = phaseScoped.svat_project;
-          }
-
-          if (phaseLabel === activePhaseLabel) {
-            activeScoped = phaseScoped;
-          }
-        }
-      }
-    } catch (error) {
-      console.warn('Não foi possível reunir os highlights de todas as fases:', error);
-    }
-
-    // Mantém compatibilidade quando a pasta/fase ainda não foi criada.
-    if (Object.keys(activeScoped).length === 0) {
-      const scopedPath = this.getScopedStoragePath();
-      activeScoped = scopedPath ? (this.readJson(scopedPath) || {}) : {};
-      const activeLinks = activeScoped.highlightedLinks;
-      if (activeLinks && typeof activeLinks === 'object' && !Array.isArray(activeLinks)) {
-        Object.assign(mergedHighlightedLinks, activeLinks);
-      }
-    }
+    // Fases são escopos independentes. O Google Scholar e a aba Artigos devem
+    // refletir somente a fase ativa; ao criar/remover a fase atual, a próxima
+    // atualização troca simultaneamente links, cores e artigos exibidos.
+    const scopedPath = this.getScopedStoragePath();
+    const activeScoped = scopedPath ? (this.readJson(scopedPath) || {}) : {};
+    const activeLinks = activeScoped.highlightedLinks;
+    const highlightedLinks = activeLinks
+      && typeof activeLinks === 'object'
+      && !Array.isArray(activeLinks)
+      ? activeLinks
+      : {};
 
     return {
       status: 'ok',
       data: {
-        highlightedLinks: mergedHighlightedLinks,
-        // Somente os artigos da fase ativa são enviados ao Dashboard.
+        highlightedLinks,
         svat_papers: Array.isArray(activeScoped.svat_papers) ? activeScoped.svat_papers : [],
-        svat_project: activeScoped.svat_project || fallbackProject || null
+        svat_project: activeScoped.svat_project || null
       }
     };
   }
@@ -414,7 +521,12 @@ class NodeFsStrategy {
       title,
       description: phaseData.description ?? existing.description ?? '',
       completed: typeof phaseData.completed === 'boolean' ? phaseData.completed : !!existing.completed,
-      categories: Array.isArray(phaseData.categories) ? phaseData.categories : (Array.isArray(existing.categories) ? existing.categories : []),
+      categories: [...new Set(
+        (Array.isArray(phaseData.categories)
+          ? phaseData.categories
+          : (Array.isArray(existing.categories) ? existing.categories : []))
+          .filter(Boolean)
+      )],
       criteria,
       papers: {
         inheritedAccumulated: existing?.papers?.inheritedAccumulated || [],
@@ -437,14 +549,36 @@ class NodeFsStrategy {
     }
 
     if (!Array.isArray(project.phases)) project.phases = [];
+    if (!Array.isArray(project.categories)) project.categories = [];
+
+    const latestPhase = project.phases.at(-1) || null;
+    if (latestPhase && !latestPhase.completed) {
+      return {
+        status: 'error',
+        message: `Conclua a fase "${latestPhase.title || latestPhase.label}" antes de criar uma nova fase.`
+      };
+    }
 
     const phase = this.normalizePhase(phaseData);
+    // A criação nunca aceita uma fase previamente concluída. O usuário precisa
+    // salvá-la em análise e, depois, alterar explicitamente o rótulo da etapa
+    // mais recente para “Concluído”.
+    phase.completed = false;
     if (project.phases.some((p) => p.label === phase.label)) {
       return { status: 'error', message: `Já existe uma fase com o rótulo "${phase.label}".` };
     }
 
+    const categoryLabels = new Set(project.categories.map(category => category?.label).filter(Boolean));
+    const invalidCategories = phase.categories.filter(label => !categoryLabels.has(label));
+    if (invalidCategories.length) {
+      return { status: 'error', message: `Categorias inexistentes: ${invalidCategories.join(', ')}.` };
+    }
+    if (project.categories.length && !phase.categories.length) {
+      return { status: 'error', message: 'Selecione pelo menos uma categoria para a nova fase.' };
+    }
+
     project.phases.push(phase);
-    if (!project.activePhaseLabel) project.activePhaseLabel = phase.label;
+    project.activePhaseLabel = phase.label;
     project.updatedAt = new Date().toISOString();
 
     this.writeJson(relPath, project);
@@ -462,6 +596,7 @@ class NodeFsStrategy {
 
     if (!project) return { status: 'error', message: 'Projeto não encontrado.' };
     if (!Array.isArray(project.phases)) project.phases = [];
+    if (!Array.isArray(project.categories)) project.categories = [];
 
     const idx = project.phases.findIndex((p) => p.label === phaseLabel);
     if (idx === -1) return { status: 'error', message: 'Fase não encontrada.' };
@@ -472,9 +607,128 @@ class NodeFsStrategy {
     const duplicate = project.phases.some((p, i) => i !== idx && p.label === phase.label);
     if (duplicate) return { status: 'error', message: `Já existe uma fase com o rótulo "${phase.label}".` };
 
+    const categoryLabels = new Set(project.categories.map(category => category?.label).filter(Boolean));
+    const invalidCategories = phase.categories.filter(label => !categoryLabels.has(label));
+    if (invalidCategories.length) {
+      return { status: 'error', message: `Categorias inexistentes: ${invalidCategories.join(', ')}.` };
+    }
+    if (project.categories.length && !phase.categories.length) {
+      return { status: 'error', message: 'A fase deve manter pelo menos uma categoria ativa.' };
+    }
+
+    const isLatestPhase = idx === project.phases.length - 1;
+    if (!isLatestPhase && !phase.completed) {
+      return {
+        status: 'error',
+        message: 'Fases anteriores permanecem concluídas enquanto existir uma fase posterior. Remova a fase atual para retornar.'
+      };
+    }
+
     project.phases[idx] = phase;
-    if (project.activePhaseLabel === phaseLabel) project.activePhaseLabel = phase.label;
+    if (isLatestPhase || project.activePhaseLabel === phaseLabel) project.activePhaseLabel = phase.label;
     project.updatedAt = new Date().toISOString();
+
+    if (phase.label !== phaseLabel) {
+      const oldPhaseDir = this.path.join(this.baseDir, projectID, 'phases', phaseLabel);
+      const newPhaseDir = this.path.join(this.baseDir, projectID, 'phases', phase.label);
+      if (this.fs.existsSync(oldPhaseDir) && !this.fs.existsSync(newPhaseDir)) {
+        this.ensureDir(this.path.dirname(newPhaseDir));
+        this.fs.renameSync(oldPhaseDir, newPhaseDir);
+      }
+
+      // O storage da fase também contém cópias escopadas dos artigos. Ao
+      // renomear a fase, atualiza essas referências para que a tabela, as
+      // métricas e as próximas reclassificações usem o novo rótulo.
+      const scopedStoragePath = this.path.join(projectID, 'phases', phase.label, 'storage.json');
+      const scopedStorage = this.readJson(scopedStoragePath);
+      if (scopedStorage && typeof scopedStorage === 'object') {
+        let scopedChanged = false;
+        const scopedPapers = Array.isArray(scopedStorage.svat_papers)
+          ? scopedStorage.svat_papers.map((paper) => {
+              if (!paper || typeof paper !== 'object') return paper;
+              const nextPaper = { ...paper };
+              let paperChanged = false;
+
+              const classifications = nextPaper.classifications
+                && typeof nextPaper.classifications === 'object'
+                && !Array.isArray(nextPaper.classifications)
+                ? { ...nextPaper.classifications }
+                : {};
+              if (classifications[phaseLabel]) {
+                classifications[phase.label] = {
+                  ...classifications[phaseLabel],
+                  phaseLabel: phase.label,
+                };
+                delete classifications[phaseLabel];
+                nextPaper.classifications = classifications;
+                paperChanged = true;
+              }
+              if (nextPaper.phaseLabel === phaseLabel) {
+                nextPaper.phaseLabel = phase.label;
+                paperChanged = true;
+              }
+              if (nextPaper.iterationId === phaseLabel) {
+                nextPaper.iterationId = phase.label;
+                paperChanged = true;
+              }
+              if (paperChanged) nextPaper.updatedAt = new Date().toISOString();
+              scopedChanged = scopedChanged || paperChanged;
+              return nextPaper;
+            })
+          : scopedStorage.svat_papers;
+
+        const scopedProject = scopedStorage.svat_project
+          && typeof scopedStorage.svat_project === 'object'
+          ? { ...scopedStorage.svat_project }
+          : null;
+        if (scopedProject) {
+          if (scopedProject.activePhaseLabel === phaseLabel) {
+            scopedProject.activePhaseLabel = phase.label;
+            scopedChanged = true;
+          }
+          if (scopedProject.currentIterationId === phaseLabel) {
+            scopedProject.currentIterationId = phase.label;
+            scopedChanged = true;
+          }
+        }
+
+        if (scopedChanged) {
+          this.writeJson(scopedStoragePath, {
+            ...scopedStorage,
+            svat_papers: scopedPapers,
+            ...(scopedProject ? { svat_project: scopedProject } : {}),
+          });
+        }
+      }
+
+      const papersDir = this.path.join(this.baseDir, projectID, 'papers');
+      if (this.fs.existsSync(papersDir)) {
+        for (const filename of this.fs.readdirSync(papersDir)) {
+          if (!filename.endsWith('.json')) continue;
+          const paperPath = this.path.join(projectID, 'papers', filename);
+          const paper = this.readJson(paperPath);
+          if (!paper || typeof paper !== 'object') continue;
+          let changed = false;
+          if (paper.classifications?.[phaseLabel]) {
+            paper.classifications[phase.label] = {
+              ...paper.classifications[phaseLabel],
+              phaseLabel: phase.label,
+            };
+            delete paper.classifications[phaseLabel];
+            changed = true;
+          }
+          if (paper.phaseLabel === phaseLabel) {
+            paper.phaseLabel = phase.label;
+            changed = true;
+          }
+          if (paper.iterationId === phaseLabel) {
+            paper.iterationId = phase.label;
+            changed = true;
+          }
+          if (changed) this.writeJson(paperPath, paper);
+        }
+      }
+    }
 
     this.writeJson(relPath, project);
     if (this.activeProjectID === projectID) this.activeProjectData = project;
@@ -492,14 +746,29 @@ class NodeFsStrategy {
     if (!project) return { status: 'error', message: 'Projeto não encontrado.' };
     if (!Array.isArray(project.phases)) project.phases = [];
 
-    const before = project.phases.length;
-    project.phases = project.phases.filter((p) => p.label !== phaseLabel);
-
-    if (project.phases.length === before) return { status: 'error', message: 'Fase não encontrada.' };
-
-    if (project.activePhaseLabel === phaseLabel) {
-      project.activePhaseLabel = project.phases[0]?.label || null;
+    if (project.phases.length <= 1) {
+      return { status: 'error', message: 'O projeto deve manter pelo menos uma fase.' };
     }
+
+    const phaseIndex = project.phases.findIndex((p) => p.label === phaseLabel);
+    if (phaseIndex === -1) return { status: 'error', message: 'Fase não encontrada.' };
+    if (phaseIndex !== project.phases.length - 1) {
+      return {
+        status: 'error',
+        message: 'Somente a fase atual mais recente pode ser removida. Remova as fases posteriores primeiro.'
+      };
+    }
+
+    project.phases.pop();
+    const previousPhase = project.phases.at(-1);
+    previousPhase.completed = false;
+    project.activePhaseLabel = previousPhase.label;
+
+    const phaseDir = this.path.join(this.baseDir, projectID, 'phases', phaseLabel);
+    if (this.fs.existsSync(phaseDir)) {
+      this.fs.rmSync(phaseDir, { recursive: true, force: true });
+    }
+    this.cleanupDeletedPhasePaperReferences(projectID, phaseLabel, previousPhase.label);
 
     project.updatedAt = new Date().toISOString();
     this.writeJson(relPath, project);
@@ -520,6 +789,18 @@ class NodeFsStrategy {
 
     const phaseExists = project.phases.some((p) => p.label === phaseLabel);
     if (!phaseExists) return { status: 'error', message: 'Fase não encontrada.' };
+
+    const latestPhase = project.phases.at(-1);
+    if (latestPhase?.label !== phaseLabel) {
+      return {
+        status: 'error',
+        message: 'A fase mais recente é a única que pode ficar ativa. Para retornar à anterior, remova a fase atual.'
+      };
+    }
+
+    if (Array.isArray(project.categories) && project.categories.length && !latestPhase.categories?.length) {
+      return { status: 'error', message: 'A fase ativa deve possuir pelo menos uma categoria.' };
+    }
 
     project.activePhaseLabel = phaseLabel;
     project.updatedAt = new Date().toISOString();
@@ -662,6 +943,7 @@ class WebSocketStrategy {
     if(project && project instanceof Project){
       const data = project.toJSON();
       const result = await this.send('save_project', { projectID: data.id, data });
+      await this.notifyContextMenuRefresh();
       await this.notifyDataRefresh('project_saved', { projectID: data.id });
       return result;
     }
@@ -690,6 +972,7 @@ class WebSocketStrategy {
   async openProject(projectID) {
     // O projeto ativo e todos os seus dados são mantidos pelo servidor.
     const result = await this.send('open_project', { projectID });
+    await this.notifyContextMenuRefresh();
     await this.notifyScholarRefresh();
     await this.notifyDataRefresh('project_opened', { projectID });
     return result;
@@ -755,24 +1038,31 @@ class WebSocketStrategy {
 
   async savePhase(projectID, phaseData) {
     const result = await this.send('save_phase', { projectID, data: phaseData });
+    await this.notifyContextMenuRefresh();
+    await this.notifyScholarRefresh();
     await this.notifyDataRefresh('phase_saved', { projectID, phaseLabel: result?.label || phaseData?.label || null });
     return result;
   }
 
   async updatePhase(projectID, phaseLabel, phaseData) {
     const result = await this.send('update_phase', { projectID, phaseLabel, data: phaseData });
+    await this.notifyContextMenuRefresh();
+    await this.notifyScholarRefresh();
     await this.notifyDataRefresh('phase_updated', { projectID, phaseLabel });
     return result;
   }
 
   async deletePhase(projectID, phaseLabel) {
     const result = await this.send('delete_phase', { projectID, phaseLabel });
+    await this.notifyContextMenuRefresh();
+    await this.notifyScholarRefresh();
     await this.notifyDataRefresh('phase_deleted', { projectID, phaseLabel });
     return result;
   }
 
   async setActivePhase(projectID, phaseLabel) {
     const result = await this.send('set_active_phase', { projectID, phaseLabel });
+    await this.notifyContextMenuRefresh();
     await this.notifyScholarRefresh();
     await this.notifyDataRefresh('active_phase_changed', { projectID, phaseLabel });
     return result;
@@ -784,6 +1074,15 @@ class WebSocketStrategy {
       await chrome.runtime.sendMessage({ action: 'refreshScholarHighlights' });
     } catch (_) {
       // Pode não existir receptor em páginas fora do contexto da extensão.
+    }
+  }
+
+  async notifyContextMenuRefresh() {
+    if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) return;
+    try {
+      await chrome.runtime.sendMessage({ action: 'updateContextMenu' });
+    } catch (_) {
+      // O service worker pode estar reiniciando; a próxima revisão refaz o menu.
     }
   }
 

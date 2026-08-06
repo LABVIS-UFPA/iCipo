@@ -2,6 +2,8 @@ import {
   fmtDate,
   normalizeStr,
   normalizeMetricType,
+  normalizeCategoryMetricType,
+  normalizeArticleUrl,
   inferMetricTypeFromCategory,
 } from '../../core/utils.mjs';
 import { storage, ICIPO_DATA_REVISION_KEY } from '../../infrastructure/storage.mjs';
@@ -111,7 +113,7 @@ function formatResearchers(value) {
 
 // ======= Categories & Highlighted Links (moved from options) =======
 function normalizeUrl(url) {
-  return (url || "").replace(/[\?\&]casa\_token=\S+/i, "");
+  return normalizeArticleUrl(url);
 }
 
 function getLuminanceFromHex(hex) {
@@ -176,8 +178,8 @@ function getPaperClassification(paper) {
   if (!classifications || typeof classifications !== "object" || Array.isArray(classifications)) return null;
 
   const preferredKeys = [
-    paper?.phaseLabel,
     state?.project?.activePhaseLabel,
+    paper?.phaseLabel,
     paper?.iterationId,
   ].filter(Boolean);
 
@@ -244,6 +246,7 @@ function getDynamicPhaseStats(phaseLabel) {
 }
 
 function getPaperCategory(paper, highlightedLinks = {}) {
+  if (paper?.autoDuplicate) return null;
   const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
   const classification = getPaperClassification(paper);
   const explicitCategoryCandidates = [
@@ -290,6 +293,10 @@ function getPaperCategory(paper, highlightedLinks = {}) {
 }
 
 function getPaperMetricType(paper, highlightedLinks = {}) {
+  if (paper?.autoDuplicate || (paper?.duplicateOfId && normalizeMetricType(paper?.status, "pending") === "duplicate")) {
+    return "duplicate";
+  }
+
   const category = getPaperCategory(paper, highlightedLinks);
   if (category) {
     return normalizeMetricType(category.metricType, inferMetricTypeFromCategory(category));
@@ -317,42 +324,24 @@ function getDuplicateCandidateLabel(paper) {
 }
 
 function renderDuplicateOriginalSelect(paper, candidates = []) {
-  const paperId = String(paper?.id ?? "");
   const selectedId = String(paper?.duplicateOfId ?? "");
-  const available = candidates.filter(candidate => String(candidate?.id ?? "") !== paperId);
-  const hasSelectedCandidate = available.some(candidate => String(candidate?.id ?? "") === selectedId);
-  const options = [
-    `<option value="">${selectedId ? "Remover vínculo com o original" : "Selecionar artigo original"}</option>`,
-  ];
-
-  if (selectedId && !hasSelectedCandidate) {
-    options.push(`<option value="${escapeHtml(selectedId)}" selected>Original vinculado: ${escapeHtml(selectedId)}</option>`);
-  }
-
-  for (const candidate of available) {
-    const candidateId = String(candidate?.id ?? "");
-    if (!candidateId) continue;
-    const selected = candidateId === selectedId ? " selected" : "";
-    options.push(`<option value="${escapeHtml(candidateId)}"${selected}>${escapeHtml(getDuplicateCandidateLabel(candidate))}</option>`);
-  }
-
-  const disabled = available.length || selectedId ? "" : " disabled";
-  const helper = selectedId
-    ? "Duplicata vinculada ao registro original"
-    : (available.length ? "Selecione qual registro deve ser mantido" : "Nenhum artigo original disponível");
+  const original = candidates.find(candidate => String(candidate?.id ?? "") === selectedId) || null;
+  const originalLabel = original
+    ? getDuplicateCandidateLabel(original)
+    : (selectedId ? `Registro ${selectedId}` : "Original não localizado");
 
   return `
     <span class="duplicateRelation">
-      <select class="cellInput duplicateOriginalSelect" data-field="duplicateOfId" data-id="${escapeHtml(paperId)}" aria-label="Artigo original desta duplicata"${disabled}>
-        ${options.join("")}
-      </select>
-      <small>${escapeHtml(helper)}</small>
+      <span class="duplicateOriginalAutomatic" title="Vínculo identificado automaticamente pelo endereço do artigo">
+        Original: ${escapeHtml(originalLabel)}
+      </span>
+      <small>Vínculo automático pelo mesmo link</small>
     </span>
   `;
 }
 
 function applyCategoryMetricToPaper(paper, category, previousLabel = category?.label) {
-  if (!paper || !category?.label) return false;
+  if (!paper || paper.autoDuplicate || !category?.label) return false;
   const labels = new Set([previousLabel, category.label].filter(Boolean));
   const tags = Array.isArray(paper.tags) ? paper.tags : [];
   const classifications = paper.classifications
@@ -368,7 +357,7 @@ function applyCategoryMetricToPaper(paper, category, previousLabel = category?.l
 
   if (!matches) return false;
 
-  const metricType = normalizeMetricType(category.metricType, inferMetricTypeFromCategory(category));
+  const metricType = normalizeCategoryMetricType(category.metricType, inferMetricTypeFromCategory(category));
   paper.categoryLabel = category.label;
   paper.status = metricType;
   if (metricType !== "duplicate") paper.duplicateOfId = null;
@@ -427,6 +416,25 @@ function getPaperCategoryColor(paper, highlightedLinks = {}) {
   return normalizeHexColor(paper?.highlightedColor || paper?.highlightColor || paper?.color);
 }
 
+function getCategoryDeletionBlockReason(project, categoryLabel) {
+  const categories = Array.isArray(project?.categories) ? project.categories : [];
+  if (categories.length <= 1) {
+    return "O projeto deve manter pelo menos uma categoria.";
+  }
+
+  const blockingPhases = (Array.isArray(project?.phases) ? project.phases : [])
+    .filter(phase => {
+      const assigned = Array.isArray(phase?.categories) ? phase.categories : [];
+      return assigned.includes(categoryLabel) && assigned.length <= 1;
+    });
+  if (blockingPhases.length) {
+    const names = blockingPhases.map(phase => phase.title || phase.label).join(", ");
+    return `Vincule outra categoria antes de excluir. Esta é a única categoria ativa em: ${names}.`;
+  }
+
+  return "";
+}
+
 function loadCategories({ refreshContextMenu = true } = {}) {
   const categoryList = document.getElementById("categoryList");
   if (!categoryList) return;
@@ -458,7 +466,7 @@ function loadCategories({ refreshContextMenu = true } = {}) {
     const category = cat.title;
     const categoryLabel = cat.label;
     const color = normalizeHexColor(cat.color, "#FFFFFF");
-    const metricType = normalizeMetricType(cat.metricType, inferMetricTypeFromCategory(cat));
+    const metricType = normalizeCategoryMetricType(cat.metricType, inferMetricTypeFromCategory(cat));
     const textColor = getReadableCategoryTextColor(color);
     const usesDarkText = textColor === "#101828";
 
@@ -514,7 +522,11 @@ function loadCategories({ refreshContextMenu = true } = {}) {
 
     const btn = document.createElement("button");
     btn.textContent = "Excluir";
+    const deletionBlockReason = getCategoryDeletionBlockReason(project, categoryLabel);
+    btn.disabled = Boolean(deletionBlockReason);
+    btn.title = deletionBlockReason || `Excluir a categoria ${category}`;
     btn.addEventListener("click", () => {
+      if (deletionBlockReason) return alert(deletionBlockReason);
       if (!confirm(`Excluir a categoria "${category}"?`)) return;
       try {
         project.removeCategory(categoryLabel);
@@ -544,34 +556,155 @@ function loadCategories({ refreshContextMenu = true } = {}) {
   }
 }
 
-async function deleteMarkedLink(urlToDelete, done) {
-  const target = normalizeUrl(urlToDelete);
-  const data = await storage.get(["highlightedLinks", "svat_papers"]);
-  const highlightedLinks = (data && data.highlightedLinks) ? data.highlightedLinks : {};
+function getPaperClassificationsMap(paper) {
+  return paper?.classifications
+    && typeof paper.classifications === "object"
+    && !Array.isArray(paper.classifications)
+    ? { ...paper.classifications }
+    : {};
+}
 
-  for (const k of Object.keys(highlightedLinks)) {
-    const nk = normalizeUrl(k);
-    if (k === urlToDelete || nk === target || nk.startsWith(target) || target.startsWith(nk)) {
-      delete highlightedLinks[k];
+function getLatestRemainingClassification(classifications) {
+  const phases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
+  for (let index = phases.length - 1; index >= 0; index -= 1) {
+    const phaseLabel = phases[index]?.label;
+    if (phaseLabel && classifications?.[phaseLabel]) {
+      return [phaseLabel, classifications[phaseLabel]];
     }
   }
 
-  const papers = Array.isArray(data && data.svat_papers) ? data.svat_papers : [];
-  const papersToDelete = [
-    ...papers.filter((p) => normalizeUrl(p?.url) === target).map((p) => p.id),
-    ...(state?.papers || []).filter((p) => normalizeUrl(p?.url) === target).map((p) => p.id),
-  ].filter(Boolean);
+  return Object.entries(classifications || {})
+    .filter(([, classification]) => classification && typeof classification === "object")
+    .sort(([, first], [, second]) => (
+      String(second?.classifiedAt || "").localeCompare(String(first?.classifiedAt || ""))
+    ))[0] || null;
+}
 
-  const filteredPapers = papers.filter((p) => normalizeUrl(p?.url) !== target);
+function removePaperClassificationFromActivePhase(paper) {
+  const activePhaseLabel = state?.project?.activePhaseLabel;
+  if (!paper || !activePhaseLabel) return null;
 
-  for (const paperId of [...new Set(papersToDelete)]) {
-    await storage.deletePaper(paperId).catch((e) => console.warn('deletePaper failed:', e));
+  const classifications = getPaperClassificationsMap(paper);
+  delete classifications[activePhaseLabel];
+
+  const updatedAt = new Date().toISOString();
+  const history = Array.isArray(paper.history) ? [...paper.history] : [];
+  history.push({
+    ts: updatedAt,
+    action: "unmark",
+    details: { phaseLabel: activePhaseLabel, visited: false },
+  });
+
+  const latest = getLatestRemainingClassification(classifications);
+  if (!latest) {
+    return {
+      ...paper,
+      classifications: {},
+      phaseLabel: null,
+      iterationId: null,
+      categoryLabel: null,
+      status: paper.autoDuplicate ? "duplicate" : "pending",
+      duplicateOfId: paper.autoDuplicate ? (paper.duplicateOfId || null) : null,
+      visited: false,
+      updatedAt,
+      history,
+    };
   }
 
-  await storage.set({ highlightedLinks, svat_papers: filteredPapers });
-  if (state && Array.isArray(state.papers)) {
-    state.papers = state.papers.filter((p) => normalizeUrl(p?.url) !== target);
+  const [latestPhaseLabel, latestClassification] = latest;
+  const categoryLabels = new Set(
+    (Array.isArray(state?.project?.categories) ? state.project.categories : [])
+      .map(category => category?.label)
+      .filter(Boolean)
+  );
+  const categoryLabel = paper.autoDuplicate
+    ? null
+    : (latestClassification?.categoryLabel || null);
+  const baseTags = (Array.isArray(paper.tags) ? paper.tags : [])
+    .filter(tag => !categoryLabels.has(tag) && tag !== "duplicado-automatico");
+  const tags = paper.autoDuplicate
+    ? [...new Set([...baseTags, "duplicado-automatico"])]
+    : [...new Set([...baseTags, ...(categoryLabel ? [categoryLabel] : [])])];
+
+  return {
+    ...paper,
+    classifications,
+    phaseLabel: latestClassification?.phaseLabel || latestPhaseLabel,
+    iterationId: latestClassification?.phaseLabel || latestPhaseLabel,
+    categoryLabel,
+    status: paper.autoDuplicate
+      ? "duplicate"
+      : normalizeMetricType(latestClassification?.outcome, "pending"),
+    duplicateOfId: paper.autoDuplicate ? (paper.duplicateOfId || null) : null,
+    tags,
+    visited: true,
+    updatedAt,
+    history,
+  };
+}
+
+async function removeUrlsFromActivePhase(urls = []) {
+  const targets = new Set(
+    (Array.isArray(urls) ? urls : [urls])
+      .map(normalizeUrl)
+      .filter(Boolean)
+  );
+  if (!targets.size) return;
+
+  const activePhaseLabel = state?.project?.activePhaseLabel;
+  if (!activePhaseLabel) throw new Error("Nenhuma fase ativa disponível.");
+
+  const data = await storage.get(["highlightedLinks", "svat_papers"]);
+  const highlightedLinks = data?.highlightedLinks && typeof data.highlightedLinks === "object"
+    ? { ...data.highlightedLinks }
+    : {};
+  for (const storedUrl of Object.keys(highlightedLinks)) {
+    if (targets.has(normalizeUrl(storedUrl))) delete highlightedLinks[storedUrl];
   }
+
+  const scopedPapers = Array.isArray(data?.svat_papers) ? data.svat_papers : [];
+  const removedScopedPapers = scopedPapers.filter(paper => targets.has(normalizeUrl(paper?.url)));
+  const remainingScopedPapers = scopedPapers.filter(paper => !targets.has(normalizeUrl(paper?.url)));
+
+  // Retira imediatamente os itens da fase ativa. Os arquivos consolidados são
+  // atualizados em seguida sem apagar classificações de fases anteriores.
+  await storage.set({ highlightedLinks, svat_papers: remainingScopedPapers });
+
+  const processedIds = new Set();
+  for (const scopedPaper of removedScopedPapers) {
+    const paperId = scopedPaper?.id;
+    if ((!paperId && paperId !== 0) || processedIds.has(String(paperId))) continue;
+    processedIds.add(String(paperId));
+
+    let persistedPaper = null;
+    try {
+      persistedPaper = await storage.loadPaper(paperId);
+      if (persistedPaper && typeof persistedPaper.toJSON === "function") {
+        persistedPaper = persistedPaper.toJSON();
+      }
+    } catch (_) {
+      persistedPaper = null;
+    }
+
+    const mergedPaper = {
+      ...(persistedPaper || {}),
+      ...scopedPaper,
+      classifications: {
+        ...getPaperClassificationsMap(persistedPaper),
+        ...getPaperClassificationsMap(scopedPaper),
+      },
+    };
+    const nextPaper = removePaperClassificationFromActivePhase(mergedPaper);
+
+    await storage.savePaper(nextPaper);
+    const stateIndex = (state?.papers || []).findIndex(paper => String(paper?.id) === String(paperId));
+    if (stateIndex >= 0) state.papers[stateIndex] = nextPaper;
+    else if (Array.isArray(state?.papers)) state.papers.push(nextPaper);
+  }
+}
+
+async function deleteMarkedLink(urlToDelete, done) {
+  await removeUrlsFromActivePhase([urlToDelete]);
   if (done) done();
 }
 
@@ -1033,6 +1166,9 @@ function unwrapStoragePayload(response) {
 }
 
 function getOverviewPaperKey(paper, fallbackIndex = 0) {
+  if (paper?.autoDuplicate && (paper?.id || paper?.id === 0)) {
+    return `duplicate:${paper.id}`;
+  }
   const normalizedUrl = normalizeUrl(paper?.url || "").trim().toLowerCase();
   if (normalizedUrl) return `url:${normalizedUrl}`;
   if (paper?.id || paper?.id === 0) return `id:${paper.id}`;
@@ -1079,7 +1215,7 @@ async function loadOverviewContext() {
       projectScope = unwrapStoragePayload(await storage.getAllHighlightedLinksForActiveProject());
     }
   } catch (error) {
-    console.warn("Não foi possível carregar as marcações de todas as fases.", error);
+    console.warn("Não foi possível carregar as marcações da fase ativa.", error);
   }
 
   const highlightedLinks = {
@@ -1492,9 +1628,27 @@ async function renderPapersTable() {
   // Early cancellation: if a newer render started, bail out
   if (myToken !== renderToken) return;
 
+  // A aba Artigos é estritamente vinculada à fase ativa. Os registros
+  // consolidados servem apenas para completar metadados dos itens que já estão
+  // presentes no storage da fase; nunca introduzem artigos de outras fases.
+  const globalPapers = Array.isArray(state?.papers) ? state.papers : [];
+  const globalById = new Map(
+    globalPapers
+      .filter(paper => paper?.id || paper?.id === 0)
+      .map(paper => [String(paper.id), paper])
+  );
+  const globalByUrl = new Map(
+    globalPapers
+      .filter(paper => paper?.url)
+      .map(paper => [normalizeUrl(paper.url), paper])
+  );
   const byKey = new Map();
-  [...(state.papers || []), ...svat].forEach((paper, index) => {
-    if (!paper || typeof paper !== "object") return;
+  svat.forEach((scopedPaper, index) => {
+    if (!scopedPaper || typeof scopedPaper !== "object") return;
+    const consolidated = globalById.get(String(scopedPaper.id))
+      || globalByUrl.get(normalizeUrl(scopedPaper.url))
+      || {};
+    const paper = mergeOverviewPaper(consolidated, scopedPaper);
     const key = getOverviewPaperKey(paper, index);
     byKey.set(key, mergeOverviewPaper(byKey.get(key), paper));
   });
@@ -1533,6 +1687,9 @@ async function renderPapersTable() {
     // Use a light tint from the selected category so the title stays readable.
     const category = getPaperCategory(p, hl);
     const metricType = getPaperMetricType(p, hl);
+    const categoryDisplayLabel = p?.autoDuplicate
+      ? "Duplicado automático"
+      : (category?.title || category?.label || "Sem categoria");
     const categoryColor = getPaperCategoryColor(p, hl);
     const rowStyle = categoryColor
       ? `style="--paper-category-color:${escapeHtml(categoryColor)};--paper-category-tint:${escapeHtml(hexToRgba(categoryColor, 0.25))};--paper-category-tint-hover:${escapeHtml(hexToRgba(categoryColor, 0.50))}"`
@@ -1556,7 +1713,7 @@ async function renderPapersTable() {
           <span class="paperCategoryCell">
             <span class="categoryBadge">
               ${categoryMarker}
-              <span>${escapeHtml(category?.title || category?.label || "Sem categoria")}</span>
+              <span>${escapeHtml(categoryDisplayLabel)}</span>
             </span>
             <span class="paperOutcomeBadge paperOutcomeBadge--${escapeHtml(metricType)}">${escapeHtml(getPaperMetricLabel(metricType))}</span>
             ${metricType === "duplicate" ? renderDuplicateOriginalSelect(p, duplicateCandidates) : ""}
@@ -1620,8 +1777,6 @@ async function onCellChange(e) {
       target.year = Number.isFinite(n) ? n : null;
     } else if (field === "tags") {
       target.tags = val.split(/[;,]/).map(s => s.trim()).filter(Boolean);
-    } else if (field === "duplicateOfId") {
-      target.duplicateOfId = val || null;
     } else {
       target[field] = val;
     }
@@ -1647,56 +1802,27 @@ async function bulkDeleteMarkedSelected() {
 
   if (!confirm(`Remover/excluir ${ids.length} artigo(s) selecionado(s)?`)) return;
 
-  const d = await storage.get(["highlightedLinks", "svat_papers"]);
-  const highlightedLinks = (d && d.highlightedLinks) ? d.highlightedLinks : {};
-  const svat_papers = Array.isArray(d && d.svat_papers) ? d.svat_papers : [];
-
-  const selectedUrls = new Set();
-  const paperIdsToDelete = new Set();
-
+  const selectedUrls = [];
   for (const id of ids) {
-    if (id && id.startsWith("marked:")) {
-      selectedUrls.add(id.slice(7));
+    const renderedPaper = renderedPapersById.get(String(id));
+    if (renderedPaper?.url) {
+      selectedUrls.push(renderedPaper.url);
       continue;
     }
-
-    paperIdsToDelete.add(id);
-    const paper = (state.papers || []).find((p) => p.id === id);
-    if (paper?.url) selectedUrls.add(normalizeStr(paper.url));
+    if (id?.startsWith("marked:")) selectedUrls.push(id.slice(7));
   }
 
-  for (const p of svat_papers) {
-    const nu = normalizeStr(p?.url || "");
-    if (selectedUrls.has(nu) && p?.id) paperIdsToDelete.add(p.id);
+  try {
+    await removeUrlsFromActivePhase(selectedUrls);
+    await Promise.allSettled([
+      loadHighlightedLinks(),
+      renderPapersTable(),
+      renderOverview(),
+    ]);
+  } catch (error) {
+    console.warn("bulkDeleteMarkedSelected failed", error);
+    alert(error?.message || "Não foi possível remover os artigos da fase ativa.");
   }
-
-  for (const t of selectedUrls) {
-    for (const k of Object.keys(highlightedLinks)) {
-      try {
-        if (normalizeStr(k) === t || normalizeUrl(k) === t || normalizeStr(normalizeUrl(k)) === t) {
-          delete highlightedLinks[k];
-        }
-      } catch (e) {
-        // ignore
-      }
-    }
-  }
-
-  const filteredPapers = svat_papers.filter((p) => {
-    const nu = normalizeStr(p?.url || "");
-    return !selectedUrls.has(nu) && !paperIdsToDelete.has(p?.id);
-  });
-
-  for (const paperId of paperIdsToDelete) {
-    await storage.deletePaper(paperId).catch((e) => console.warn('deletePaper failed:', e));
-  }
-
-  await storage.set({ highlightedLinks, svat_papers: filteredPapers });
-
-  state.papers = (state.papers || []).filter((p) => !paperIdsToDelete.has(p.id));
-  await loadState();
-  loadHighlightedLinks();
-  renderAll();
 }
 
 async function persist() {
@@ -1849,7 +1975,6 @@ function bindEvents() {
   const categoryColorInput = document.getElementById("categoryColor");
   const categoryColorValue = document.getElementById("categoryColorValue");
   const categoryMetricTypeInput = document.getElementById("categoryMetricType");
-  const categoryPhasesInput = document.getElementById("categoryPhases");
   const categoryCriteriaInput = document.getElementById("categoryCriteria");
   const categoryCriterionNewInput = document.getElementById("categoryCriterionNew");
   const btnAddCategoryCriterion = document.getElementById("btnAddCategoryCriterion");
@@ -1865,32 +1990,6 @@ function bindEvents() {
   const makeLabel = (value) => String(value || "")
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-
-  function renderCategoryRequirementOptions(container, items, selected = []) {
-    if (!container) return;
-    container.innerHTML = "";
-    if (!items.length) {
-      const empty = document.createElement("div");
-      empty.className = "muted categoryEmptyRequirements";
-      empty.textContent = "Nenhum item cadastrado.";
-      container.appendChild(empty);
-      return;
-    }
-
-    for (const item of items) {
-      const label = item.label || makeLabel(item.title);
-      const wrapper = document.createElement("label");
-      wrapper.className = "phaseCategoryItem";
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.value = label;
-      checkbox.checked = selected.includes(label);
-      const text = document.createElement("span");
-      text.textContent = item.title || label;
-      wrapper.append(checkbox, text);
-      container.appendChild(wrapper);
-    }
-  }
 
   function renderCategoryCriteria() {
     if (!categoryCriteriaInput) return;
@@ -1971,7 +2070,7 @@ function bindEvents() {
     categoryColorInput.value = category?.color || "#4CAF50";
     categoryColorValue.textContent = categoryColorInput.value.toUpperCase();
     if (categoryMetricTypeInput) {
-      categoryMetricTypeInput.value = normalizeMetricType(
+      categoryMetricTypeInput.value = normalizeCategoryMetricType(
         category?.metricType,
         inferMetricTypeFromCategory(category || {})
       );
@@ -1979,13 +2078,16 @@ function bindEvents() {
     categoryTitleError.classList.remove("visible");
     categoryTitleError.textContent = "";
 
-    const project = state?.project;
-    renderCategoryRequirementOptions(categoryPhasesInput, project?.phases || [], category?.phases || []);
     categoryDraftCriteria = Array.isArray(category?.criteria) ? [...category.criteria] : [];
     renderCategoryCriteria();
     if (categoryCriterionNewInput) categoryCriterionNewInput.value = "";
 
+    const deletionBlockReason = category
+      ? getCategoryDeletionBlockReason(state?.project, category.label)
+      : "";
     btnDeleteCategory.style.display = category ? "" : "none";
+    btnDeleteCategory.disabled = Boolean(deletionBlockReason);
+    btnDeleteCategory.title = deletionBlockReason || "Excluir categoria";
     categoryPanel.classList.add("open");
     categoryPanel.setAttribute("aria-hidden", "false");
     categoryPanel.removeAttribute("inert");
@@ -2165,8 +2267,7 @@ function bindEvents() {
       label: editingCategoryLabel || makeLabel(title),
       description: categoryDescriptionInput.value.trim(),
       color: categoryColorInput.value,
-      metricType: normalizeMetricType(categoryMetricTypeInput?.value, "pending"),
-      phases: selectedValues(categoryPhasesInput),
+      metricType: normalizeCategoryMetricType(categoryMetricTypeInput?.value, "pending"),
       criteria: [...categoryDraftCriteria],
     };
 
@@ -2207,6 +2308,8 @@ function bindEvents() {
   btnDeleteCategory?.addEventListener("click", async () => {
     const project = state?.project;
     const category = project?.categories?.find(item => item.label === editingCategoryLabel);
+    const deletionBlockReason = getCategoryDeletionBlockReason(project, editingCategoryLabel);
+    if (deletionBlockReason) return alert(deletionBlockReason);
     if (!category || !confirm(`Excluir a categoria "${category.title}"?`)) return;
     try {
       project.removeCategory(editingCategoryLabel);
@@ -2226,10 +2329,24 @@ function bindEvents() {
   });
 
   if (removeLinks) {
-    removeLinks.addEventListener("click", () => {
+    removeLinks.addEventListener("click", async () => {
       if (!confirm("Tem certeza que deseja remover TODOS os links marcados?")) return;
-      storage.set({ highlightedLinks: {}, svat_papers: [] }).then(loadHighlightedLinks)
-        .catch((e) => console.warn("removeLinks set failed", e));
+      try {
+        const scoped = await storage.get(["svat_papers", "highlightedLinks"]);
+        const urls = [
+          ...Object.keys(scoped?.highlightedLinks || {}),
+          ...(Array.isArray(scoped?.svat_papers) ? scoped.svat_papers.map(paper => paper?.url) : []),
+        ];
+        await removeUrlsFromActivePhase(urls);
+        await Promise.allSettled([
+          loadHighlightedLinks(),
+          renderPapersTable(),
+          renderOverview(),
+        ]);
+      } catch (error) {
+        console.warn("removeLinks failed", error);
+        alert(error?.message || "Não foi possível remover os links da fase ativa.");
+      }
     });
   }
 
@@ -2247,6 +2364,7 @@ function bindEvents() {
   const phaseDescInput = document.getElementById('phaseDesc');
   const phaseCriteriaInput = document.getElementById('phaseCriteria');
   const phaseCategoriesInput = document.getElementById('phaseCategories');
+  const phaseCategoriesError = document.getElementById('phaseCategoriesError');
   const btnTogglePhaseStatus = document.getElementById('btnTogglePhaseStatus');
   const btnDeletePhase = document.getElementById('btnDeletePhase');
   const phaseTitleError = document.getElementById('phaseTitleError');
@@ -2258,17 +2376,48 @@ function bindEvents() {
   let phaseEditingLabel = null; // label original da fase em edição
   let phaseLabelStatus = 'pending'; // 'pending' | 'done'
 
+  function getProjectPhases() {
+    return Array.isArray(state?.project?.phases) ? state.project.phases : [];
+  }
+
+  function getLatestPhase() {
+    return getProjectPhases().at(-1) || null;
+  }
+
+  function isLatestPhaseLabel(label) {
+    return Boolean(label && getLatestPhase()?.label === label);
+  }
+
+  function canCreateNextPhase() {
+    const latest = getLatestPhase();
+    return !latest || !!latest.completed;
+  }
+
+  function updatePhaseCreationAvailability() {
+    if (!btnShowAddPhase) return;
+    const latest = getLatestPhase();
+    const allowed = canCreateNextPhase();
+    btnShowAddPhase.disabled = !allowed;
+    btnShowAddPhase.title = allowed
+      ? (latest ? 'Adicionar a próxima fase' : 'Adicionar a primeira fase')
+      : `Conclua a fase "${latest?.title || latest?.label || 'atual'}" antes de criar outra.`;
+  }
+
   function updateToggleButtonUI(){
     if(!btnTogglePhaseStatus) return;
     const s = phaseLabelStatus === 'done' ? 'done' : 'pending';
     btnTogglePhaseStatus.dataset.status = s;
-    btnTogglePhaseStatus.textContent = s === 'done' ? 'Concluída' : 'Em análise';
+    btnTogglePhaseStatus.textContent = s === 'done' ? 'Concluído' : 'Em análise';
     btnTogglePhaseStatus.classList.toggle('ghost', s === 'pending');
   }
 
   if(btnTogglePhaseStatus){
     btnTogglePhaseStatus.addEventListener('click', (e) => {
       e.preventDefault();
+      if (!phaseEditingLabel || !isLatestPhaseLabel(phaseEditingLabel)) {
+        alert('Somente a fase atual mais recente pode ter o rótulo alterado. Para retornar a uma fase anterior, remova a fase atual.');
+        return;
+      }
       phaseLabelStatus = (phaseLabelStatus === 'done') ? 'pending' : 'done';
       updateToggleButtonUI();
     });
@@ -2294,6 +2443,14 @@ function bindEvents() {
         }))
         .sort((a,b)=>(a.title || '').localeCompare(b.title || ''));
 
+      if (!cats.length) {
+        const empty = document.createElement('div');
+        empty.className = 'muted categoryEmptyRequirements';
+        empty.textContent = 'Crie a primeira categoria para disponibilizá-la nesta fase.';
+        phaseCategoriesInput.appendChild(empty);
+        return;
+      }
+
       for (const cat of cats){
         const value = cat.label || cat.title;
         const id = `phase_cat_${cssSafeId(value)}`;
@@ -2304,6 +2461,12 @@ function bindEvents() {
         cb.value = value;
         cb.id = id;
         if(Array.isArray(selected) && selected.includes(value)) cb.checked = true;
+        cb.addEventListener('change', () => {
+          if (phaseCategoriesError && phaseCategoriesInput.querySelector('input[type=checkbox]:checked')) {
+            phaseCategoriesError.classList.remove('visible');
+            phaseCategoriesError.textContent = '';
+          }
+        });
         const pill = document.createElement('span');
         pill.className = 'catPill';
         pill.style.width = '12px';
@@ -2364,7 +2527,7 @@ function bindEvents() {
     };
   }
 
-  function createPhaseCard(phaseData = {}) {
+  function createPhaseCard(phaseData = {}, phaseIndex = 0, phaseCount = 1) {
     const title = phaseData.title || '';
     const desc = phaseData.desc ?? phaseData.description ?? '';
     const criteria = phaseCriteriaToText(phaseData.criteria);
@@ -2372,10 +2535,13 @@ function bindEvents() {
     const label = phaseData.label || cssSafeId(title).toLowerCase();
     const labelStatus = phaseData.labelStatus || (phaseData.completed ? 'done' : 'pending');
     const stats = phaseData.stats || getPhaseStats(phaseData);
+    const isFirstPhase = phaseIndex === 0;
+    const isLatestPhase = phaseIndex === phaseCount - 1;
 
     const el = document.createElement('div');
     el.className = 'phaseCard';
     if (state?.project?.activePhaseLabel === label) el.classList.add('active');
+    if (!isLatestPhase) el.classList.add('phaseCard--locked');
     el.dataset.label = label;
     el.dataset.labelStatus = labelStatus;
     el.dataset.desc = desc;
@@ -2396,12 +2562,12 @@ function bindEvents() {
         <div class="papersSection">
           <div class="papersTitle">📊 Papers</div>
           <div class="papersGrid">
-            <div><span class="muted">Herdados:</span> <strong>${s.inherited}</strong></div>
+            ${isFirstPhase ? '' : `<div><span class="muted">Herdados:</span> <strong>${s.inherited}</strong></div>`}
             <div><span class="muted">Novos:</span> <strong>${s.added}</strong></div>
             <div><span class="muted">Selecionados:</span> <strong>${s.selected}</strong></div>
             <div><span class="muted">Removidos:</span> <strong>${s.removed}</strong></div>
           </div>
-          <div class="papersUtil">Rótulo: <strong class="phaseLabelStatus ${labelStatus === 'done' ? 'done' : 'pending'}">${labelStatus === 'done' ? 'Concluída' : 'Em análise'}</strong></div>
+          <div class="papersUtil">Rótulo: <strong class="phaseLabelStatus ${labelStatus === 'done' ? 'done' : 'pending'}">${labelStatus === 'done' ? 'Concluído' : 'Em análise'}</strong></div>
         </div>
       </div>
       <div class="phaseCardFooter">
@@ -2421,6 +2587,12 @@ function bindEvents() {
       if(phaseCategoriesInput) renderPhaseCategories(categories || []);
       phaseLabelStatus = el.dataset.labelStatus || labelStatus || 'pending';
       phaseEditingLabel = el.dataset.label || label;
+      if (btnTogglePhaseStatus) {
+        btnTogglePhaseStatus.disabled = !isLatestPhase;
+        btnTogglePhaseStatus.title = isLatestPhase
+          ? 'Alterar o rótulo da fase atual'
+          : 'Fases anteriores permanecem concluídas enquanto existir uma fase posterior.';
+      }
       updateToggleButtonUI();
       phaseEditingCard = el;
       updateSaveState();
@@ -2434,13 +2606,20 @@ function bindEvents() {
         return;
       }
 
+      if (!isLatestPhase) {
+        alert('A fase mais recente é a única que pode ficar ativa. Para retornar a esta fase, remova o card da fase atual.');
+        return;
+      }
+
       try {
         console.log('🟢 Enviando set_active_phase para WS', { projectID: state.project.id, phaseLabel: label });
         await storage.setActivePhase(state.project.id, label);
-        state.project.activePhaseLabel = label;
-
-        loadHighlightedLinks();
-        await renderPapersTable();
+        await reloadActiveProjectAfterPhaseChange();
+        await Promise.allSettled([
+          loadHighlightedLinks(),
+          renderPapersTable(),
+          renderOverview(),
+        ]);
 
         if(phasesList){
           Array.from(phasesList.querySelectorAll('.phaseCard.active')).forEach(c => c.classList.remove('active'));
@@ -2459,10 +2638,11 @@ function bindEvents() {
     if(!phasesList) return;
     phasesList.innerHTML = '';
     const phases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
-    if (phases.length && !state.project.activePhaseLabel) {
-      state.project.activePhaseLabel = phases[0].label;
+    if (phases.length) {
+      state.project.activePhaseLabel = phases.at(-1).label;
     }
-    phases.forEach((phase) => phasesList.appendChild(createPhaseCard(phase)));
+    phases.forEach((phase, index) => phasesList.appendChild(createPhaseCard(phase, index, phases.length)));
+    updatePhaseCreationAvailability();
   }
 
   refreshPhaseCards = renderPhasesFromProject;
@@ -2494,7 +2674,12 @@ function bindEvents() {
     if(phaseDescInput) phaseDescInput.value = '';
     if(phaseCriteriaInput) phaseCriteriaInput.value = '';
     if(phaseCategoriesInput) renderPhaseCategories([]);
+    if(phaseCategoriesError){ phaseCategoriesError.classList.remove('visible'); phaseCategoriesError.textContent = ''; }
     phaseLabelStatus = 'pending';
+    if (btnTogglePhaseStatus) {
+      btnTogglePhaseStatus.disabled = true;
+      btnTogglePhaseStatus.title = 'Salve a fase em análise e conclua-a depois pela edição.';
+    }
     updateToggleButtonUI();
     updateSaveState();
   }
@@ -2516,9 +2701,20 @@ function bindEvents() {
     // ensure custom resizers are present and wired
     enhanceSidePanelTextareas();
     // show delete button when editing an existing card
+    if (phasePanelTitle) {
+      phasePanelTitle.textContent = isEditing
+        ? 'Editar fase'
+        : (phaseCreationRequired ? 'Crie a primeira fase' : 'Nova fase');
+    }
     if(btnDeletePhase){
-      if(isEditing) btnDeletePhase.style.display = '';
-      else btnDeletePhase.style.display = 'none';
+      const canDelete = isEditing
+        && getProjectPhases().length > 1
+        && isLatestPhaseLabel(phaseEditingLabel);
+      btnDeletePhase.style.display = isEditing ? '' : 'none';
+      btnDeletePhase.disabled = !canDelete;
+      btnDeletePhase.title = canDelete
+        ? 'Excluir a fase atual e retornar à anterior'
+        : 'O projeto deve manter a primeira fase; fases anteriores só podem ser acessadas removendo a atual.';
     }
     setTimeout(() => phaseTitleInput?.focus(), 60);
   }
@@ -2545,6 +2741,7 @@ function bindEvents() {
     if(phaseTitleError){ phaseTitleError.classList.remove('visible'); phaseTitleError.textContent=''; }
     if(phaseDescError){ phaseDescError.classList.remove('visible'); phaseDescError.textContent=''; }
     if(phaseCriteriaError){ phaseCriteriaError.classList.remove('visible'); phaseCriteriaError.textContent=''; }
+    if(phaseCategoriesError){ phaseCategoriesError.classList.remove('visible'); phaseCategoriesError.textContent=''; }
     if(btnDeletePhase) btnDeletePhase.style.display = 'none';
   }
 
@@ -2622,6 +2819,11 @@ function bindEvents() {
 
   if (btnShowAddPhase && phasePanel) {
     btnShowAddPhase.addEventListener('click', () => {
+      if (!canCreateNextPhase()) {
+        const latest = getLatestPhase();
+        alert(`Conclua a fase "${latest?.title || latest?.label || 'atual'}" antes de criar uma nova fase.`);
+        return;
+      }
       prepareNewPhaseForm();
       openPhasePanel(false);
     });
@@ -2699,6 +2901,7 @@ function bindEvents() {
     if(phaseTitleError){ phaseTitleError.classList.remove('visible'); phaseTitleError.textContent=''; }
     if(phaseDescError){ phaseDescError.classList.remove('visible'); phaseDescError.textContent=''; }
     if(phaseCriteriaError){ phaseCriteriaError.classList.remove('visible'); phaseCriteriaError.textContent=''; }
+    if(phaseCategoriesError){ phaseCategoriesError.classList.remove('visible'); phaseCategoriesError.textContent=''; }
 
     const emptyFields = [];
     if(!title) emptyFields.push('title');
@@ -2719,10 +2922,30 @@ function bindEvents() {
       return;
     }
 
+    if (!phaseEditingLabel && !canCreateNextPhase()) {
+      const latest = getLatestPhase();
+      alert(`Conclua a fase "${latest?.title || latest?.label || 'atual'}" antes de criar uma nova fase.`);
+      return;
+    }
+
     let categories = [];
     if(phaseCategoriesInput){
       const checked = Array.from(phaseCategoriesInput.querySelectorAll('input[type=checkbox]:checked'));
       categories = checked.map(c => (c.value || '').trim()).filter(Boolean);
+    }
+
+    if (projectHasCategories() && !categories.length) {
+      if (phaseCategoriesError) {
+        phaseCategoriesError.textContent = 'Selecione pelo menos uma categoria para esta fase.';
+        phaseCategoriesError.classList.add('visible');
+      }
+      phaseCategoriesInput?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
+    if (phaseEditingLabel && !isLatestPhaseLabel(phaseEditingLabel) && phaseLabelStatus !== 'done') {
+      alert('Fases anteriores permanecem concluídas enquanto existir uma fase posterior. Para retornar, remova a fase atual.');
+      return;
     }
 
     const phasePayload = {
@@ -2747,7 +2970,12 @@ function bindEvents() {
       await reloadActiveProjectAfterPhaseChange();
       renderPhasesFromProject();
       renderHeader();
-      renderOverview();
+      await Promise.allSettled([
+        renderOverview(),
+        loadHighlightedLinks(),
+        renderPapersTable(),
+        updateScholarCategoryMenu(),
+      ]);
       const stillRequiresPhase = !projectHasPhases();
       applyPhaseRequirementUI(stillRequiresPhase);
       clearPhaseForm();
@@ -2772,7 +3000,16 @@ function bindEvents() {
   // Delete handler (persistido no project.json)
   if(btnDeletePhase) btnDeletePhase.addEventListener('click', async () => {
     if(!phaseEditingLabel) return;
-    if(!confirm('Excluir esta fase?')) return;
+    const phases = getProjectPhases();
+    if (phases.length <= 1) {
+      alert('O projeto deve manter pelo menos uma fase. A primeira fase não pode ser excluída.');
+      return;
+    }
+    if (!isLatestPhaseLabel(phaseEditingLabel)) {
+      alert('Somente a fase atual mais recente pode ser removida. Remova as fases posteriores primeiro.');
+      return;
+    }
+    if(!confirm('Excluir a fase atual e retornar à fase anterior? Os artigos marcados exclusivamente nesta fase serão removidos do seu escopo.')) return;
     if(!state?.project?.id){
       alert('Abra um projeto antes de excluir fases.');
       return;
@@ -2784,7 +3021,12 @@ function bindEvents() {
       await reloadActiveProjectAfterPhaseChange();
       renderPhasesFromProject();
       renderHeader();
-      renderOverview();
+      await Promise.allSettled([
+        renderOverview(),
+        loadHighlightedLinks(),
+        renderPapersTable(),
+        updateScholarCategoryMenu(),
+      ]);
       const requiresReplacementPhase = !projectHasPhases();
       applyPhaseRequirementUI(requiresReplacementPhase);
       clearPhaseForm();

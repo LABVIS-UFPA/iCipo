@@ -6,6 +6,7 @@ import {
   replaceArrayItem,
   removeArrayItem,
   normalizeMetricType,
+  normalizeCategoryMetricType,
   inferMetricTypeFromCategory,
 } from "./utils.mjs";
 
@@ -19,6 +20,7 @@ class Project {
     categories: [],
     criteria: [],
     phases: [],
+    activePhaseLabel: null,
     isCurrent: false,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -41,6 +43,46 @@ class Project {
       if(this.categories) this.categories = checkArray(this.categories).map(c => Category.fromJSON(c));
       if(this.criteria) this.criteria = checkArray(this.criteria).map(c => Criterion.fromJSON(c));
       if(this.phases) this.phases = checkArray(this.phases).map(f => Phase.fromJSON(f));
+
+      this._migrateLegacyCategoryPhaseLinks(data.categories);
+      this._normalizeActivePhase();
+    }
+  }
+
+  _migrateLegacyCategoryPhaseLinks(rawCategories = []) {
+    if (!Array.isArray(this.phases) || !Array.isArray(this.categories)) return;
+
+    for (const rawCategory of checkArray(rawCategories)) {
+      const categoryLabel = rawCategory?.label || slugify(rawCategory?.title || "");
+      if (!categoryLabel) continue;
+
+      for (const phaseLabel of uniqueStrings(rawCategory?.phases)) {
+        const phase = this.phases.find(item => item.label === phaseLabel);
+        if (phase) phase.categories = uniqueStrings([...phase.categories, categoryLabel]);
+      }
+    }
+
+    // Projetos antigos podem possuir uma fase ativa sem categorias porque o
+    // vínculo era mantido apenas em Category.phases. Garante uma categoria
+    // utilizável sem reintroduzir a relação bidirecional.
+    const activePhase = this.phases.find(phase => phase.label === this.activePhaseLabel)
+      || this.phases.at(-1)
+      || null;
+    if (activePhase && this.categories.length && !activePhase.categories.length) {
+      activePhase.categories = [this.categories[0].label];
+    }
+  }
+
+  _normalizeActivePhase() {
+    if (!Array.isArray(this.phases) || !this.phases.length) {
+      this.activePhaseLabel = null;
+      return;
+    }
+
+    const latestPhase = this.phases.at(-1);
+    const activeExists = this.phases.some(phase => phase.label === this.activePhaseLabel);
+    if (!activeExists || this.activePhaseLabel !== latestPhase.label) {
+      this.activePhaseLabel = latestPhase.label;
     }
   }
 
@@ -56,14 +98,19 @@ class Project {
       throw new Error("Título e cor da categoria são obrigatórios.");
     }
 
-    category.phases = uniqueStrings(category.phases);
     category.criteria = normalizeCategoryCriteria(category.criteria);
     this._assertUniqueLabel(this.categories, category.label, null, "categoria");
 
-    const missingPhases = category.phases.filter(label => !this.phases.some(phase => phase.label === label));
-    if (missingPhases.length) throw new Error(`Fases inexistentes: ${missingPhases.join(", ")}.`);
-
     this.categories.push(category);
+
+    // A primeira categoria criada passa a ser automaticamente utilizável na
+    // fase ativa. As demais categorias são vinculadas somente pelo painel da
+    // própria fase.
+    const activePhase = this.getActivePhase();
+    if (activePhase && !activePhase.categories.length) {
+      activePhase.categories = [category.label];
+    }
+
     this._touch();
     return category;
   }
@@ -79,12 +126,8 @@ class Project {
       throw new Error("Título e cor da categoria são obrigatórios.");
     }
 
-    nextCategory.phases = uniqueStrings(nextCategory.phases);
     nextCategory.criteria = normalizeCategoryCriteria(nextCategory.criteria);
     this._assertUniqueLabel(this.categories, nextCategory.label, previousCategory.label, "categoria");
-
-    const missingPhases = nextCategory.phases.filter(phaseLabel => !this.phases.some(phase => phase.label === phaseLabel));
-    if (missingPhases.length) throw new Error(`Fases inexistentes: ${missingPhases.join(", ")}.`);
 
     this.categories[categoryIndex] = nextCategory;
     if (previousCategory.label !== nextCategory.label) {
@@ -101,6 +144,19 @@ class Project {
   removeCategory(label) {
     const index = this.categories.findIndex(category => category.label === label);
     if (index === -1) return null;
+
+    if (this.categories.length <= 1) {
+      throw new Error("O projeto deve manter pelo menos uma categoria.");
+    }
+
+    const phasesWithoutAlternative = this.phases.filter(phase => {
+      const assigned = uniqueStrings(phase.categories);
+      return assigned.includes(label) && assigned.length <= 1;
+    });
+    if (phasesWithoutAlternative.length) {
+      const phaseNames = phasesWithoutAlternative.map(phase => phase.title || phase.label).join(", ");
+      throw new Error(`A categoria é a única ativa em: ${phaseNames}. Vincule outra categoria nessas fases antes de excluí-la.`);
+    }
 
     const removed = this.categories.splice(index, 1)[0];
     for (const phase of this.phases) {
@@ -155,20 +211,6 @@ class Project {
     }
 
     // Critérios das categorias são locais e não referenciam os critérios globais do projeto.
-  }
-
-  _renamePhaseReferences(oldLabel, newLabel) {
-    if (!oldLabel || oldLabel === newLabel) return;
-
-    for (const category of this.categories) {
-      category.phases = replaceArrayItem(category.phases, oldLabel, newLabel);
-    }
-  }
-
-  _removePhaseReferences(label) {
-    for (const category of this.categories) {
-      category.phases = removeArrayItem(category.phases, label);
-    }
   }
 
   _renameCategoryReferences(oldLabel, newLabel) {
@@ -256,13 +298,27 @@ class Project {
   addPhase(phaseData) {
     const rawPhase = phaseData instanceof Phase ? phaseData.toJSON() : (phaseData || {});
     const phase = Phase.fromJSON(rawPhase);
+    // Toda nova fase começa em análise. O rótulo “Concluído” só pode ser
+    // aplicado depois, ao editar a fase mais recente, evitando criar etapas já
+    // finalizadas e pular o fluxo sequencial.
+    phase.completed = false;
     phase.categories = uniqueStrings(phase.categories);
     phase.criteria = uniqueStrings(phase.criteria);
     this._assertUniqueLabel(this.phases, phase.label, null, "phase");
     this._assertCriteriaExist(phase.criteria);
     this._assertCategoriesExist(phase.categories);
 
+    const latestPhase = this.phases.at(-1) || null;
+    if (latestPhase && !latestPhase.completed) {
+      throw new Error(`Conclua a fase "${latestPhase.title || latestPhase.label}" antes de criar uma nova fase.`);
+    }
+
+    if (this.categories.length && !phase.categories.length) {
+      throw new Error("Selecione pelo menos uma categoria para a nova fase.");
+    }
+
     this.phases.push(phase);
+    this.activePhaseLabel = phase.label;
     this._touch();
     return phase;
   }
@@ -283,40 +339,64 @@ class Project {
     this._assertCriteriaExist(nextPhase.criteria);
     this._assertCategoriesExist(nextPhase.categories);
 
+    if (this.categories.length && !nextPhase.categories.length) {
+      throw new Error("A fase deve manter pelo menos uma categoria ativa.");
+    }
+
+    const isLatestPhase = phaseIndex === this.phases.length - 1;
+    if (!isLatestPhase && !nextPhase.completed) {
+      throw new Error("Fases anteriores permanecem concluídas enquanto existir uma fase posterior.");
+    }
+
     this.phases[phaseIndex] = nextPhase;
-    this._renamePhaseReferences(previousPhase.label, nextPhase.label);
+    if (this.activePhaseLabel === previousPhase.label || isLatestPhase) {
+      this.activePhaseLabel = nextPhase.label;
+    }
     this._touch();
     return nextPhase;
   }
 
   canRemovePhase(label) {
-    const phase = this.getPhaseByLabel(label);
-    return !!phase && !phase.completed;
+    const phaseIndex = this.phases.findIndex(phase => phase.label === label);
+    return this.phases.length > 1 && phaseIndex === this.phases.length - 1;
   }
 
   removePhase(label) {
     const phaseIndex = this.phases.findIndex(phase => phase.label === label);
     if (phaseIndex === -1) return null;
 
-    const phase = this.phases[phaseIndex];
-    if (phase.completed) {
-      throw new Error(`A phase \"${label}\" já foi concluída e não pode ser removida.`);
+    if (this.phases.length <= 1) {
+      throw new Error("O projeto deve manter pelo menos uma fase.");
+    }
+
+    if (phaseIndex !== this.phases.length - 1) {
+      throw new Error("Somente a fase atual mais recente pode ser removida. Remova as fases posteriores primeiro.");
     }
 
     const removedPhase = this.phases.splice(phaseIndex, 1)[0];
-    this._removePhaseReferences(removedPhase.label);
+    const previousPhase = this.phases.at(-1) || null;
+    if (previousPhase) {
+      previousPhase.completed = false;
+      this.activePhaseLabel = previousPhase.label;
+    }
     this._touch();
     return removedPhase;
   }
 
   getActivePhase() {
-    return this.phases.find(phase => !phase.completed) || null;
+    return this.phases.find(phase => phase.label === this.activePhaseLabel)
+      || this.phases.at(-1)
+      || null;
   }
 
   canFinalizePhase(label) {
     const phase = this.getPhaseByLabel(label);
     const activePhase = this.getActivePhase();
-    return !!phase && !phase.completed && !!activePhase && activePhase.label === label;
+    return !!phase
+      && !phase.completed
+      && !!activePhase
+      && activePhase.label === label
+      && this.phases.at(-1)?.label === label;
   }
 
   finalizePhase(label) {
@@ -334,6 +414,7 @@ class Project {
     }
 
     phase.completed = true;
+    this.activePhaseLabel = phase.label;
     this._touch();
 
     return {
@@ -386,6 +467,10 @@ class Paper {
       ? { ...data.classifications }
       : {};
     this.duplicateOfId = data.duplicateOfId || null;
+    this.autoDuplicate = !!data.autoDuplicate;
+    this.duplicateSequence = Number.isFinite(Number(data.duplicateSequence))
+      ? Number(data.duplicateSequence)
+      : null;
     this.iterationId = data.iterationId || null;
     this.criteriaId = data.criteriaId || null;
     this.tags = checkArray(data.tags);
@@ -478,6 +563,8 @@ class Paper {
       phaseLabel: this.phaseLabel,
       classifications: this.classifications,
       duplicateOfId: this.duplicateOfId,
+      autoDuplicate: this.autoDuplicate,
+      duplicateSequence: this.duplicateSequence,
       iterationId: this.iterationId,
       criteriaId: this.criteriaId,
       tags: this.tags,
@@ -515,11 +602,10 @@ class Category {
     this.label = data.label || slugify(this.title);
     this.description = data.description || "";
     this.color = data.color || null;
-    this.metricType = normalizeMetricType(
+    this.metricType = normalizeCategoryMetricType(
       data.metricType ?? data.metric ?? data.outcome,
       inferMetricTypeFromCategory(data)
     );
-    this.phases = checkArray(data.phases);
     this.criteria = normalizeCategoryCriteria(data.criteria);
   }
 
@@ -530,7 +616,6 @@ class Category {
       description: this.description,
       color: this.color,
       metricType: this.metricType,
-      phases: this.phases,
       criteria: this.criteria,
     };
   }

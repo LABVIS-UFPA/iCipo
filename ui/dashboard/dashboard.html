@@ -316,15 +316,9 @@
             <select id="categoryMetricType" class="input select">
               <option value="included">Incluído</option>
               <option value="excluded">Excluído</option>
-              <option value="duplicate">Duplicado</option>
               <option value="pending">Não contabilizar / Pendente</option>
             </select>
-            <div class="categoryMetricHelp">Define em qual indicador da Visão Geral os artigos desta categoria serão contabilizados.</div>
-
-            <fieldset class="categoryFieldset">
-              <legend>Fases em que a categoria pode ser usada</legend>
-              <div id="categoryPhases" class="categoriesList categoryRequirementsList" aria-live="polite"></div>
-            </fieldset>
+            <div class="categoryMetricHelp">Define em qual indicador da Visão Geral os artigos desta categoria serão contabilizados. Duplicatas são identificadas automaticamente pelo link.</div>
 
             <fieldset class="categoryFieldset">
               <legend>Critérios da categoria</legend>
@@ -366,7 +360,7 @@
             </div>
             <div class="articleTutorialStep">
               <span class="articleTutorialNumber">3</span>
-              <div><strong>Confira ano, categoria e resultado</strong><span>A categoria registra o motivo detalhado; o resultado mostra se o artigo foi incluído, excluído, marcado como duplicado ou ficou pendente.</span></div>
+              <div><strong>Confira ano, categoria e resultado</strong><span>A categoria registra o motivo detalhado; o sistema identifica duplicatas automaticamente pelo link.</span></div>
             </div>
             <div class="articleTutorialStep">
               <span class="articleTutorialNumber">4</span>
@@ -407,10 +401,10 @@
             <textarea id="phaseCriteria" class="input" style="min-height:120px" placeholder="Critérios (texto livre)"></textarea>
             <div id="phaseCriteriaError" class="fieldError" aria-live="polite"></div>
 
-            <!-- rótulo removido -->
-
-            <label class="visually-hidden" for="phaseCategories">Categorias</label>
+            <label for="phaseCategories" class="phaseFieldLabel">Categorias usadas nesta fase</label>
+            <div class="categoryMetricHelp">Somente as categorias selecionadas aqui aparecerão no menu de marcação enquanto esta fase estiver ativa.</div>
             <div id="phaseCategories" class="categoriesList" aria-live="polite"></div>
+            <div id="phaseCategoriesError" class="fieldError" aria-live="polite"></div>
 
             <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
               <span class="muted">Rótulo:</span>

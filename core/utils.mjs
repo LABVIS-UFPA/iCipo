@@ -42,6 +42,15 @@ export const PAPER_METRIC_TYPES = Object.freeze([
     "pending",
 ]);
 
+// Categorias representam decisões humanas. A duplicidade deixou de ser uma
+// decisão manual e passou a ser identificada automaticamente pelo endereço do
+// artigo, por isso não é um tipo válido para novas categorias.
+export const CATEGORY_METRIC_TYPES = Object.freeze([
+    "included",
+    "excluded",
+    "pending",
+]);
+
 function normalizeMetricToken(value) {
     return String(value || "")
         .trim()
@@ -103,6 +112,77 @@ export function normalizeMetricType(value, fallback = "pending") {
     const normalizedFallback = normalizeMetricToken(fallback);
     if (PAPER_METRIC_TYPES.includes(normalizedFallback)) return normalizedFallback;
     return "pending";
+}
+
+/**
+ * Normaliza o impacto permitido para categorias. Projetos antigos que ainda
+ * possuem uma categoria manual de duplicidade são migrados para "pending";
+ * registros de artigos duplicados continuam usando normalizeMetricType().
+ */
+export function normalizeCategoryMetricType(value, fallback = "pending") {
+    const normalized = normalizeMetricType(value, fallback);
+    if (CATEGORY_METRIC_TYPES.includes(normalized)) return normalized;
+
+    const normalizedFallback = normalizeMetricType(fallback, "pending");
+    return CATEGORY_METRIC_TYPES.includes(normalizedFallback)
+        ? normalizedFallback
+        : "pending";
+}
+
+/**
+ * Gera uma identidade estável para comparar links de artigos. Mantém os
+ * parâmetros funcionais da URL e remove somente fragmentos e parâmetros de
+ * rastreamento conhecidos, evitando duplicatas causadas por pequenas
+ * variações do mesmo endereço.
+ */
+export function normalizeArticleUrl(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+
+    try {
+        const url = new URL(raw);
+        url.hash = "";
+        url.hostname = url.hostname.toLowerCase();
+
+        const removableParams = new Set([
+            "casa_token",
+            "utm_source",
+            "utm_medium",
+            "utm_campaign",
+            "utm_term",
+            "utm_content",
+            "gclid",
+            "fbclid",
+        ]);
+
+        for (const key of [...url.searchParams.keys()]) {
+            if (removableParams.has(key.toLowerCase())) {
+                url.searchParams.delete(key);
+            }
+        }
+
+        const sortedParams = [...url.searchParams.entries()]
+            .sort(([keyA, valueA], [keyB, valueB]) => {
+                const keyComparison = keyA.localeCompare(keyB);
+                return keyComparison || valueA.localeCompare(valueB);
+            });
+        url.search = "";
+        for (const [key, itemValue] of sortedParams) {
+            url.searchParams.append(key, itemValue);
+        }
+
+        if (url.pathname.length > 1) {
+            url.pathname = url.pathname.replace(/\/+$/g, "");
+        }
+
+        return url.toString();
+    } catch {
+        return raw
+            .replace(/([?&])casa_token=[^&#]*/gi, "$1")
+            .replace(/[?&]+$/g, "")
+            .replace(/#.*$/g, "")
+            .replace(/\/+$/g, "");
+    }
 }
 
 /**

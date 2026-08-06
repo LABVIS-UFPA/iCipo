@@ -670,6 +670,28 @@ svg .axis line, svg .axis path{stroke: rgba(234,240,255,0.18)}
 .phaseCard .activeLabel{display:none}
 .phaseCard.active .activeLabel{display:inline-flex}
 .activeLabel.pill{background: rgba(59,225,155,0.08);border:1px solid rgba(59,225,155,0.12);color:var(--good);font-weight:800;padding:6px 8px;border-radius:999px;font-size:12px}
+.phaseCard--locked{
+  cursor:default;
+}
+.phaseCard--locked .statusDot{
+  background:rgba(102,112,133,.28);
+  border-color:rgba(102,112,133,.36);
+}
+.phaseFieldLabel{
+  display:block;
+  margin-top:6px;
+  font-size:13px;
+  font-weight:850;
+  color:var(--text);
+}
+
+.btn:disabled,
+button:disabled{
+  cursor:not-allowed;
+  opacity:.52;
+  transform:none !important;
+  box-shadow:none !important;
+}
 
 /* Phase categories (checkbox chips) inside side panel */
 #phaseCategories{
@@ -1768,20 +1790,22 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
   align-items:flex-start;
   gap:3px;
 }
-.duplicateOriginalSelect{
+.duplicateOriginalAutomatic{
+  display:block;
   width:100%;
   min-width:168px;
   max-width:250px;
-  min-height:29px;
-  padding:4px 24px 4px 7px;
+  padding:5px 8px;
+  border:1px solid #e5d3ad;
+  border-radius:7px;
   border-color:#e5d3ad;
   background-color:#fffaf0;
   color:#7d4b0a;
   font-size:9.5px;
-}
-.duplicateOriginalSelect:disabled{
-  cursor:not-allowed;
-  opacity:.68;
+  line-height:1.35;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
 }
 .duplicateRelation small{
   color:#7b8799;
