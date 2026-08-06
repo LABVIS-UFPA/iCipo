@@ -35,6 +35,104 @@ export function removeArrayItem(values, targetValue) {
     return checkArray(values).filter(value => value !== targetValue);
 }
 
+export const PAPER_METRIC_TYPES = Object.freeze([
+    "included",
+    "excluded",
+    "duplicate",
+    "pending",
+]);
+
+function normalizeMetricToken(value) {
+    return String(value || "")
+        .trim()
+        .toLowerCase()
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+}
+
+/**
+ * Normaliza o resultado consolidado usado nas métricas dos artigos.
+ * O formato persistido é sempre um dos quatro valores canônicos abaixo.
+ */
+export function normalizeMetricType(value, fallback = "pending") {
+    const token = normalizeMetricToken(value);
+    const aliases = {
+        included: "included",
+        include: "included",
+        incluido: "included",
+        incluida: "included",
+        inclusao: "included",
+        aprovado: "included",
+        aprovada: "included",
+        aceito: "included",
+        aceita: "included",
+        selected: "included",
+        selecionado: "included",
+        selecionada: "included",
+
+        excluded: "excluded",
+        exclude: "excluded",
+        excluido: "excluded",
+        excluida: "excluded",
+        exclusao: "excluded",
+        rejeitado: "excluded",
+        rejeitada: "excluded",
+        descartado: "excluded",
+        descartada: "excluded",
+
+        duplicate: "duplicate",
+        duplicated: "duplicate",
+        duplicado: "duplicate",
+        duplicada: "duplicate",
+        duplicidade: "duplicate",
+        repetido: "duplicate",
+        repetida: "duplicate",
+
+        pending: "pending",
+        pendente: "pending",
+        unclassified: "pending",
+        sem_classificacao: "pending",
+        nao_contabilizar: "pending",
+        none: "pending",
+    };
+
+    if (aliases[token]) return aliases[token];
+
+    const normalizedFallback = normalizeMetricToken(fallback);
+    if (PAPER_METRIC_TYPES.includes(normalizedFallback)) return normalizedFallback;
+    return "pending";
+}
+
+/**
+ * Compatibilidade com projetos antigos que ainda não possuem metricType.
+ * Novas categorias devem persistir metricType explicitamente.
+ */
+export function inferMetricTypeFromCategory(category) {
+    if (category && typeof category === "object") {
+        const explicit = normalizeMetricType(
+            category.metricType ?? category.metric ?? category.outcome,
+            ""
+        );
+        if (explicit && PAPER_METRIC_TYPES.includes(explicit)) {
+            const rawExplicit = category.metricType ?? category.metric ?? category.outcome;
+            if (String(rawExplicit || "").trim()) return explicit;
+        }
+    }
+
+    const source = category && typeof category === "object"
+        ? `${category.label || ""} ${category.title || ""}`
+        : String(category || "");
+    const token = normalizeMetricToken(source);
+
+    if (/(^|_)(nao_(incl|aprov|aceit|selecion)|ineleg|fora_dos_criterios)/.test(token)) return "excluded";
+    if (/(^|_)(excl|rejeit|descart|ineleg)/.test(token)) return "excluded";
+    if (/(^|_)(duplic|repet)/.test(token)) return "duplicate";
+    if (/(^|_)(incl|aprov|aceit|selecion|elegivel|atende)/.test(token)) return "included";
+    return "pending";
+}
+
 export function tokenSet(title) {
     return new Set(normalizeStr(title)
         .replace(/[^a-z0-9\s]/g, " ")
@@ -87,16 +185,16 @@ export function hashId(input) {
 }
 
 export function inferFromCategory(category) {
-    const c = (category || "").toLowerCase();
+    const categoryText = category && typeof category === "object"
+        ? `${category.label || ""} ${category.title || ""}`
+        : String(category || "");
+    const c = categoryText.toLowerCase();
     const origin = c.includes("seed") || c.includes("semente") ? "seed"
         : c.includes("back") || c.includes("refer") ? "backward"
         : c.includes("forw") || c.includes("cita") ? "forward"
         : "unknown";
 
-    const status = c.includes("incl") ? "included"
-        : c.includes("excl") ? "excluded"
-        : c.includes("duplic") ? "duplicate"
-        : "pending";
+    const status = inferMetricTypeFromCategory(category);
 
     return { origin, status };
 }

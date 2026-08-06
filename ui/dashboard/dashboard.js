@@ -1,4 +1,9 @@
-import {fmtDate, normalizeStr} from '../../core/utils.mjs';
+import {
+  fmtDate,
+  normalizeStr,
+  normalizeMetricType,
+  inferMetricTypeFromCategory,
+} from '../../core/utils.mjs';
 import { storage } from '../../infrastructure/storage.mjs';
 
 let state = null;
@@ -8,7 +13,17 @@ let dashboardIntroRequired = false;
 let categoryCreationRequired = false;
 let tutorialTransitionTimer = null;
 let overviewResizeTimer = null;
+let paperMetricFilter = "all";
+let paperCategoryFilter = "all";
+let renderedPapersById = new Map();
 const TUTORIAL_TRANSITION_DELAY = 2000;
+
+const PAPER_METRIC_LABELS = Object.freeze({
+  included: "Incluídos",
+  excluded: "Excluídos",
+  duplicate: "Duplicados",
+  pending: "Pendentes",
+});
 
 function projectHasCategories() {
   return Array.isArray(state?.project?.categories) && state.project.categories.length > 0;
@@ -112,6 +127,23 @@ function getLuminanceFromHex(hex) {
 }
 
 
+function getContrastRatio(firstLuminance, secondLuminance) {
+  const lighter = Math.max(firstLuminance, secondLuminance);
+  const darker = Math.min(firstLuminance, secondLuminance);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function getReadableCategoryTextColor(backgroundColor) {
+  const backgroundLuminance = getLuminanceFromHex(backgroundColor);
+  const darkText = "#101828";
+  const lightText = "#FFFFFF";
+  const darkContrast = getContrastRatio(backgroundLuminance, getLuminanceFromHex(darkText));
+  const lightContrast = getContrastRatio(backgroundLuminance, getLuminanceFromHex(lightText));
+
+  return darkContrast >= lightContrast ? darkText : lightText;
+}
+
+
 function normalizeHexColor(value, fallback = "") {
   const color = String(value || "").trim();
   if (/^#[0-9a-f]{6}$/i.test(color)) return color.toUpperCase();
@@ -131,8 +163,46 @@ function hexToRgba(hex, alpha = 0.12) {
   return `rgba(${r}, ${g}, ${b}, ${safeAlpha})`;
 }
 
+function getPaperClassification(paper) {
+  const classifications = paper?.classifications;
+  if (!classifications || typeof classifications !== "object" || Array.isArray(classifications)) return null;
+
+  const preferredKeys = [
+    paper?.phaseLabel,
+    state?.project?.activePhaseLabel,
+    paper?.iterationId,
+  ].filter(Boolean);
+
+  for (const key of preferredKeys) {
+    if (classifications[key] && typeof classifications[key] === "object") {
+      return classifications[key];
+    }
+  }
+
+  return Object.values(classifications)
+    .filter(item => item && typeof item === "object")
+    .sort((a, b) => String(b.classifiedAt || "").localeCompare(String(a.classifiedAt || "")))[0]
+    || null;
+}
+
 function getPaperCategory(paper, highlightedLinks = {}) {
   const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
+  const classification = getPaperClassification(paper);
+  const explicitCategoryCandidates = [
+    paper?.categoryLabel,
+    classification?.categoryLabel,
+    paper?.categoryId,
+    typeof paper?.category === "string" ? paper.category : "",
+  ].map(value => String(value || "").trim().toLowerCase()).filter(Boolean);
+
+  const categoryByReference = categories.find(cat => {
+    const label = String(cat?.label || "").trim().toLowerCase();
+    const title = String(cat?.title || "").trim().toLowerCase();
+    return (label && explicitCategoryCandidates.includes(label))
+      || (title && explicitCategoryCandidates.includes(title));
+  });
+  if (categoryByReference) return categoryByReference;
+
   const tags = Array.isArray(paper?.tags)
     ? paper.tags.map(tag => String(tag).trim().toLowerCase()).filter(Boolean)
     : [];
@@ -159,6 +229,125 @@ function getPaperCategory(paper, highlightedLinks = {}) {
 
   if (!resolvedColor) return null;
   return categories.find(cat => normalizeHexColor(cat?.color) === resolvedColor) || null;
+}
+
+function getPaperMetricType(paper, highlightedLinks = {}) {
+  const category = getPaperCategory(paper, highlightedLinks);
+  if (category) {
+    return normalizeMetricType(category.metricType, inferMetricTypeFromCategory(category));
+  }
+
+  const classification = getPaperClassification(paper);
+  const fallbackCategory = classification?.categoryLabel
+    || paper?.categoryLabel
+    || (Array.isArray(paper?.tags) ? paper.tags.join(" ") : "");
+  return normalizeMetricType(
+    classification?.outcome ?? paper?.status,
+    inferMetricTypeFromCategory(fallbackCategory)
+  );
+}
+
+function getPaperMetricLabel(metricType) {
+  return PAPER_METRIC_LABELS[normalizeMetricType(metricType, "pending")] || "Pendentes";
+}
+
+function getDuplicateCandidateLabel(paper) {
+  const title = String(paper?.title || paper?.url || paper?.id || "Artigo sem título").trim();
+  const compactTitle = title.length > 72 ? `${title.slice(0, 69)}…` : title;
+  const year = extractPaperYear(paper);
+  return year ? `${compactTitle} (${year})` : compactTitle;
+}
+
+function renderDuplicateOriginalSelect(paper, candidates = []) {
+  const paperId = String(paper?.id ?? "");
+  const selectedId = String(paper?.duplicateOfId ?? "");
+  const available = candidates.filter(candidate => String(candidate?.id ?? "") !== paperId);
+  const hasSelectedCandidate = available.some(candidate => String(candidate?.id ?? "") === selectedId);
+  const options = [
+    `<option value="">${selectedId ? "Remover vínculo com o original" : "Selecionar artigo original"}</option>`,
+  ];
+
+  if (selectedId && !hasSelectedCandidate) {
+    options.push(`<option value="${escapeHtml(selectedId)}" selected>Original vinculado: ${escapeHtml(selectedId)}</option>`);
+  }
+
+  for (const candidate of available) {
+    const candidateId = String(candidate?.id ?? "");
+    if (!candidateId) continue;
+    const selected = candidateId === selectedId ? " selected" : "";
+    options.push(`<option value="${escapeHtml(candidateId)}"${selected}>${escapeHtml(getDuplicateCandidateLabel(candidate))}</option>`);
+  }
+
+  const disabled = available.length || selectedId ? "" : " disabled";
+  const helper = selectedId
+    ? "Duplicata vinculada ao registro original"
+    : (available.length ? "Selecione qual registro deve ser mantido" : "Nenhum artigo original disponível");
+
+  return `
+    <span class="duplicateRelation">
+      <select class="cellInput duplicateOriginalSelect" data-field="duplicateOfId" data-id="${escapeHtml(paperId)}" aria-label="Artigo original desta duplicata"${disabled}>
+        ${options.join("")}
+      </select>
+      <small>${escapeHtml(helper)}</small>
+    </span>
+  `;
+}
+
+function applyCategoryMetricToPaper(paper, category, previousLabel = category?.label) {
+  if (!paper || !category?.label) return false;
+  const labels = new Set([previousLabel, category.label].filter(Boolean));
+  const tags = Array.isArray(paper.tags) ? paper.tags : [];
+  const classifications = paper.classifications
+    && typeof paper.classifications === "object"
+    && !Array.isArray(paper.classifications)
+    ? paper.classifications
+    : {};
+  const matchingClassifications = Object.values(classifications)
+    .filter(item => item && labels.has(item.categoryLabel));
+  const matches = labels.has(paper.categoryLabel)
+    || tags.some(tag => labels.has(tag))
+    || matchingClassifications.length > 0;
+
+  if (!matches) return false;
+
+  const metricType = normalizeMetricType(category.metricType, inferMetricTypeFromCategory(category));
+  paper.categoryLabel = category.label;
+  paper.status = metricType;
+  if (metricType !== "duplicate") paper.duplicateOfId = null;
+  paper.tags = [...new Set(tags.map(tag => labels.has(tag) ? category.label : tag))];
+
+  for (const classification of matchingClassifications) {
+    classification.categoryLabel = category.label;
+    classification.outcome = metricType;
+  }
+
+  return true;
+}
+
+async function syncCategoryMetricAcrossActivePapers(category, previousLabel = category?.label) {
+  if (!category?.label) return;
+
+  try {
+    const scoped = await storage.get(["svat_papers"]);
+    const scopedPapers = Array.isArray(scoped?.svat_papers) ? scoped.svat_papers : [];
+    let scopedChanged = false;
+    for (const paper of scopedPapers) {
+      scopedChanged = applyCategoryMetricToPaper(paper, category, previousLabel) || scopedChanged;
+    }
+    if (scopedChanged) await storage.set({ svat_papers: scopedPapers });
+  } catch (error) {
+    console.warn("Não foi possível atualizar a métrica dos artigos da fase ativa.", error);
+  }
+
+  const projectPapers = Array.isArray(state?.papers) ? state.papers : [];
+  for (const paper of projectPapers) {
+    if (!applyCategoryMetricToPaper(paper, category, previousLabel)) continue;
+    try {
+      await storage.savePaper(paper);
+    } catch (error) {
+      console.warn("Não foi possível atualizar a métrica de um artigo persistido.", error);
+    }
+  }
 }
 
 function getPaperCategoryKey(category) {
@@ -210,10 +399,16 @@ function loadCategories() {
   for (const cat of items) {
     const category = cat.title;
     const categoryLabel = cat.label;
-    const color = cat.color || "#ffffff";
+    const color = normalizeHexColor(cat.color, "#FFFFFF");
+    const metricType = normalizeMetricType(cat.metricType, inferMetricTypeFromCategory(cat));
+    const textColor = getReadableCategoryTextColor(color);
+    const usesDarkText = textColor === "#101828";
 
     const li = document.createElement("li");
     li.style.backgroundColor = color;
+    li.style.setProperty("--category-foreground", textColor);
+    li.style.setProperty("--category-description", textColor);
+    li.dataset.categoryTone = usesDarkText ? "light" : "dark";
 
     const left = document.createElement("div");
     left.className = "left";
@@ -248,6 +443,11 @@ function loadCategories() {
     meta.style.fontFamily = "monospace";
     meta.style.fontSize = "12px";
 
+    const metricBadge = document.createElement("span");
+    metricBadge.className = `categoryMetricBadge categoryMetricBadge--${metricType}`;
+    metricBadge.textContent = getPaperMetricLabel(metricType);
+    metricBadge.title = `Impacto na métrica: ${getPaperMetricLabel(metricType)}`;
+
     const editBtn = document.createElement("button");
     editBtn.textContent = "Editar";
     editBtn.addEventListener("click", () => {
@@ -266,16 +466,7 @@ function loadCategories() {
       }
     });
 
-    const textColor = getLuminanceFromHex(color) < 0.5 ? "#fff" : "#000";
-    title.style.color = textColor;
-    meta.style.color = textColor;
-    editBtn.style.color = textColor;
-    btn.style.color = textColor;
-    if (textColor === "#000") {
-      editBtn.classList.add("dark");
-      btn.classList.add("dark");
-    }
-
+    right.appendChild(metricBadge);
     right.appendChild(meta);
     right.appendChild(editBtn);
     right.appendChild(btn);
@@ -508,23 +699,58 @@ function setActiveView(view) {
   if (allowedView === 'overview' && state) renderOverview();
 }
 
-function computeOverviewMetrics(highlightedLinks = {}) {
-  const papers = Array.isArray(state?.papers) ? state.papers : [];
-  const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
-  const categorized = papers.filter(paper => Boolean(getPaperCategory(paper, highlightedLinks))).length;
-  const withYear = papers.filter(paper => {
-    const year = Number(paper?.year);
-    return Number.isFinite(year) && year > 1900 && year < 2100;
-  }).length;
-
-  return {
-    total: papers.length,
-    categories: categories.length,
-    categorized,
-    uncategorized: papers.length - categorized,
-    withYear,
-    withoutYear: papers.length - withYear,
+function computeOverviewMetrics(papers = [], highlightedLinks = {}) {
+  const metrics = {
+    total: 0,
+    included: 0,
+    excluded: 0,
+    duplicate: 0,
+    pending: 0,
   };
+
+  for (const paper of papers) {
+    metrics.total += 1;
+    const metricType = getPaperMetricType(paper, highlightedLinks);
+    if (metricType === "included") metrics.included += 1;
+    else if (metricType === "excluded") metrics.excluded += 1;
+    else if (metricType === "duplicate") metrics.duplicate += 1;
+    else metrics.pending += 1;
+  }
+
+  return metrics;
+}
+
+function formatMetricPercentage(value, total) {
+  const percentage = total ? (value / total) * 100 : 0;
+  return `${percentage.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% do total`;
+}
+
+function renderPaperMetrics(papers, highlightedLinks = {}) {
+  const metrics = computeOverviewMetrics(papers, highlightedLinks);
+  const total = $("#paperMetricTotal");
+  const included = $("#paperMetricIncluded");
+  const excluded = $("#paperMetricExcluded");
+  const duplicate = $("#paperMetricDuplicate");
+  const totalDetail = $("#paperMetricTotalDetail");
+  const includedDetail = $("#paperMetricIncludedDetail");
+  const excludedDetail = $("#paperMetricExcludedDetail");
+  const duplicateDetail = $("#paperMetricDuplicateDetail");
+
+  if (total) total.textContent = String(metrics.total);
+  if (included) included.textContent = String(metrics.included);
+  if (excluded) excluded.textContent = String(metrics.excluded);
+  if (duplicate) duplicate.textContent = String(metrics.duplicate);
+
+  if (totalDetail) {
+    totalDetail.textContent = !metrics.total
+      ? "Nenhum artigo registrado"
+      : metrics.pending
+        ? `${metrics.pending} pendente${metrics.pending === 1 ? "" : "s"} de classificação`
+        : "Todos os artigos estão classificados";
+  }
+  if (includedDetail) includedDetail.textContent = formatMetricPercentage(metrics.included, metrics.total);
+  if (excludedDetail) excludedDetail.textContent = formatMetricPercentage(metrics.excluded, metrics.total);
+  if (duplicateDetail) duplicateDetail.textContent = formatMetricPercentage(metrics.duplicate, metrics.total);
 }
 
 function ensureHistory(p) {
@@ -533,11 +759,10 @@ function ensureHistory(p) {
 }
 
 function pushHistory(paper, action, details = {}) {
-  //TODO: migrar para usar o infrastructure/storage.mjs
-  // const h = ensureHistory(paper);
-  // h.push({ ts: svatNowIso(), action, details });
-  // // Keep it bounded
-  // if (h.length > 200) paper.history = h.slice(h.length - 200);
+  if (!paper) return;
+  const history = ensureHistory(paper);
+  history.push({ ts: new Date().toISOString(), action, details });
+  if (history.length > 200) paper.history = history.slice(history.length - 200);
 }
 
 function renderHeader() {
@@ -622,6 +847,16 @@ function mergeOverviewPaper(base = {}, incoming = {}) {
   const merged = { ...base };
   for (const [key, value] of Object.entries(incoming || {})) {
     const current = merged[key];
+
+    if (
+      key === "classifications"
+      && current && typeof current === "object" && !Array.isArray(current)
+      && value && typeof value === "object" && !Array.isArray(value)
+    ) {
+      merged[key] = { ...current, ...value };
+      continue;
+    }
+
     const incomingHasValue = Array.isArray(value)
       ? value.length > 0
       : value !== undefined && value !== null && value !== "";
@@ -657,9 +892,11 @@ async function loadOverviewContext() {
   };
 
   const sources = [
-    ...(Array.isArray(state?.papers) ? state.papers : []),
     ...(Array.isArray(projectScope.svat_papers) ? projectScope.svat_papers : []),
     ...(Array.isArray(activeScope.svat_papers) ? activeScope.svat_papers : []),
+    // O registro individual consolidado entra por último e prevalece na Visão
+    // Geral, sem perder a classificação específica guardada em cada fase.
+    ...(Array.isArray(state?.papers) ? state.papers : []),
   ];
 
   const byKey = new Map();
@@ -681,7 +918,7 @@ async function loadOverviewContext() {
   }
 
   return {
-    papers: [...byKey.values()],
+    papers: [...byKey.values()].filter(paper => paper?.visited !== false),
     highlightedLinks,
   };
 }
@@ -739,10 +976,46 @@ function formatOverviewDate(value, includeTime = false) {
     : date.toLocaleDateString("pt-BR");
 }
 
-function openPapersFromOverview(_categoryKey = "all", year = "") {
+function getCategoryFilterLabel(categoryKey) {
+  if (!categoryKey || categoryKey === "all") return "";
+  if (categoryKey === "uncategorized") return "Sem categoria";
+  const category = state?.project?.categories?.find(item => getPaperCategoryKey(item) === categoryKey);
+  return category?.title || category?.label || categoryKey;
+}
+
+function updatePaperFilterBar() {
+  const bar = $("#paperFilterBar");
+  const text = $("#paperFilterText");
+  if (!bar || !text) return;
+
+  const descriptions = [];
+  if (paperMetricFilter !== "all") descriptions.push(`situação: ${getPaperMetricLabel(paperMetricFilter).toLowerCase()}`);
+  const categoryLabel = getCategoryFilterLabel(paperCategoryFilter);
+  if (categoryLabel) descriptions.push(`categoria: ${categoryLabel}`);
+
+  const hasFilter = descriptions.length > 0;
+  bar.classList.toggle("hidden", !hasFilter);
+  text.textContent = hasFilter ? `Filtro ativo — ${descriptions.join(" · ")}` : "";
+}
+
+function clearPaperFilters({ clearSearch = false, render = true } = {}) {
+  paperMetricFilter = "all";
+  paperCategoryFilter = "all";
+  if (clearSearch) {
+    const searchInput = $("#search");
+    if (searchInput) searchInput.value = "";
+  }
+  updatePaperFilterBar();
+  if (render) renderPapersTable();
+}
+
+function openPapersFromOverview(categoryKey = "all", year = "", metricType = "all") {
+  paperCategoryFilter = categoryKey || "all";
+  paperMetricFilter = metricType === "all" ? "all" : normalizeMetricType(metricType, "pending");
   setActiveView("papers");
   const searchInput = $("#search");
   if (searchInput) searchInput.value = year === "Sem ano" ? "" : String(year || "");
+  updatePaperFilterBar();
   renderPapersTable();
 }
 
@@ -765,6 +1038,7 @@ async function renderOverview() {
       : "Última atualização: agora";
   }
 
+  renderPaperMetrics(papers, highlightedLinks);
   renderCategoryDistribution(papers, highlightedLinks);
   renderPhaseProgress(papers);
   renderOverviewRecentArticles(papers, highlightedLinks);
@@ -956,7 +1230,8 @@ function renderHistoryTable(targetTbody, history) {
 }
 
 function showHistory(paperId) {
-  const paper = state.papers.find(item => item.id === paperId);
+  const paper = state?.papers?.find(item => String(item.id) === String(paperId))
+    || renderedPapersById.get(String(paperId));
   if (!paper) return;
 
   const modal = document.getElementById("historyModal");
@@ -971,15 +1246,27 @@ function showHistory(paperId) {
 function getFilters() {
   return {
     q: normalizeStr($("#search").value),
+    metric: paperMetricFilter,
+    category: paperCategoryFilter,
   };
 }
 
 function paperMatchesFilters(paper, filters, highlightedLinks = {}) {
   const category = getPaperCategory(paper, highlightedLinks);
 
+  if (filters.metric && filters.metric !== "all") {
+    if (getPaperMetricType(paper, highlightedLinks) !== filters.metric) return false;
+  }
+
+  if (filters.category && filters.category !== "all") {
+    const categoryKey = getPaperCategoryKey(category) || "uncategorized";
+    if (categoryKey !== filters.category) return false;
+  }
+
   if (!filters.q) return true;
   const categoryText = category ? `${category.title || ""} ${category.label || ""}` : "sem categoria";
-  const hay = normalizeStr(`${paper.title || ""} ${paper.authorsRaw || ""} ${(paper.tags || []).join(" ")} ${paper.year || ""} ${paper.url || ""} ${categoryText}`);
+  const metricText = getPaperMetricLabel(getPaperMetricType(paper, highlightedLinks));
+  const hay = normalizeStr(`${paper.title || ""} ${paper.authorsRaw || ""} ${(paper.tags || []).join(" ")} ${paper.year || ""} ${paper.url || ""} ${categoryText} ${metricText}`);
   return hay.includes(filters.q);
 }
 
@@ -1003,40 +1290,39 @@ async function renderPapersTable() {
   // Early cancellation: if a newer render started, bail out
   if (myToken !== renderToken) return;
 
-  const base = (state.papers || []).filter(paper => paperMatchesFilters(paper, f, hl));
+  const byKey = new Map();
+  [...(state.papers || []), ...svat].forEach((paper, index) => {
+    if (!paper || typeof paper !== "object") return;
+    const key = getOverviewPaperKey(paper, index);
+    byKey.set(key, mergeOverviewPaper(byKey.get(key), paper));
+  });
 
-  const titleByUrl = new Map();
-  for (const p of svat || []) {
-    const nu = normalizeStr(String(p?.url || ''));
-    if (!nu) continue;
-    const t = (p?.title || '').trim();
-    if (t) titleByUrl.set(nu, t);
-  }
-
-  // Map existing papers by normalized url to avoid duplicates
-  const present = new Set((state.papers || []).map(p => normalizeStr(p.url || '')));
-
-  const synth = [];
-  for (const url of Object.keys(hl || {})) {
-    const nurl = normalizeStr(url);
-    if (present.has(nurl)) continue;
-    const title = titleByUrl.get(nurl) || url;
-    const color = hl[url];
-    const item = {
-      id: `marked:${nurl}`,
-      title,
-      authorsRaw: '',
-      createdAt: '',
-      year: '',
-      tags: [],
-      url: url,
+  for (const [url, color] of Object.entries(hl || {})) {
+    const key = getOverviewPaperKey({ url });
+    const existing = byKey.get(key) || {};
+    byKey.set(key, mergeOverviewPaper(existing, {
+      id: existing.id || `marked:${normalizeStr(normalizeUrl(url))}`,
+      url,
+      title: existing.title || url,
+      authorsRaw: existing.authorsRaw || "",
+      createdAt: existing.createdAt || "",
+      year: existing.year || "",
+      tags: Array.isArray(existing.tags) ? existing.tags : [],
       highlightedColor: color,
-    };
-    if (!paperMatchesFilters(item, f, hl)) continue;
-    synth.push(item);
+      visited: true,
+    }));
   }
 
-  const rows = [...base, ...synth].sort((a, b) => (b.updatedAt || b.createdAt || "").localeCompare(a.updatedAt || a.createdAt || ""));
+  const allRows = [...byKey.values()]
+    .filter(paper => paper?.visited !== false);
+  const duplicateCandidates = allRows
+    .filter(paper => paper?.id || paper?.id === 0)
+    .filter(paper => getPaperMetricType(paper, hl) !== "duplicate")
+    .sort((a, b) => String(a.title || a.url || "").localeCompare(String(b.title || b.url || ""), "pt-BR"));
+  const rows = allRows
+    .filter(paper => paperMatchesFilters(paper, f, hl))
+    .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
+  renderedPapersById = new Map(rows.map(paper => [String(paper.id), paper]));
 
   // build HTML in memory
   let rowsHtml = "";
@@ -1044,6 +1330,7 @@ async function renderPapersTable() {
     const tags = Array.isArray(p.tags) ? p.tags.join(";") : "";
     // Use a light tint from the selected category so the title stays readable.
     const category = getPaperCategory(p, hl);
+    const metricType = getPaperMetricType(p, hl);
     const categoryColor = getPaperCategoryColor(p, hl);
     const rowStyle = categoryColor
       ? `style="--paper-category-color:${escapeHtml(categoryColor)};--paper-category-tint:${escapeHtml(hexToRgba(categoryColor, 0.25))};--paper-category-tint-hover:${escapeHtml(hexToRgba(categoryColor, 0.50))}"`
@@ -1055,21 +1342,25 @@ async function renderPapersTable() {
 
     rowsHtml += `
       <tr class="${rowClass}" ${rowStyle}>
-        <td><input type="checkbox" class="rowCheck" data-id="${p.id}" /></td>
+        <td><input type="checkbox" class="rowCheck" data-id="${escapeHtml(p.id)}" /></td>
         <td>
           <div class="paperTitleWrap">
-            <button class="linkBtn" data-show-history="${p.id}" title="Ver histórico">${escapeHtml(p.title || "(sem título)")}</button>
+            <button class="linkBtn" data-show-history="${escapeHtml(p.id)}" title="Ver histórico">${escapeHtml(p.title || "(sem título)")}</button>
           </div>
           <div style="color:#666;font-size:11px;margin-top:4px">${escapeHtml(p.authorsRaw || "")} • ${escapeHtml(fmtDate(p.createdAt))}</div>
         </td>
-        <td><input class="cellInput" data-field="year" data-id="${p.id}" value="${escapeHtml(p.year ?? "")}" placeholder="—" style="width:64px" /></td>
+        <td><input class="cellInput" data-field="year" data-id="${escapeHtml(p.id)}" value="${escapeHtml(p.year ?? "")}" placeholder="—" style="width:64px" /></td>
         <td>
-          <span class="categoryBadge">
-            ${categoryMarker}
-            <span>${escapeHtml(category?.title || category?.label || "Sem categoria")}</span>
+          <span class="paperCategoryCell">
+            <span class="categoryBadge">
+              ${categoryMarker}
+              <span>${escapeHtml(category?.title || category?.label || "Sem categoria")}</span>
+            </span>
+            <span class="paperOutcomeBadge paperOutcomeBadge--${escapeHtml(metricType)}">${escapeHtml(getPaperMetricLabel(metricType))}</span>
+            ${metricType === "duplicate" ? renderDuplicateOriginalSelect(p, duplicateCandidates) : ""}
           </span>
         </td>
-        <td><input class="cellInput" data-field="tags" data-id="${p.id}" value="${escapeHtml(tags)}" placeholder="ex: vis;ml" /></td>
+        <td><input class="cellInput" data-field="tags" data-id="${escapeHtml(p.id)}" value="${escapeHtml(tags)}" placeholder="ex: vis;ml" /></td>
         <td><a class="link" href="${escapeHtml(p.url)}" target="_blank" rel="noreferrer">Abrir</a></td>
       </tr>
     `;
@@ -1095,20 +1386,49 @@ async function onCellChange(e) {
   const el = e.target;
   const id = el.getAttribute("data-id");
   const field = el.getAttribute("data-field");
-  const paper = state.papers.find(p => p.id === id);
-  if (!paper) return;
+  const renderedPaper = renderedPapersById.get(String(id));
+  const projectPaper = state?.papers?.find(p => String(p.id) === String(id)) || null;
+  let scopedPapers = [];
+  let scopedPaper = null;
+
+  try {
+    const scoped = await storage.get(["svat_papers"]);
+    scopedPapers = Array.isArray(scoped?.svat_papers) ? scoped.svat_papers : [];
+    scopedPaper = scopedPapers.find(p => String(p.id) === String(id))
+      || scopedPapers.find(p => normalizeUrl(p?.url || "") === normalizeUrl(renderedPaper?.url || ""))
+      || null;
+  } catch (error) {
+    console.warn("Não foi possível carregar o artigo da fase ativa para edição.", error);
+  }
+
+  const paper = projectPaper || scopedPaper;
+  if (!paper) {
+    // Marcações antigas sem registro de artigo continuam somente para leitura.
+    renderPapersTable();
+    return;
+  }
+
   let val = el.value;
   const prev = paper[field];
-  if (field === "year") {
-    const n = Number(val);
-    paper.year = Number.isFinite(n) ? n : null;
-  } else if (field === "tags") {
-    paper.tags = val.split(/[;,]/).map(s => s.trim()).filter(Boolean);
-  } else {
-    paper[field] = val;
+
+  const targets = [...new Set([projectPaper, scopedPaper].filter(Boolean))];
+  for (const target of targets) {
+    if (field === "year") {
+      const n = Number(val);
+      target.year = Number.isFinite(n) ? n : null;
+    } else if (field === "tags") {
+      target.tags = val.split(/[;,]/).map(s => s.trim()).filter(Boolean);
+    } else if (field === "duplicateOfId") {
+      target.duplicateOfId = val || null;
+    } else {
+      target[field] = val;
+    }
+    target.updatedAt = new Date().toISOString();
   }
+
   pushHistory(paper, "update_field", { field, from: prev, to: paper[field] });
-  await persist();
+  if (projectPaper) await storage.savePaper(projectPaper);
+  if (scopedPaper) await storage.set({ svat_papers: scopedPapers });
   renderAll();
 }
 
@@ -1189,6 +1509,7 @@ async function persist() {
 
 function renderAll() {
   renderHeader();
+  updatePaperFilterBar();
   renderOverview();
   renderPapersTable();
 }
@@ -1262,6 +1583,16 @@ function bindEvents() {
     button.addEventListener('click', () => setActiveView(button.dataset.overviewView));
   });
 
+  $$('[data-paper-metric]').forEach((button) => {
+    button.addEventListener('click', () => {
+      openPapersFromOverview('all', '', button.dataset.paperMetric || 'all');
+    });
+  });
+
+  $('#btnClearPaperFilters')?.addEventListener('click', () => {
+    clearPaperFilters({ clearSearch: false, render: true });
+  });
+
 
   window.addEventListener("resize", () => {
     updateProjectMetaClamp(false);
@@ -1315,6 +1646,7 @@ function bindEvents() {
   const categoryDescriptionInput = document.getElementById("categoryDescription");
   const categoryColorInput = document.getElementById("categoryColor");
   const categoryColorValue = document.getElementById("categoryColorValue");
+  const categoryMetricTypeInput = document.getElementById("categoryMetricType");
   const categoryPhasesInput = document.getElementById("categoryPhases");
   const categoryCriteriaInput = document.getElementById("categoryCriteria");
   const categoryCriterionNewInput = document.getElementById("categoryCriterionNew");
@@ -1436,6 +1768,12 @@ function bindEvents() {
     categoryDescriptionInput.value = category?.description || "";
     categoryColorInput.value = category?.color || "#4CAF50";
     categoryColorValue.textContent = categoryColorInput.value.toUpperCase();
+    if (categoryMetricTypeInput) {
+      categoryMetricTypeInput.value = normalizeMetricType(
+        category?.metricType,
+        inferMetricTypeFromCategory(category || {})
+      );
+    }
     categoryTitleError.classList.remove("visible");
     categoryTitleError.textContent = "";
 
@@ -1620,19 +1958,25 @@ function bindEvents() {
 
     const data = {
       title,
-      label: makeLabel(title),
+      // O identificador interno permanece estável durante edições para que os
+      // artigos já classificados não percam o vínculo com a categoria.
+      label: editingCategoryLabel || makeLabel(title),
       description: categoryDescriptionInput.value.trim(),
       color: categoryColorInput.value,
+      metricType: normalizeMetricType(categoryMetricTypeInput?.value, "pending"),
       phases: selectedValues(categoryPhasesInput),
       criteria: [...categoryDraftCriteria],
     };
 
     try {
-      if (editingCategoryLabel) project.updateCategory(editingCategoryLabel, data);
-      else project.addCategory(data);
+      const previousLabel = editingCategoryLabel;
+      const savedCategory = editingCategoryLabel
+        ? project.updateCategory(editingCategoryLabel, data)
+        : project.addCategory(data);
 
       // project.json no servidor é a única fonte persistente das categorias.
       await storage.saveProject(project);
+      await syncCategoryMetricAcrossActivePapers(savedCategory, previousLabel || savedCategory?.label);
       await reloadCategoryProjectFromWebSocket(project.id);
 
       loadCategories();

@@ -1,4 +1,4 @@
-import {hashId, inferFromCategory} from './core/utils.mjs';
+import {hashId, inferFromCategory, normalizeMetricType} from './core/utils.mjs';
 import {storage} from './infrastructure/storage.mjs';
 import { wsManager } from './infrastructure/socketManager.mjs';
 
@@ -233,25 +233,27 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     const category_label = info.menuItemId.replace("highlight_", "");
     const data = await storage.get(["highlightedLinks", "svat_project", "svat_papers"]);
     
-    // Busca a cor da categoria no projeto ativo
+    // Busca a categoria completa no projeto ativo. A cor continua sendo usada
+    // apenas para o destaque visual; o metricType define a métrica do artigo.
     let color = "yellow";
+    let activeProject = null;
+    let selectedCategory = null;
     try {
       const projectResult = await storage.getActiveProject();
-      let project = null;
       if (projectResult && projectResult.data) {
-        project = projectResult.data;
+        activeProject = projectResult.data;
       } else if (projectResult && projectResult.id) {
-        project = projectResult;
+        activeProject = projectResult;
       }
       
-      if (project && Array.isArray(project.categories)) {
-        const cat = project.categories.find(c => c.label === category_label);
-        if (cat && cat.color) {
-          color = cat.color;
+      if (activeProject && Array.isArray(activeProject.categories)) {
+        selectedCategory = activeProject.categories.find(c => c.label === category_label) || null;
+        if (selectedCategory?.color) {
+          color = selectedCategory.color;
         }
       }
     } catch (e) {
-      console.warn('Erro ao buscar cor da categoria:', e);
+      console.warn('Erro ao buscar os dados da categoria:', e);
     }
     let highlightedLinks = data.highlightedLinks || {};
     let url = (info.linkUrl || "").replace(/[\?|\&]casa\_token=\S+/i, "");
@@ -267,10 +269,22 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
     //TODO: Refatorar toda essa lógica depois. Pois foi feito com IA temos que validar todo o código abaixo.
     // Save SVAT paper (best-effort metadata extraction)
-    const project = data.svat_project || { id: "tcc-001", title: "Meu TCC", researcher: "", createdAt: nowIso(), currentIterationId: "I1" };
+    const project = data.svat_project || {
+      id: activeProject?.id || "tcc-001",
+      title: activeProject?.name || activeProject?.title || "Meu TCC",
+      researcher: "",
+      createdAt: nowIso(),
+      currentIterationId: activeProject?.activePhaseLabel || "I1"
+    };
     const papers = Array.isArray(data.svat_papers) ? data.svat_papers : [];
     const id = hashId(url);
-    const { origin, status } = inferFromCategory(category_label);
+    const inferred = inferFromCategory(selectedCategory || category_label);
+    const status = normalizeMetricType(selectedCategory?.metricType, inferred.status);
+    const origin = inferred.origin;
+    const phaseLabel = activeProject?.activePhaseLabel
+      || project.activePhaseLabel
+      || project.currentIterationId
+      || "_sem_fase";
 
     let meta = { title: url, authorsRaw: "", year: null };
     try {
@@ -280,30 +294,112 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     } catch {}
 
     const idx = papers.findIndex(p => p.id === id);
-    const prev = idx >= 0 ? (papers[idx].status || "pending") : "new";
+    const scopedPaper = idx >= 0 ? papers[idx] : {};
+    let persistedPaper = {};
+    try {
+      const loadedPaper = await storage.loadPaper(id);
+      persistedPaper = loadedPaper && typeof loadedPaper.toJSON === "function"
+        ? loadedPaper.toJSON()
+        : (loadedPaper || {});
+    } catch (error) {
+      // O registro individual pode ainda não existir em projetos antigos.
+      persistedPaper = {};
+    }
+
+    const persistedClassifications = persistedPaper.classifications
+      && typeof persistedPaper.classifications === "object"
+      && !Array.isArray(persistedPaper.classifications)
+      ? persistedPaper.classifications
+      : {};
+    const scopedClassifications = scopedPaper.classifications
+      && typeof scopedPaper.classifications === "object"
+      && !Array.isArray(scopedPaper.classifications)
+      ? scopedPaper.classifications
+      : {};
+    const previousPaper = {
+      ...persistedPaper,
+      ...scopedPaper,
+      classifications: {
+        ...persistedClassifications,
+        ...scopedClassifications,
+      },
+    };
+    const prev = previousPaper.status || "new";
+    const previousClassifications = previousPaper.classifications;
+    const classifiedAt = nowIso();
+    const classifications = {
+      ...previousClassifications,
+      [phaseLabel]: {
+        ...(previousClassifications[phaseLabel] || {}),
+        phaseLabel,
+        categoryLabel: category_label,
+        outcome: status,
+        classifiedAt,
+      },
+    };
+    const projectCategoryLabels = new Set(
+      Array.isArray(activeProject?.categories)
+        ? activeProject.categories.map(category => category?.label).filter(Boolean)
+        : []
+    );
+    const tags = [
+      ...new Set([
+        ...((Array.isArray(previousPaper.tags) ? previousPaper.tags : [])
+          .filter(tag => !projectCategoryLabels.has(tag))),
+        category_label,
+      ])
+    ];
     const base = {
       id,
       url,
-      title: meta.title || url,
-      authors: [],
-      authorsRaw: meta.authorsRaw || "",
-      year: meta.year || null,
+      title: meta.title && meta.title !== url ? meta.title : (previousPaper.title || url),
+      authors: Array.isArray(previousPaper.authors) ? previousPaper.authors : [],
+      authorsRaw: meta.authorsRaw || previousPaper.authorsRaw || "",
+      year: meta.year || previousPaper.year || null,
       origin,
       status,
-      iterationId: project.currentIterationId || "I1",
-      criteriaId: null,
-      tags: [category_label],
+      categoryLabel: category_label,
+      phaseLabel,
+      classifications,
+      duplicateOfId: status === "duplicate" ? (previousPaper.duplicateOfId || null) : null,
+      iterationId: phaseLabel,
+      criteriaId: previousPaper.criteriaId || null,
+      tags,
       visited: true,
-      updatedAt: nowIso(),
+      updatedAt: classifiedAt,
     };
-    if (idx >= 0) {
-      const history = Array.isArray(papers[idx].history) ? papers[idx].history : [];
-      history.push({ ts: nowIso(), action: "mark", details: { category: category_label, origin, status, prevStatus: prev } });
-      papers[idx] = { ...papers[idx], ...base, history };
-    } else {
-      papers.push({ ...base, createdAt: nowIso(), history: [{ ts: nowIso(), action: "mark", details: { category: category_label, origin, status, prevStatus: prev } }] });
-    }
+    const history = Array.isArray(previousPaper.history) ? [...previousPaper.history] : [];
+    history.push({
+      ts: classifiedAt,
+      action: "mark",
+      details: {
+        category: category_label,
+        metricType: status,
+        phaseLabel,
+        origin,
+        status,
+        prevStatus: prev,
+      }
+    });
+
+    const nextPaper = {
+      ...previousPaper,
+      ...base,
+      createdAt: previousPaper.createdAt || classifiedAt,
+      history,
+    };
+
+    if (idx >= 0) papers[idx] = nextPaper;
+    else papers.push(nextPaper);
+
     await storage.set({ svat_project: project, svat_papers: papers });
+    try {
+      // Mantém um registro consolidado do artigo para preservar classificações
+      // de fases anteriores e alimentar corretamente a Visão Geral do projeto.
+      await storage.savePaper(nextPaper);
+    } catch (error) {
+      console.warn('iCipo: não foi possível salvar o registro consolidado do artigo.', error);
+    }
     await broadcastHighlightsRefresh();
   
   

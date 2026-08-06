@@ -1,4 +1,13 @@
-import { checkArray, slugify, mapToJSON, uniqueStrings, replaceArrayItem, removeArrayItem } from "./utils.mjs";
+import {
+  checkArray,
+  slugify,
+  mapToJSON,
+  uniqueStrings,
+  replaceArrayItem,
+  removeArrayItem,
+  normalizeMetricType,
+  inferMetricTypeFromCategory,
+} from "./utils.mjs";
 
 class Project {
   // Default project schema (matches ui/projects/projects.html form)
@@ -82,7 +91,9 @@ class Project {
       for (const phase of this.phases) {
         phase.categories = replaceArrayItem(phase.categories, previousCategory.label, nextCategory.label);
       }
+      this._renameCategoryReferences(previousCategory.label, nextCategory.label);
     }
+    this._syncCategoryMetricReferences(nextCategory.label, nextCategory.metricType);
     this._touch();
     return nextCategory;
   }
@@ -157,6 +168,40 @@ class Project {
   _removePhaseReferences(label) {
     for (const category of this.categories) {
       category.phases = removeArrayItem(category.phases, label);
+    }
+  }
+
+  _renameCategoryReferences(oldLabel, newLabel) {
+    if (!oldLabel || oldLabel === newLabel) return;
+
+    for (const paper of checkArray(this.papers)) {
+      if (paper.categoryLabel === oldLabel) paper.categoryLabel = newLabel;
+      paper.tags = replaceArrayItem(paper.tags, oldLabel, newLabel);
+
+      if (paper.classifications && typeof paper.classifications === "object") {
+        for (const classification of Object.values(paper.classifications)) {
+          if (classification?.categoryLabel === oldLabel) {
+            classification.categoryLabel = newLabel;
+          }
+        }
+      }
+    }
+  }
+
+  _syncCategoryMetricReferences(categoryLabel, metricType) {
+    const normalizedMetricType = normalizeMetricType(metricType, "pending");
+    for (const paper of checkArray(this.papers)) {
+      const matchesTopLevel = paper.categoryLabel === categoryLabel;
+      const matchesTag = checkArray(paper.tags).includes(categoryLabel);
+      if (matchesTopLevel || matchesTag) paper.status = normalizedMetricType;
+
+      if (paper.classifications && typeof paper.classifications === "object") {
+        for (const classification of Object.values(paper.classifications)) {
+          if (classification?.categoryLabel === categoryLabel) {
+            classification.outcome = normalizedMetricType;
+          }
+        }
+      }
     }
   }
 
@@ -334,11 +379,17 @@ class Paper {
     this.authorsRaw = data.authorsRaw || "";
     this.year = data.year || null;
     this.origin = data.origin || null;
-    this.status = data.status || null;
+    this.status = normalizeMetricType(data.status, "pending");
+    this.categoryLabel = data.categoryLabel || data.categoryId || null;
+    this.phaseLabel = data.phaseLabel || data.phaseId || null;
+    this.classifications = data.classifications && typeof data.classifications === "object" && !Array.isArray(data.classifications)
+      ? { ...data.classifications }
+      : {};
+    this.duplicateOfId = data.duplicateOfId || null;
     this.iterationId = data.iterationId || null;
     this.criteriaId = data.criteriaId || null;
     this.tags = checkArray(data.tags);
-    this.visited = !!data.visited;
+    this.visited = data.visited === undefined ? true : !!data.visited;
     this.createdAt = data.createdAt || new Date().toISOString();
     this.updatedAt = data.updatedAt || new Date().toISOString();
     this.history = checkArray(data.history);
@@ -423,6 +474,10 @@ class Paper {
       year: this.year,
       origin: this.origin,
       status: this.status,
+      categoryLabel: this.categoryLabel,
+      phaseLabel: this.phaseLabel,
+      classifications: this.classifications,
+      duplicateOfId: this.duplicateOfId,
       iterationId: this.iterationId,
       criteriaId: this.criteriaId,
       tags: this.tags,
@@ -460,6 +515,10 @@ class Category {
     this.label = data.label || slugify(this.title);
     this.description = data.description || "";
     this.color = data.color || null;
+    this.metricType = normalizeMetricType(
+      data.metricType ?? data.metric ?? data.outcome,
+      inferMetricTypeFromCategory(data)
+    );
     this.phases = checkArray(data.phases);
     this.criteria = normalizeCategoryCriteria(data.criteria);
   }
@@ -470,6 +529,7 @@ class Category {
       label: this.label,
       description: this.description,
       color: this.color,
+      metricType: this.metricType,
       phases: this.phases,
       criteria: this.criteria,
     };

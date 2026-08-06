@@ -108,6 +108,48 @@
             <div class="overviewUpdated"><span aria-hidden="true">◷</span><span id="overviewUpdatedAt">Última atualização: —</span></div>
           </div>
 
+          <div class="paperMetricsGrid" aria-label="Resumo da seleção de artigos">
+            <button class="paperMetricCard paperMetricCard--total" type="button" data-paper-metric="all" aria-label="Ver todos os artigos">
+              <span class="paperMetricIcon" aria-hidden="true">▤</span>
+              <span class="paperMetricContent">
+                <span class="paperMetricLabel">Total de artigos</span>
+                <strong id="paperMetricTotal">0</strong>
+                <small id="paperMetricTotalDetail">Nenhum artigo registrado</small>
+              </span>
+              <span class="paperMetricArrow" aria-hidden="true">→</span>
+            </button>
+
+            <button class="paperMetricCard paperMetricCard--included" type="button" data-paper-metric="included" aria-label="Ver artigos incluídos">
+              <span class="paperMetricIcon" aria-hidden="true">✓</span>
+              <span class="paperMetricContent">
+                <span class="paperMetricLabel">Incluídos</span>
+                <strong id="paperMetricIncluded">0</strong>
+                <small id="paperMetricIncludedDetail">0% do total</small>
+              </span>
+              <span class="paperMetricArrow" aria-hidden="true">→</span>
+            </button>
+
+            <button class="paperMetricCard paperMetricCard--excluded" type="button" data-paper-metric="excluded" aria-label="Ver artigos excluídos">
+              <span class="paperMetricIcon" aria-hidden="true">×</span>
+              <span class="paperMetricContent">
+                <span class="paperMetricLabel">Excluídos</span>
+                <strong id="paperMetricExcluded">0</strong>
+                <small id="paperMetricExcludedDetail">0% do total</small>
+              </span>
+              <span class="paperMetricArrow" aria-hidden="true">→</span>
+            </button>
+
+            <button class="paperMetricCard paperMetricCard--duplicate" type="button" data-paper-metric="duplicate" aria-label="Ver artigos duplicados">
+              <span class="paperMetricIcon" aria-hidden="true">⧉</span>
+              <span class="paperMetricContent">
+                <span class="paperMetricLabel">Duplicados</span>
+                <strong id="paperMetricDuplicate">0</strong>
+                <small id="paperMetricDuplicateDetail">0% do total</small>
+              </span>
+              <span class="paperMetricArrow" aria-hidden="true">→</span>
+            </button>
+          </div>
+
           <div class="overviewLayout overviewLayoutTop overviewLayoutPrimary">
             <article class="overviewCard categoryDistributionCard">
               <div class="overviewCardHeader">
@@ -154,6 +196,11 @@
             <button id="btnBulkDeleteMarked" class="btn">Remover marcado</button>
           </div>
 
+          <div id="paperFilterBar" class="paperFilterBar hidden" role="status" aria-live="polite">
+            <span id="paperFilterText"></span>
+            <button id="btnClearPaperFilters" type="button" class="btn">Limpar filtro</button>
+          </div>
+
           <div class="tableWrap u-flex-fill-col u-scroll-y">
             <table class="table" id="papersTable">
               <thead>
@@ -161,7 +208,7 @@
                   <th style="width:36px"><input type="checkbox" id="checkAll" /></th>
                   <th>Título</th>
                   <th style="width:72px">Ano</th>
-                  <th style="width:190px">Categoria</th>
+                  <th style="width:260px">Categoria</th>
                   <th style="width:160px">Tags</th>
                   <th style="width:90px">Link</th>
                 </tr>
@@ -176,7 +223,7 @@
         <section class="view hidden u-flex-fill-col" id="view_categories">
           <div class="panelHeader">
             <h2>Categorias</h2>
-            <p>Crie cores para marcar artigos</p>
+            <p>Crie categorias e defina como cada classificação afeta as métricas.</p>
           </div>
 
           <div class="toolbar">
@@ -188,7 +235,7 @@
 
           <div class="card u-flex-fill-col" style="margin-top:12px">
             <div class="cardTitle">Lista de categorias</div>
-            <div class="muted" style="margin-bottom:8px">Clique em <b>Excluir</b> para remover uma categoria.</div>
+            <div class="muted" style="margin-bottom:8px">Use <b>Editar</b> para ajustar a finalidade da categoria ou <b>Excluir</b> para removê-la.</div>
 
             <div class="tableWrap u-flex-fill-col" style="margin-top:8px">
               <ul id="categoryList" class="categoryList u-flex-fill-col u-scroll-y"></ul>
@@ -265,6 +312,15 @@
               <span id="categoryColorValue" class="categoryColorValue">#4CAF50</span>
             </div>
 
+            <label for="categoryMetricType">Impacto na métrica</label>
+            <select id="categoryMetricType" class="input select">
+              <option value="included">Incluído</option>
+              <option value="excluded">Excluído</option>
+              <option value="duplicate">Duplicado</option>
+              <option value="pending">Não contabilizar / Pendente</option>
+            </select>
+            <div class="categoryMetricHelp">Define em qual indicador da Visão Geral os artigos desta categoria serão contabilizados.</div>
+
             <fieldset class="categoryFieldset">
               <legend>Fases em que a categoria pode ser usada</legend>
               <div id="categoryPhases" class="categoriesList categoryRequirementsList" aria-live="polite"></div>
@@ -310,7 +366,7 @@
             </div>
             <div class="articleTutorialStep">
               <span class="articleTutorialNumber">3</span>
-              <div><strong>Confira ano e categoria</strong><span>As colunas Ano e Categoria ajudam a validar a publicação e a classificação aplicada ao estudo.</span></div>
+              <div><strong>Confira ano, categoria e resultado</strong><span>A categoria registra o motivo detalhado; o resultado mostra se o artigo foi incluído, excluído, marcado como duplicado ou ficou pendente.</span></div>
             </div>
             <div class="articleTutorialStep">
               <span class="articleTutorialNumber">4</span>
