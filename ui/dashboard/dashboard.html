@@ -201,9 +201,17 @@
 
         <!-- PAPERS -->
         <section class="view hidden u-flex-fill-col" id="view_papers">
-          <div class="toolbar">
+          <div class="toolbar papersToolbar">
             <input id="search" class="input" placeholder="Buscar por título, autor, tag…" />
-            <button id="btnBulkDeleteMarked" class="btn">Remover marcado</button>
+            <div class="paperBulkActions" aria-label="Ações para os artigos selecionados">
+              <span id="paperSelectionCount" class="paperSelectionCount" aria-live="polite">0 selecionados</span>
+              <button id="btnBulkDeleteMarked" class="btn paperBulkUnmarkBtn" type="button" disabled title="Retirar os artigos selecionados da fase ativa">Remover marcados</button>
+              <span class="paperBulkDivider" aria-hidden="true"></span>
+              <button id="btnBulkInclude" class="btn paperBulkOutcomeBtn paperBulkOutcomeBtn--included" type="button" data-paper-bulk-outcome="included" disabled title="Classificar os artigos selecionados como incluídos">Incluir</button>
+              <button id="btnBulkExclude" class="btn paperBulkOutcomeBtn paperBulkOutcomeBtn--excluded" type="button" data-paper-bulk-outcome="excluded" disabled title="Classificar os artigos selecionados como removidos da triagem, sem apagar a marcação">Remover</button>
+              <button id="btnBulkPending" class="btn paperBulkOutcomeBtn paperBulkOutcomeBtn--pending" type="button" data-paper-bulk-outcome="pending" disabled title="Classificar os artigos selecionados como pendentes">Pendente</button>
+            </div>
+            <span id="paperBulkStatus" class="paperBulkStatus" role="status" aria-live="polite"></span>
           </div>
 
           <div id="paperFilterBar" class="paperFilterBar hidden" role="status" aria-live="polite">
@@ -263,7 +271,7 @@
           <div class="toolbar">
             <div style="display:flex;gap:8px;align-items:center">
               <button id="btnShowAddPhase" class="btn">Adicionar nova fase</button>
-              <div class="muted">As fases são organizadas automaticamente em linhas, respeitando a ordem da progressão.</div>
+              <div class="muted">As fases são organizadas em ordem. Clique em uma fase concluída para consultar os artigos selecionados, removidos e herdados.</div>
             </div>
           </div>
 
@@ -290,6 +298,21 @@
                 <tbody></tbody>
               </table>
             </div>
+          </div>
+        </div>
+
+        <!-- BULK CATEGORY CHOOSER -->
+        <div id="paperBulkCategoryModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="paperBulkCategoryModalTitle" aria-describedby="paperBulkCategoryModalDescription" aria-hidden="true">
+          <div class="modalCard paperBulkCategoryModalCard">
+            <div class="paperBulkCategoryModalHeader">
+              <div>
+                <div id="paperBulkCategoryModalEyebrow" class="paperBulkCategoryModalEyebrow">Classificação em lote</div>
+                <div id="paperBulkCategoryModalTitle" class="paperBulkCategoryModalTitle">Escolha uma categoria</div>
+              </div>
+              <button id="btnClosePaperBulkCategory" class="btn" type="button">Fechar</button>
+            </div>
+            <p id="paperBulkCategoryModalDescription" class="paperBulkCategoryModalDescription"></p>
+            <div id="paperBulkCategoryOptions" class="paperBulkCategoryOptions" role="list"></div>
           </div>
         </div>
 
@@ -378,7 +401,11 @@
             </div>
             <div class="articleTutorialStep">
               <span class="articleTutorialNumber">5</span>
-              <div><strong>Remova marcações quando necessário</strong><span>Selecione os artigos pela caixa lateral e utilize “Remover marcado” apenas quando quiser retirar a marcação do projeto.</span></div>
+              <div><strong>Classifique vários artigos de uma vez</strong><span>Selecione os artigos pela caixa lateral e use “Incluir”, “Remover” ou “Pendente”. A ação aplica uma categoria ativa com o resultado correspondente e atualiza as métricas da fase.</span></div>
+            </div>
+            <div class="articleTutorialStep">
+              <span class="articleTutorialNumber">6</span>
+              <div><strong>Retire marcações quando necessário</strong><span>Use “Remover marcados” apenas para retirar os registros da fase ativa. Essa ação é diferente de classificá-los como removidos da triagem.</span></div>
             </div>
 
             <div class="articleTutorialTip">

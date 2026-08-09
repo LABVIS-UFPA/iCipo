@@ -5,6 +5,8 @@ import {
   normalizeCategoryMetricType,
   normalizeArticleUrl,
   inferMetricTypeFromCategory,
+  inferFromCategory,
+  hashId,
 } from '../../core/utils.mjs';
 import { storage, ICIPO_DATA_REVISION_KEY } from '../../infrastructure/storage.mjs';
 
@@ -18,6 +20,10 @@ let overviewResizeTimer = null;
 let paperMetricFilter = "all";
 let paperCategoryFilter = "all";
 let renderedPapersById = new Map();
+let paperBulkBusy = false;
+let paperBulkPendingOutcome = null;
+let paperBulkStatusTimer = null;
+let expandedCompletedPhaseLabel = null;
 let refreshPhaseCards = () => {};
 let syncRequirementViews = () => {};
 let dashboardRefreshTimer = null;
@@ -33,6 +39,27 @@ const PAPER_METRIC_LABELS = Object.freeze({
   excluded: "Excluídos",
   duplicate: "Duplicados",
   pending: "Pendentes",
+});
+
+const PAPER_BULK_ACTION_COPY = Object.freeze({
+  included: {
+    button: "Incluir",
+    result: "Incluído",
+    singular: "incluído",
+    plural: "incluídos",
+  },
+  excluded: {
+    button: "Remover",
+    result: "Removido",
+    singular: "removido",
+    plural: "removidos",
+  },
+  pending: {
+    button: "Pendente",
+    result: "Pendente",
+    singular: "marcado como pendente",
+    plural: "marcados como pendentes",
+  },
 });
 
 function projectHasCategories() {
@@ -252,6 +279,392 @@ function getDynamicPhaseStats(phaseLabel) {
 
   stats.processed = stats.included + stats.excluded + stats.duplicate;
   return stats;
+}
+
+function isInheritedPhaseClassification(classification = {}) {
+  const entryType = String(classification?.entryType || "").toLowerCase();
+  return classification?.inherited === true
+    || entryType === "inherited"
+    || Boolean(classification?.inheritedFromPhaseLabel);
+}
+
+function isPhaseCompleted(phase = {}) {
+  return phase?.completed === true || String(phase?.labelStatus || "").toLowerCase() === "done";
+}
+
+function getPhaseArchiveDomId(phaseLabel) {
+  return `phaseArchive_${hashId(String(phaseLabel || "fase")).slice(2)}`;
+}
+
+function getPhaseArchiveRecords(phase = {}) {
+  const phaseLabel = phase?.label;
+  if (!phaseLabel) return [];
+
+  const projectPapers = Array.isArray(state?.papers) ? state.papers : [];
+  const paperById = new Map();
+  const paperByUrl = new Map();
+  projectPapers.forEach((paper) => {
+    if (!paper || typeof paper !== "object") return;
+    if (paper.id || paper.id === 0) paperById.set(String(paper.id), paper);
+    const normalizedUrl = normalizeUrl(paper.url || "");
+    if (normalizedUrl) paperByUrl.set(normalizedUrl, paper);
+  });
+
+  const records = new Map();
+  const getRecordKey = (paper = {}, fallbackReference = "") => {
+    if (paper?.id || paper?.id === 0) return `id:${String(paper.id)}`;
+    const normalizedUrl = normalizeUrl(paper?.url || fallbackReference || "");
+    if (normalizedUrl) return `url:${normalizedUrl}`;
+    return `ref:${String(fallbackReference || paper?.title || records.size)}`;
+  };
+
+  const addRecord = (paper, classification = {}, fallback = {}) => {
+    const safePaper = paper && typeof paper === "object" ? paper : {};
+    const safeClassification = classification && typeof classification === "object"
+      ? classification
+      : {};
+    const key = getRecordKey(safePaper, fallback.reference);
+    const inherited = fallback.inherited === true
+      || isInheritedPhaseClassification(safeClassification);
+    const paperPhaseLabel = safePaper.phaseLabel || safePaper.phaseId || safePaper.iterationId;
+    const categoryLabel = safeClassification.categoryLabel
+      || fallback.categoryLabel
+      || (paperPhaseLabel === phaseLabel ? safePaper.categoryLabel : null)
+      || null;
+    let outcome = normalizeMetricType(
+      safeClassification.outcome
+        ?? fallback.outcome
+        ?? (paperPhaseLabel === phaseLabel ? safePaper.status : "pending"),
+      "pending"
+    );
+    if (
+      paperPhaseLabel === phaseLabel
+      && (safePaper.autoDuplicate === true || safePaper.duplicateOfId)
+    ) {
+      outcome = "duplicate";
+    }
+    const classifiedAt = safeClassification.classifiedAt
+      || fallback.classifiedAt
+      || safePaper.updatedAt
+      || safePaper.createdAt
+      || null;
+
+    const current = records.get(key);
+    if (current) {
+      current.inherited = current.inherited || inherited;
+      current.inheritedFromPhaseLabel = current.inheritedFromPhaseLabel
+        || safeClassification.inheritedFromPhaseLabel
+        || fallback.inheritedFromPhaseLabel
+        || null;
+      return current;
+    }
+
+    const record = {
+      key,
+      paper: safePaper,
+      classification: safeClassification,
+      outcome,
+      categoryLabel,
+      classifiedAt,
+      inherited,
+      inheritedFromPhaseLabel: safeClassification.inheritedFromPhaseLabel
+        || fallback.inheritedFromPhaseLabel
+        || null,
+    };
+    records.set(key, record);
+    return record;
+  };
+
+  for (const paper of projectPapers) {
+    const classification = getPaperClassificationForPhase(paper, phaseLabel);
+    if (!classification) continue;
+    addRecord(paper, classification);
+  }
+
+  const resolveReference = (reference) => {
+    if (reference && typeof reference === "object") return reference;
+    const rawReference = String(reference ?? "").trim();
+    if (!rawReference) return null;
+    return paperById.get(rawReference)
+      || paperByUrl.get(normalizeUrl(rawReference))
+      || {
+        id: rawReference,
+        title: `Registro ${rawReference}`,
+        url: /^https?:\/\//i.test(rawReference) ? rawReference : "",
+      };
+  };
+
+  const phasePapers = phase?.papers && typeof phase.papers === "object" ? phase.papers : {};
+  const addBucket = (values, fallback = {}) => {
+    for (const reference of Array.isArray(values) ? values : []) {
+      const paper = resolveReference(reference);
+      if (!paper) continue;
+      addRecord(paper, {}, { ...fallback, reference });
+    }
+  };
+
+  // Compatibilidade com projetos antigos que possuem apenas os grupos salvos
+  // no card da fase, sem classificação completa em cada artigo.
+  addBucket(phasePapers.selected, { outcome: "included" });
+  addBucket(phasePapers.removed, { outcome: "excluded" });
+  addBucket(phasePapers.new, { outcome: "pending" });
+  addBucket(phasePapers.inherited, { inherited: true, outcome: "pending" });
+
+  return [...records.values()].sort((first, second) => {
+    const dateOrder = String(second.classifiedAt || "").localeCompare(String(first.classifiedAt || ""));
+    if (dateOrder) return dateOrder;
+    const firstTitle = String(first.paper?.title || first.paper?.url || first.paper?.id || "");
+    const secondTitle = String(second.paper?.title || second.paper?.url || second.paper?.id || "");
+    return firstTitle.localeCompare(secondTitle, "pt-BR");
+  });
+}
+
+function getPhaseArchiveOutcomeLabel(outcome) {
+  const normalizedOutcome = normalizeMetricType(outcome, "pending");
+  if (normalizedOutcome === "included") return "Selecionado";
+  if (normalizedOutcome === "excluded") return "Removido";
+  if (normalizedOutcome === "duplicate") return "Duplicado";
+  return "Pendente";
+}
+
+function getPhaseArchiveCategory(record) {
+  if (!record || record.outcome === "duplicate") return null;
+  const categoryLabel = String(record.categoryLabel || "").trim().toLowerCase();
+  if (!categoryLabel) return null;
+  return (Array.isArray(state?.project?.categories) ? state.project.categories : []).find((category) => {
+    const label = String(category?.label || "").trim().toLowerCase();
+    const title = String(category?.title || "").trim().toLowerCase();
+    return label === categoryLabel || title === categoryLabel;
+  }) || null;
+}
+
+function createPhaseArchiveArticleItem(record) {
+  const paper = record?.paper || {};
+  const outcome = normalizeMetricType(record?.outcome, "pending");
+  const category = getPhaseArchiveCategory(record);
+  const categoryColor = normalizeHexColor(category?.color, "#A5ADBA");
+  const categoryName = outcome === "duplicate"
+    ? "Duplicado automático"
+    : (category?.title || category?.label || record?.categoryLabel || "Sem categoria");
+  const title = String(paper.title || paper.url || paper.id || "Artigo sem título").trim();
+  const article = document.createElement("article");
+  article.className = `phaseArchiveArticle phaseArchiveArticle--${outcome}`;
+
+  const heading = document.createElement("div");
+  heading.className = "phaseArchiveArticleHeading";
+  const validUrl = /^https?:\/\//i.test(String(paper.url || ""));
+  const titleElement = document.createElement(validUrl ? "a" : "span");
+  titleElement.className = "phaseArchiveArticleTitle";
+  titleElement.textContent = title;
+  titleElement.title = title;
+  if (validUrl) {
+    titleElement.href = paper.url;
+    titleElement.target = "_blank";
+    titleElement.rel = "noreferrer";
+  }
+
+  const outcomeBadge = document.createElement("span");
+  outcomeBadge.className = `phaseArchiveOutcome phaseArchiveOutcome--${outcome}`;
+  outcomeBadge.textContent = getPhaseArchiveOutcomeLabel(outcome);
+  heading.append(titleElement, outcomeBadge);
+
+  const metaParts = [];
+  const authors = getPaperAuthorsText(paper);
+  if (authors && authors !== "—") metaParts.push(authors);
+  const year = extractPaperYear(paper);
+  if (year) metaParts.push(String(year));
+  if (record?.classifiedAt) metaParts.push(formatOverviewDate(record.classifiedAt, true));
+
+  const meta = document.createElement("div");
+  meta.className = "phaseArchiveArticleMeta";
+  meta.textContent = metaParts.length ? metaParts.join(" · ") : "Sem metadados adicionais";
+
+  const badges = document.createElement("div");
+  badges.className = "phaseArchiveArticleBadges";
+
+  const categoryBadge = document.createElement("span");
+  categoryBadge.className = "phaseArchiveCategoryBadge";
+  const categoryMarker = document.createElement("i");
+  categoryMarker.style.backgroundColor = categoryColor;
+  categoryMarker.setAttribute("aria-hidden", "true");
+  const categoryText = document.createElement("span");
+  categoryText.textContent = categoryName;
+  categoryBadge.append(categoryMarker, categoryText);
+  badges.appendChild(categoryBadge);
+
+  const originBadge = document.createElement("span");
+  originBadge.className = record?.inherited
+    ? "phaseArchiveOriginBadge phaseArchiveOriginBadge--inherited"
+    : "phaseArchiveOriginBadge";
+  const inheritedFromPhase = record?.inheritedFromPhaseLabel
+    ? (Array.isArray(state?.project?.phases) ? state.project.phases : [])
+        .find(phase => phase?.label === record.inheritedFromPhaseLabel)
+    : null;
+  const inheritedFromName = inheritedFromPhase?.title || record?.inheritedFromPhaseLabel || "";
+  originBadge.textContent = record?.inherited
+    ? `Herdado${inheritedFromName ? ` de ${inheritedFromName}` : ""}`
+    : "Novo na fase";
+  badges.appendChild(originBadge);
+
+  article.append(heading, meta, badges);
+  return article;
+}
+
+function createPhaseArchiveGroup({ title, description, tone, records }) {
+  const group = document.createElement("section");
+  group.className = `phaseArchiveGroup phaseArchiveGroup--${tone}`;
+
+  const header = document.createElement("div");
+  header.className = "phaseArchiveGroupHeader";
+  const headingWrap = document.createElement("div");
+  headingWrap.className = "phaseArchiveGroupHeading";
+  const heading = document.createElement("h4");
+  heading.textContent = title;
+  const sub = document.createElement("p");
+  sub.textContent = description;
+  headingWrap.append(heading, sub);
+  const count = document.createElement("span");
+  count.className = "phaseArchiveGroupCount";
+  count.textContent = String(records.length);
+  header.append(headingWrap, count);
+
+  const list = document.createElement("div");
+  list.className = "phaseArchiveArticleList";
+  if (!records.length) {
+    const empty = document.createElement("div");
+    empty.className = "phaseArchiveEmpty";
+    empty.textContent = "Nenhum artigo neste grupo.";
+    list.appendChild(empty);
+  } else {
+    records.forEach(record => list.appendChild(createPhaseArchiveArticleItem(record)));
+  }
+
+  group.append(header, list);
+  return group;
+}
+
+function createCompletedPhaseArchivePanel(phase = {}) {
+  const phaseLabel = phase?.label || "";
+  const panelId = getPhaseArchiveDomId(phaseLabel);
+  const records = getPhaseArchiveRecords(phase);
+  const selected = records.filter(record => record.outcome === "included");
+  const removed = records.filter(record => record.outcome === "excluded" || record.outcome === "duplicate");
+  const inherited = records.filter(record => record.inherited);
+  const pending = records.filter(record => record.outcome === "pending");
+
+  const panel = document.createElement("section");
+  panel.id = panelId;
+  panel.className = "phaseArchivePanel";
+  panel.dataset.phaseArchiveLabel = phaseLabel;
+  panel.hidden = expandedCompletedPhaseLabel !== phaseLabel;
+  panel.setAttribute("aria-label", `Artigos trabalhados na fase ${phase.title || phaseLabel}`);
+
+  const header = document.createElement("div");
+  header.className = "phaseArchiveHeader";
+  const headerText = document.createElement("div");
+  headerText.className = "phaseArchiveHeaderText";
+  const eyebrow = document.createElement("span");
+  eyebrow.className = "phaseArchiveEyebrow";
+  eyebrow.textContent = "Histórico da fase concluída";
+  const title = document.createElement("h3");
+  title.textContent = phase.title || phaseLabel || "Fase";
+  const description = document.createElement("p");
+  description.textContent = inherited.length
+    ? `${records.length} artigo${records.length === 1 ? "" : "s"} trabalhado${records.length === 1 ? "" : "s"}. Artigos herdados também aparecem no grupo do resultado final da triagem.`
+    : `${records.length} artigo${records.length === 1 ? "" : "s"} trabalhado${records.length === 1 ? "" : "s"} nesta fase.`;
+  headerText.append(eyebrow, title, description);
+
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.className = "btn phaseArchiveClose";
+  closeButton.textContent = "Fechar lista";
+  closeButton.addEventListener("click", () => toggleCompletedPhaseArchive(phaseLabel));
+  header.append(headerText, closeButton);
+
+  const summary = document.createElement("div");
+  summary.className = "phaseArchiveSummary";
+  const summaryItems = [
+    ["Selecionados", selected.length, "selected"],
+    ["Removidos", removed.length, "removed"],
+    ["Herdados", inherited.length, "inherited"],
+  ];
+  if (pending.length) summaryItems.push(["Pendentes", pending.length, "pending"]);
+  for (const [label, value, tone] of summaryItems) {
+    const item = document.createElement("span");
+    item.className = `phaseArchiveSummaryItem phaseArchiveSummaryItem--${tone}`;
+    item.innerHTML = `<strong>${value}</strong><span>${label}</span>`;
+    summary.appendChild(item);
+  }
+
+  const groups = document.createElement("div");
+  groups.className = "phaseArchiveGroups";
+  groups.appendChild(createPhaseArchiveGroup({
+    title: "Selecionados",
+    description: "Artigos incluídos ao final da triagem desta fase.",
+    tone: "selected",
+    records: selected,
+  }));
+  groups.appendChild(createPhaseArchiveGroup({
+    title: "Removidos",
+    description: "Artigos excluídos ou identificados automaticamente como duplicados.",
+    tone: "removed",
+    records: removed,
+  }));
+  if (inherited.length) {
+    groups.appendChild(createPhaseArchiveGroup({
+      title: "Herdados",
+      description: "Artigos recebidos da fase anterior e submetidos a uma nova triagem.",
+      tone: "inherited",
+      records: inherited,
+    }));
+  }
+  if (pending.length) {
+    groups.appendChild(createPhaseArchiveGroup({
+      title: "Pendentes",
+      description: "Registros antigos que ainda não possuem uma decisão final nesta fase.",
+      tone: "pending",
+      records: pending,
+    }));
+  }
+
+  panel.append(header, summary, groups);
+  return panel;
+}
+
+function applyCompletedPhaseArchiveState({ scroll = false } = {}) {
+  const phasesList = document.getElementById("phasesList");
+  if (!phasesList) return;
+
+  phasesList.querySelectorAll(".phaseCard[data-label]").forEach((card) => {
+    const isCompleted = card.classList.contains("phaseCard--completed");
+    const isOpen = isCompleted && card.dataset.label === expandedCompletedPhaseLabel;
+    card.classList.toggle("phaseCard--archive-open", isOpen);
+    if (isCompleted) card.setAttribute("aria-expanded", String(isOpen));
+    const toggleButton = card.querySelector('[data-action="archive"]');
+    if (toggleButton) {
+      toggleButton.setAttribute("aria-expanded", String(isOpen));
+      toggleButton.classList.toggle("is-open", isOpen);
+      const label = toggleButton.querySelector("span:first-child");
+      if (label) label.textContent = isOpen ? "Ocultar artigos" : "Ver artigos";
+    }
+  });
+
+  phasesList.querySelectorAll(".phaseArchivePanel").forEach((panel) => {
+    const isOpen = panel.dataset.phaseArchiveLabel === expandedCompletedPhaseLabel;
+    panel.hidden = !isOpen;
+    panel.classList.toggle("is-open", isOpen);
+  });
+
+  if (scroll && expandedCompletedPhaseLabel) {
+    const panel = [...phasesList.querySelectorAll(".phaseArchivePanel")]
+      .find(item => item.dataset.phaseArchiveLabel === expandedCompletedPhaseLabel);
+    setTimeout(() => panel?.scrollIntoView?.({ behavior: "smooth", block: "nearest" }), 0);
+  }
+}
+
+function toggleCompletedPhaseArchive(phaseLabel) {
+  expandedCompletedPhaseLabel = expandedCompletedPhaseLabel === phaseLabel ? null : phaseLabel;
+  applyCompletedPhaseArchiveState({ scroll: Boolean(expandedCompletedPhaseLabel) });
 }
 
 function getPaperCategory(paper, highlightedLinks = {}) {
@@ -1756,7 +2169,15 @@ async function renderPapersTable() {
   tbody.querySelectorAll("button[data-show-history]").forEach(b => {
     b.addEventListener("click", () => showHistory(b.getAttribute("data-show-history")));
   });
-  $("#checkAll").checked = false;
+  tbody.querySelectorAll(".rowCheck").forEach(check => {
+    check.addEventListener("change", updatePaperBulkActionState);
+  });
+  const checkAll = $("#checkAll");
+  if (checkAll) {
+    checkAll.checked = false;
+    checkAll.indeterminate = false;
+  }
+  updatePaperBulkActionState();
 }
 
 
@@ -1812,6 +2233,541 @@ function selectedPaperIds() {
   return $$(".rowCheck:checked").map(ch => ch.getAttribute("data-id"));
 }
 
+function getActivePhaseForPaperBulkActions() {
+  const phases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
+  return phases.find(phase => phase?.label === state?.project?.activePhaseLabel)
+    || phases.at(-1)
+    || null;
+}
+
+function isProtectedAutomaticDuplicate(paper, phaseLabel = getActivePhaseForPaperBulkActions()?.label) {
+  if (!paper || typeof paper !== "object") return false;
+  const classification = phaseLabel
+    ? getPaperClassificationForPhase(paper, phaseLabel)
+    : null;
+  const outcome = normalizeMetricType(classification?.outcome ?? paper.status, "pending");
+  return paper.autoDuplicate === true || Boolean(paper.duplicateOfId) || outcome === "duplicate";
+}
+
+function getActivePhaseCategoriesForOutcome(outcome) {
+  const activePhase = getActivePhaseForPaperBulkActions();
+  if (!activePhase) return [];
+
+  const normalizedOutcome = normalizeCategoryMetricType(outcome, "pending");
+  const allowedLabels = new Set(
+    (Array.isArray(activePhase.categories) ? activePhase.categories : []).filter(Boolean)
+  );
+
+  return (Array.isArray(state?.project?.categories) ? state.project.categories : [])
+    .filter(category => allowedLabels.has(category?.label))
+    .filter(category => (
+      normalizeCategoryMetricType(
+        category?.metricType,
+        inferMetricTypeFromCategory(category)
+      ) === normalizedOutcome
+    ));
+}
+
+function getSelectedRenderedPapers() {
+  return selectedPaperIds()
+    .map(id => renderedPapersById.get(String(id)))
+    .filter(Boolean);
+}
+
+function setPaperBulkStatus(message = "", tone = "", autoClear = true) {
+  clearTimeout(paperBulkStatusTimer);
+  paperBulkStatusTimer = null;
+
+  const status = document.getElementById("paperBulkStatus");
+  if (!status) return;
+
+  status.textContent = message;
+  status.classList.toggle("paperBulkStatus--success", tone === "success");
+  status.classList.toggle("paperBulkStatus--error", tone === "error");
+  status.classList.toggle("paperBulkStatus--loading", tone === "loading");
+
+  if (message && autoClear && tone !== "loading") {
+    paperBulkStatusTimer = setTimeout(() => {
+      status.textContent = "";
+      status.classList.remove(
+        "paperBulkStatus--success",
+        "paperBulkStatus--error",
+        "paperBulkStatus--loading"
+      );
+      paperBulkStatusTimer = null;
+    }, tone === "error" ? 8000 : 6000);
+  }
+}
+
+function updatePaperBulkActionState() {
+  const rowChecks = $$("#papersTable .rowCheck");
+  const selectedChecks = rowChecks.filter(check => check.checked);
+  const selectedPapers = selectedChecks
+    .map(check => renderedPapersById.get(String(check.getAttribute("data-id"))))
+    .filter(Boolean);
+  const classifiableCount = selectedPapers.filter(paper => !isProtectedAutomaticDuplicate(paper)).length;
+  const automaticDuplicateCount = selectedPapers.length - classifiableCount;
+  const activePhase = getActivePhaseForPaperBulkActions();
+  const phaseLocked = !activePhase || isPhaseCompleted(activePhase);
+
+  const selectionCount = document.getElementById("paperSelectionCount");
+  if (selectionCount) {
+    if (paperBulkBusy) {
+      selectionCount.textContent = "Atualizando…";
+    } else if (!selectedChecks.length) {
+      selectionCount.textContent = "0 selecionados";
+    } else {
+      const duplicateSuffix = automaticDuplicateCount
+        ? ` · ${automaticDuplicateCount} duplicata${automaticDuplicateCount === 1 ? "" : "s"} protegida${automaticDuplicateCount === 1 ? "" : "s"}`
+        : "";
+      selectionCount.textContent = `${selectedChecks.length} selecionado${selectedChecks.length === 1 ? "" : "s"}${duplicateSuffix}`;
+    }
+  }
+
+  $$('[data-paper-bulk-outcome]').forEach(button => {
+    const outcome = normalizeCategoryMetricType(button.dataset.paperBulkOutcome, "pending");
+    const categories = getActivePhaseCategoriesForOutcome(outcome);
+    const copy = PAPER_BULK_ACTION_COPY[outcome] || PAPER_BULK_ACTION_COPY.pending;
+    const disabled = paperBulkBusy || phaseLocked || classifiableCount === 0;
+
+    button.disabled = disabled;
+    button.classList.toggle("paperBulkOutcomeBtn--unavailable", categories.length === 0);
+
+    if (!activePhase) {
+      button.title = "Crie uma fase antes de classificar artigos.";
+    } else if (isPhaseCompleted(activePhase)) {
+      button.title = "A fase ativa está concluída. Crie a próxima fase ou reabra a atual antes de alterar a triagem.";
+    } else if (!selectedChecks.length) {
+      button.title = "Selecione pelo menos um artigo.";
+    } else if (!classifiableCount) {
+      button.title = "Duplicatas automáticas não podem ser reclassificadas manualmente.";
+    } else if (!categories.length) {
+      button.title = `A fase ativa não possui uma categoria vinculada ao resultado ${copy.result}.`;
+    } else if (categories.length === 1) {
+      button.title = `${copy.button} usando a categoria “${categories[0].title || categories[0].label}”.`;
+    } else {
+      button.title = `${copy.button}: escolha uma das ${categories.length} categorias compatíveis da fase ativa.`;
+    }
+  });
+
+  const unmarkButton = document.getElementById("btnBulkDeleteMarked");
+  if (unmarkButton) {
+    unmarkButton.disabled = paperBulkBusy || phaseLocked || selectedChecks.length === 0;
+    if (!activePhase) {
+      unmarkButton.title = "Crie uma fase antes de remover marcações.";
+    } else if (isPhaseCompleted(activePhase)) {
+      unmarkButton.title = "A fase ativa está concluída e não pode ser alterada.";
+    } else if (!selectedChecks.length) {
+      unmarkButton.title = "Selecione pelo menos um artigo.";
+    } else {
+      unmarkButton.title = "Retirar os artigos selecionados da fase ativa, sem classificá-los como removidos.";
+    }
+  }
+
+  const checkAll = document.getElementById("checkAll");
+  if (checkAll) {
+    checkAll.checked = rowChecks.length > 0 && selectedChecks.length === rowChecks.length;
+    checkAll.indeterminate = selectedChecks.length > 0 && selectedChecks.length < rowChecks.length;
+    checkAll.disabled = paperBulkBusy || rowChecks.length === 0;
+  }
+}
+
+function closePaperBulkCategoryModal() {
+  const modal = document.getElementById("paperBulkCategoryModal");
+  const options = document.getElementById("paperBulkCategoryOptions");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.setAttribute("aria-hidden", "true");
+  }
+  if (options) options.innerHTML = "";
+  paperBulkPendingOutcome = null;
+}
+
+function openPaperBulkCategoryModal(outcome, categories, selectedCount) {
+  const normalizedOutcome = normalizeCategoryMetricType(outcome, "pending");
+  const copy = PAPER_BULK_ACTION_COPY[normalizedOutcome] || PAPER_BULK_ACTION_COPY.pending;
+  const modal = document.getElementById("paperBulkCategoryModal");
+  const eyebrow = document.getElementById("paperBulkCategoryModalEyebrow");
+  const title = document.getElementById("paperBulkCategoryModalTitle");
+  const description = document.getElementById("paperBulkCategoryModalDescription");
+  const options = document.getElementById("paperBulkCategoryOptions");
+  if (!modal || !options) return;
+
+  paperBulkPendingOutcome = normalizedOutcome;
+  if (eyebrow) eyebrow.textContent = `Classificação em lote · ${copy.result}`;
+  if (title) title.textContent = "Escolha a categoria que será aplicada";
+  if (description) {
+    description.textContent = `${selectedCount} artigo${selectedCount === 1 ? "" : "s"} será${selectedCount === 1 ? "" : "ão"} classificado${selectedCount === 1 ? "" : "s"} como ${copy.result.toLowerCase()}. A categoria escolhida será gravada na fase ativa e alimentará a respectiva contagem.`;
+  }
+
+  options.innerHTML = "";
+  for (const category of categories) {
+    const option = document.createElement("button");
+    option.type = "button";
+    option.className = "paperBulkCategoryOption";
+    option.setAttribute("role", "listitem");
+    option.dataset.categoryLabel = category.label;
+
+    const marker = document.createElement("i");
+    marker.className = "paperBulkCategoryOptionColor";
+    marker.style.backgroundColor = normalizeHexColor(category.color, "#A5ADBA");
+
+    const text = document.createElement("span");
+    text.className = "paperBulkCategoryOptionText";
+
+    const strong = document.createElement("strong");
+    strong.textContent = category.title || category.label;
+    text.appendChild(strong);
+
+    if (category.description) {
+      const small = document.createElement("small");
+      small.textContent = category.description;
+      text.appendChild(small);
+    }
+
+    const outcomeBadge = document.createElement("span");
+    outcomeBadge.className = `paperBulkCategoryOptionOutcome paperBulkCategoryOptionOutcome--${normalizedOutcome}`;
+    outcomeBadge.textContent = copy.result;
+
+    option.append(marker, text, outcomeBadge);
+    option.addEventListener("click", async () => {
+      closePaperBulkCategoryModal();
+      await applyPaperBulkCategory(category, normalizedOutcome);
+    });
+    options.appendChild(option);
+  }
+
+  modal.classList.remove("hidden");
+  modal.setAttribute("aria-hidden", "false");
+  setTimeout(() => options.querySelector("button")?.focus(), 50);
+}
+
+function mergePaperSourcesForBulk(...sources) {
+  const validSources = sources.filter(source => source && typeof source === "object");
+  const merged = Object.assign({}, ...validSources);
+  merged.classifications = Object.assign(
+    {},
+    ...validSources.map(source => getPaperClassificationsMap(source))
+  );
+
+  const longestHistory = validSources
+    .map(source => Array.isArray(source.history) ? source.history : [])
+    .sort((first, second) => second.length - first.length)[0]
+    || [];
+  merged.history = [...longestHistory];
+  return merged;
+}
+
+function findPaperIndexForBulk(collection, paper) {
+  const list = Array.isArray(collection) ? collection : [];
+  const id = paper?.id;
+  if ((id || id === 0) && !String(id).startsWith("marked:")) {
+    const byId = list.findIndex(item => String(item?.id) === String(id));
+    if (byId >= 0) return byId;
+  }
+
+  const normalizedUrl = normalizeUrl(paper?.url || "");
+  if (!normalizedUrl) return -1;
+  return list.findIndex(item => (
+    !isProtectedAutomaticDuplicate(item)
+    && normalizeUrl(item?.url || "") === normalizedUrl
+  ));
+}
+
+function createBulkClassifiedPaper(previousPaper, category, phaseLabel, classifiedAt) {
+  const metricType = normalizeCategoryMetricType(
+    category?.metricType,
+    inferMetricTypeFromCategory(category)
+  );
+  const normalizedUrl = normalizeUrl(previousPaper?.url || "");
+  const rawId = previousPaper?.id;
+  const hasStableId = (rawId || rawId === 0) && !String(rawId).startsWith("marked:");
+  const paperId = hasStableId
+    ? rawId
+    : hashId(normalizedUrl || previousPaper?.url || `${phaseLabel}:${previousPaper?.title || classifiedAt}`);
+  const classifications = getPaperClassificationsMap(previousPaper);
+  const previousPhaseClassification = classifications[phaseLabel]
+    && typeof classifications[phaseLabel] === "object"
+    ? classifications[phaseLabel]
+    : {};
+  const belongsToActivePhase = (
+    previousPaper?.phaseLabel
+    || previousPaper?.phaseId
+    || previousPaper?.iterationId
+  ) === phaseLabel;
+  const inheritedFromPhaseLabel = previousPhaseClassification.inheritedFromPhaseLabel
+    || (belongsToActivePhase ? previousPaper?.inheritedFromPhaseLabel : null)
+    || null;
+  const inheritedInCurrentPhase = previousPhaseClassification.inherited === true
+    || String(previousPhaseClassification.entryType || "").toLowerCase() === "inherited"
+    || Boolean(previousPhaseClassification.inheritedFromPhaseLabel)
+    || (belongsToActivePhase && previousPaper?.inherited === true)
+    || (belongsToActivePhase && String(previousPaper?.entryType || "").toLowerCase() === "inherited")
+    || Boolean(inheritedFromPhaseLabel);
+  const entryType = previousPhaseClassification.entryType
+    || (belongsToActivePhase ? previousPaper?.entryType : null)
+    || (inheritedInCurrentPhase ? "inherited" : "new");
+  const categoryReferences = new Set(
+    (Array.isArray(state?.project?.categories) ? state.project.categories : [])
+      .flatMap(item => [item?.label, item?.title])
+      .map(value => String(value || "").trim().toLowerCase())
+      .filter(Boolean)
+  );
+  const tags = [...new Set([
+    ...(Array.isArray(previousPaper?.tags)
+      ? previousPaper.tags.filter((tag) => {
+          const normalizedTag = String(tag || "").trim().toLowerCase();
+          return normalizedTag
+            && !categoryReferences.has(normalizedTag)
+            && normalizedTag !== "duplicado-automatico";
+        })
+      : []),
+    category.label,
+  ])];
+  const inferred = inferFromCategory(category);
+  const history = Array.isArray(previousPaper?.history) ? [...previousPaper.history] : [];
+  history.push({
+    ts: classifiedAt,
+    action: "bulk_reclassify",
+    details: {
+      category: category.label,
+      metricType,
+      phaseLabel,
+      previousCategory: previousPaper?.categoryLabel || null,
+      previousStatus: normalizeMetricType(previousPaper?.status, "pending"),
+      source: "articles_toolbar",
+    },
+  });
+
+  return {
+    ...previousPaper,
+    id: paperId,
+    origin: inferred.origin,
+    status: metricType,
+    categoryLabel: category.label,
+    phaseLabel,
+    iterationId: phaseLabel,
+    classifications: {
+      ...classifications,
+      [phaseLabel]: {
+        ...previousPhaseClassification,
+        phaseLabel,
+        categoryLabel: category.label,
+        outcome: metricType,
+        classifiedAt,
+        inherited: inheritedInCurrentPhase,
+        entryType,
+        inheritedFromPhaseLabel,
+        duplicateOfId: null,
+        automatic: false,
+      },
+    },
+    duplicateOfId: null,
+    autoDuplicate: false,
+    duplicateSequence: null,
+    tags,
+    highlightedColor: normalizeHexColor(category.color, category.color || ""),
+    inherited: inheritedInCurrentPhase,
+    entryType,
+    inheritedFromPhaseLabel,
+    visited: true,
+    createdAt: previousPaper?.createdAt || classifiedAt,
+    updatedAt: classifiedAt,
+    history: history.length > 200 ? history.slice(history.length - 200) : history,
+  };
+}
+
+async function requestPaperBulkOutcome(outcome) {
+  const normalizedOutcome = normalizeCategoryMetricType(outcome, "pending");
+  const selectedPapers = getSelectedRenderedPapers();
+  if (!selectedPapers.length) {
+    alert("Selecione pelo menos 1 artigo.");
+    updatePaperBulkActionState();
+    return;
+  }
+
+  const activePhase = getActivePhaseForPaperBulkActions();
+  if (!activePhase) {
+    alert("Crie uma fase antes de classificar artigos.");
+    return;
+  }
+  if (isPhaseCompleted(activePhase)) {
+    alert("A fase ativa está concluída. Crie a próxima fase ou reabra a atual antes de alterar a triagem.");
+    return;
+  }
+
+  const classifiablePapers = selectedPapers.filter(paper => !isProtectedAutomaticDuplicate(paper));
+  if (!classifiablePapers.length) {
+    alert("Duplicatas automáticas não podem ser reclassificadas manualmente.");
+    return;
+  }
+
+  const categories = getActivePhaseCategoriesForOutcome(normalizedOutcome);
+  const copy = PAPER_BULK_ACTION_COPY[normalizedOutcome] || PAPER_BULK_ACTION_COPY.pending;
+  if (!categories.length) {
+    alert(`A fase ativa não possui uma categoria relacionada a “${copy.result}”. Edite a fase e marque pelo menos uma categoria com esse impacto antes de usar esta ação.`);
+    return;
+  }
+
+  if (categories.length === 1) {
+    await applyPaperBulkCategory(categories[0], normalizedOutcome);
+    return;
+  }
+
+  openPaperBulkCategoryModal(normalizedOutcome, categories, classifiablePapers.length);
+}
+
+async function applyPaperBulkCategory(category, requestedOutcome) {
+  const activePhase = getActivePhaseForPaperBulkActions();
+  if (!activePhase || isPhaseCompleted(activePhase)) {
+    alert("A fase ativa não está disponível para classificação.");
+    return;
+  }
+
+  const normalizedOutcome = normalizeCategoryMetricType(requestedOutcome, "pending");
+  const categoryOutcome = normalizeCategoryMetricType(
+    category?.metricType,
+    inferMetricTypeFromCategory(category)
+  );
+  const allowedCategories = getActivePhaseCategoriesForOutcome(normalizedOutcome);
+  if (
+    categoryOutcome !== normalizedOutcome
+    || !allowedCategories.some(item => item?.label === category?.label)
+  ) {
+    alert("A categoria selecionada não está ativa nesta fase ou não corresponde ao resultado escolhido.");
+    return;
+  }
+
+  const selectedPapers = getSelectedRenderedPapers();
+  if (!selectedPapers.length) {
+    alert("Selecione pelo menos 1 artigo.");
+    return;
+  }
+
+  paperBulkBusy = true;
+  updatePaperBulkActionState();
+  setPaperBulkStatus("Atualizando a classificação e as métricas da fase…", "loading", false);
+
+  try {
+    const data = await storage.get(["highlightedLinks", "svat_papers", "svat_project"]);
+    const highlightedLinks = data?.highlightedLinks && typeof data.highlightedLinks === "object"
+      ? { ...data.highlightedLinks }
+      : {};
+    const scopedPapers = Array.isArray(data?.svat_papers) ? [...data.svat_papers] : [];
+    const consolidatedPapers = Array.isArray(state?.papers) ? state.papers : [];
+    const classifiedAt = new Date().toISOString();
+    const changedPapers = [];
+    const processedIds = new Set();
+    let skippedAutomaticDuplicates = 0;
+
+    for (const renderedPaper of selectedPapers) {
+      if (isProtectedAutomaticDuplicate(renderedPaper, activePhase.label)) {
+        skippedAutomaticDuplicates += 1;
+        continue;
+      }
+
+      const scopedIndex = findPaperIndexForBulk(scopedPapers, renderedPaper);
+      const consolidatedIndex = findPaperIndexForBulk(consolidatedPapers, renderedPaper);
+      const scopedPaper = scopedIndex >= 0 ? scopedPapers[scopedIndex] : null;
+      const consolidatedPaper = consolidatedIndex >= 0 ? consolidatedPapers[consolidatedIndex] : null;
+      const previousPaper = mergePaperSourcesForBulk(
+        consolidatedPaper,
+        scopedPaper,
+        renderedPaper
+      );
+
+      if (isProtectedAutomaticDuplicate(previousPaper, activePhase.label)) {
+        skippedAutomaticDuplicates += 1;
+        continue;
+      }
+
+      const nextPaper = createBulkClassifiedPaper(
+        previousPaper,
+        category,
+        activePhase.label,
+        classifiedAt
+      );
+      const paperKey = String(nextPaper.id);
+      if (processedIds.has(paperKey)) continue;
+      processedIds.add(paperKey);
+      changedPapers.push(nextPaper);
+
+      if (scopedIndex >= 0) scopedPapers[scopedIndex] = nextPaper;
+      else scopedPapers.push(nextPaper);
+
+      const canonicalUrl = normalizeUrl(nextPaper.url || "");
+      if (canonicalUrl) {
+        for (const storedUrl of Object.keys(highlightedLinks)) {
+          if (normalizeUrl(storedUrl) === canonicalUrl) delete highlightedLinks[storedUrl];
+        }
+        highlightedLinks[nextPaper.url] = normalizeHexColor(category.color, category.color || "");
+      }
+    }
+
+    if (!changedPapers.length) {
+      throw new Error("Nenhum dos artigos selecionados pode ser reclassificado.");
+    }
+
+    const saveResults = await Promise.all(
+      changedPapers.map(paper => storage.savePaper(paper))
+    );
+    const failedSave = saveResults.find(result => result?.status === "error");
+    if (failedSave) {
+      throw new Error(failedSave.message || "Não foi possível salvar um dos artigos.");
+    }
+
+    const scopedProject = data?.svat_project && typeof data.svat_project === "object"
+      ? { ...data.svat_project }
+      : {
+          id: state?.project?.id,
+          title: state?.project?.name || state?.project?.title || "Projeto",
+          createdAt: state?.project?.createdAt || classifiedAt,
+        };
+    scopedProject.activePhaseLabel = activePhase.label;
+    scopedProject.currentIterationId = activePhase.label;
+
+    const storageResult = await storage.set({
+      highlightedLinks,
+      svat_papers: scopedPapers,
+      svat_project: scopedProject,
+    });
+    if (storageResult?.status === "error") {
+      throw new Error(storageResult.message || "Não foi possível atualizar a fase ativa.");
+    }
+
+    if (Array.isArray(state?.papers)) {
+      for (const nextPaper of changedPapers) {
+        const stateIndex = findPaperIndexForBulk(state.papers, nextPaper);
+        if (stateIndex >= 0) Object.assign(state.papers[stateIndex], nextPaper);
+        else state.papers.push(nextPaper);
+      }
+    }
+
+    await refreshDashboardFromStorage("paper_bulk_classification");
+
+    const copy = PAPER_BULK_ACTION_COPY[normalizedOutcome] || PAPER_BULK_ACTION_COPY.pending;
+    const quantity = changedPapers.length;
+    const resultText = quantity === 1 ? copy.singular : copy.plural;
+    const duplicateText = skippedAutomaticDuplicates
+      ? ` ${skippedAutomaticDuplicates} duplicata${skippedAutomaticDuplicates === 1 ? " automática foi mantida" : "s automáticas foram mantidas"} sem alteração.`
+      : "";
+    setPaperBulkStatus(
+      `${quantity} artigo${quantity === 1 ? "" : "s"} ${resultText} com a categoria “${category.title || category.label}”.${duplicateText}`,
+      "success"
+    );
+  } catch (error) {
+    console.warn("paper bulk classification failed", error);
+    const message = error?.message || "Não foi possível classificar os artigos selecionados.";
+    setPaperBulkStatus(message, "error");
+    alert(message);
+    scheduleDashboardRefresh("paper_bulk_classification_error", 80);
+  } finally {
+    paperBulkBusy = false;
+    paperBulkPendingOutcome = null;
+    updatePaperBulkActionState();
+  }
+}
+
 async function bulkDeleteMarkedSelected() {
   const ids = selectedPaperIds();
   if (!ids.length) {
@@ -1819,7 +2775,7 @@ async function bulkDeleteMarkedSelected() {
     return;
   }
 
-  if (!confirm(`Remover/excluir ${ids.length} artigo(s) selecionado(s)?`)) return;
+  if (!confirm(`Retirar ${ids.length} artigo(s) selecionado(s) da fase ativa? Essa ação remove a marcação; para classificar como excluído, use o botão “Remover”.`)) return;
 
   const selectedUrls = [];
   for (const id of ids) {
@@ -1831,16 +2787,25 @@ async function bulkDeleteMarkedSelected() {
     if (id?.startsWith("marked:")) selectedUrls.push(id.slice(7));
   }
 
+  paperBulkBusy = true;
+  updatePaperBulkActionState();
+  setPaperBulkStatus("Retirando as marcações da fase ativa…", "loading", false);
+
   try {
     await removeUrlsFromActivePhase(selectedUrls);
-    await Promise.allSettled([
-      loadHighlightedLinks(),
-      renderPapersTable(),
-      renderOverview(),
-    ]);
+    await refreshDashboardFromStorage("paper_bulk_unmark");
+    setPaperBulkStatus(
+      `${ids.length} artigo${ids.length === 1 ? " foi retirado" : "s foram retirados"} da fase ativa.`,
+      "success"
+    );
   } catch (error) {
     console.warn("bulkDeleteMarkedSelected failed", error);
-    alert(error?.message || "Não foi possível remover os artigos da fase ativa.");
+    const message = error?.message || "Não foi possível remover os artigos da fase ativa.";
+    setPaperBulkStatus(message, "error");
+    alert(message);
+  } finally {
+    paperBulkBusy = false;
+    updatePaperBulkActionState();
   }
 }
 
@@ -1974,13 +2939,28 @@ function bindEvents() {
   });
 
   // Pesquisa de artigos
-  $("#search").addEventListener("input", renderPapersTable);
-  $("#checkAll").addEventListener("change", (e) => {
+  $("#search")?.addEventListener("input", renderPapersTable);
+  $("#checkAll")?.addEventListener("change", (e) => {
     const checked = e.target.checked;
-    $$(".rowCheck").forEach(ch => ch.checked = checked);
+    $$("#papersTable .rowCheck").forEach(ch => { ch.checked = checked; });
+    updatePaperBulkActionState();
   });
 
-  $("#btnBulkDeleteMarked").addEventListener("click", () => bulkDeleteMarkedSelected());
+  $$('[data-paper-bulk-outcome]').forEach(button => {
+    button.addEventListener("click", () => requestPaperBulkOutcome(button.dataset.paperBulkOutcome));
+  });
+  $("#btnBulkDeleteMarked")?.addEventListener("click", () => bulkDeleteMarkedSelected());
+
+  $("#btnClosePaperBulkCategory")?.addEventListener("click", closePaperBulkCategoryModal);
+  const paperBulkCategoryModal = $("#paperBulkCategoryModal");
+  paperBulkCategoryModal?.addEventListener("click", event => {
+    if (event.target === paperBulkCategoryModal) closePaperBulkCategoryModal();
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && !paperBulkCategoryModal?.classList.contains("hidden")) {
+      closePaperBulkCategoryModal();
+    }
+  });
 
   // Categories CRUD
   const btnShowAddCategory = document.getElementById("btnShowAddCategory");
@@ -2576,14 +3556,22 @@ function bindEvents() {
     const categories = Array.isArray(phaseData.categories) ? phaseData.categories : [];
     const label = phaseData.label || cssSafeId(title).toLowerCase();
     const labelStatus = phaseData.labelStatus || (phaseData.completed ? 'done' : 'pending');
+    const isCompleted = isPhaseCompleted({ ...phaseData, labelStatus });
     const stats = phaseData.stats || getPhaseStats(phaseData);
     const isFirstPhase = phaseIndex === 0;
     const isLatestPhase = phaseIndex === phaseCount - 1;
+    const archivePanelId = getPhaseArchiveDomId(label);
 
     const el = document.createElement('div');
     el.className = 'phaseCard';
     if (state?.project?.activePhaseLabel === label) el.classList.add('active');
     if (!isLatestPhase) el.classList.add('phaseCard--locked');
+    if (isCompleted) {
+      el.classList.add('phaseCard--completed');
+      el.setAttribute('aria-controls', archivePanelId);
+      el.setAttribute('aria-expanded', String(expandedCompletedPhaseLabel === label));
+      el.title = 'Clique para consultar os artigos trabalhados nesta fase.';
+    }
     el.dataset.label = label;
     el.dataset.labelStatus = labelStatus;
     el.dataset.desc = desc;
@@ -2615,10 +3603,17 @@ function bindEvents() {
       <div class="phaseCardFooter">
         <span class="activeLabel pill" aria-hidden="true">Ativo</span>
         <div class="phaseCardActions">
+          ${isCompleted ? `<button class="btn small phaseArchiveToggle" type="button" data-action="archive" aria-controls="${archivePanelId}" aria-expanded="${expandedCompletedPhaseLabel === label ? 'true' : 'false'}"><span>${expandedCompletedPhaseLabel === label ? 'Ocultar artigos' : 'Ver artigos'}</span><span class="phaseArchiveChevron" aria-hidden="true">⌄</span></button>` : ''}
           <button class="btn small" data-action="edit">Editar</button>
         </div>
       </div>
     `;
+
+    const btnArchive = el.querySelector('button[data-action="archive"]');
+    if (btnArchive) btnArchive.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      toggleCompletedPhaseArchive(label);
+    });
 
     const btnEdit = el.querySelector('button[data-action="edit"]');
     if(btnEdit) btnEdit.addEventListener('click', (ev) => {
@@ -2643,6 +3638,12 @@ function bindEvents() {
 
     el.addEventListener('click', async (ev) => {
       if(ev.target.closest('button')) return;
+
+      if (isCompleted) {
+        toggleCompletedPhaseArchive(label);
+        return;
+      }
+
       if(!state?.project?.id){
         alert('Abra um projeto antes de ativar uma fase.');
         return;
@@ -2680,10 +3681,22 @@ function bindEvents() {
     if(!phasesList) return;
     phasesList.innerHTML = '';
     const phases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
+    const completedLabels = new Set(
+      phases.filter(phase => isPhaseCompleted(phase)).map(phase => phase?.label).filter(Boolean)
+    );
+    if (expandedCompletedPhaseLabel && !completedLabels.has(expandedCompletedPhaseLabel)) {
+      expandedCompletedPhaseLabel = null;
+    }
     if (phases.length) {
       state.project.activePhaseLabel = phases.at(-1).label;
     }
-    phases.forEach((phase, index) => phasesList.appendChild(createPhaseCard(phase, index, phases.length)));
+    phases.forEach((phase, index) => {
+      phasesList.appendChild(createPhaseCard(phase, index, phases.length));
+      if (isPhaseCompleted(phase)) {
+        phasesList.appendChild(createCompletedPhaseArchivePanel(phase));
+      }
+    });
+    applyCompletedPhaseArchiveState();
     updatePhaseCreationAvailability();
   }
 
