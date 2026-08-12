@@ -690,6 +690,8 @@ function toggleCompletedPhaseArchive(phaseLabel) {
 
 function getPaperCategory(paper, highlightedLinks = {}) {
   if (paper?.autoDuplicate) return null;
+  const isInheritedPaper = Boolean(paper?.inherited || String(paper?.entryType || "").toLowerCase() === "inherited");
+  if (isInheritedPaper) return null;
   const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
   const classification = getPaperClassification(paper);
   const explicitCategoryCandidates = [
@@ -1656,18 +1658,11 @@ async function loadOverviewContext() {
     ...(activeScope.highlightedLinks || {}),
   };
 
-  const activePhaseLabel = state?.project?.activePhaseLabel
-    || state?.project?.phases?.at?.(-1)?.label
-    || null;
-  const activeConsolidatedPapers = (Array.isArray(state?.papers) ? state.papers : [])
-    .filter(paper => !activePhaseLabel || getPaperClassificationForPhase(paper, activePhaseLabel));
+  const globalPapers = Array.isArray(state?.papers) ? state.papers : [];
   const sources = [
     ...(Array.isArray(projectScope.svat_papers) ? projectScope.svat_papers : []),
     ...(Array.isArray(activeScope.svat_papers) ? activeScope.svat_papers : []),
-    // O registro consolidado entra por último apenas quando pertence à fase
-    // ativa. Isso impede que decisões de fases anteriores contaminem as métricas
-    // e a distribuição visual da triagem corrente.
-    ...activeConsolidatedPapers,
+    ...globalPapers,
   ];
 
   const byKey = new Map();
@@ -1824,17 +1819,14 @@ function buildCategoryDistribution(papers, highlightedLinks = {}) {
     count: 0,
   })).filter(entry => entry.key);
   const byKey = new Map(entries.map(entry => [entry.key, entry]));
-  let uncategorized = 0;
 
   for (const paper of papers) {
+    const isInheritedPaper = Boolean(paper?.inherited || String(paper?.entryType || "").toLowerCase() === "inherited");
+    if (isInheritedPaper) continue;
+
     const category = getPaperCategory(paper, highlightedLinks);
     const key = getPaperCategoryKey(category);
     if (key && byKey.has(key)) byKey.get(key).count += 1;
-    else uncategorized += 1;
-  }
-
-  if (uncategorized > 0 || entries.length === 0) {
-    entries.push({ key: "uncategorized", label: "Sem categoria", color: "#A5ADBA", count: uncategorized });
   }
 
   return entries;
@@ -1957,8 +1949,12 @@ function renderOverviewRecentArticles(papers, highlightedLinks = {}) {
 
   for (const paper of recent) {
     const category = getPaperCategory(paper, highlightedLinks);
-    const color = getPaperCategoryColor(paper, highlightedLinks) || "#A5ADBA";
-    const categoryLabel = category?.title || category?.label || "Sem categoria";
+    const color = paper?.inherited || String(paper?.entryType || "").toLowerCase() === "inherited"
+      ? "#A5ADBA"
+      : (getPaperCategoryColor(paper, highlightedLinks) || "#A5ADBA");
+    const categoryLabel = paper?.inherited || String(paper?.entryType || "").toLowerCase() === "inherited"
+      ? "Herdado"
+      : (category?.title || category?.label || "Sem categoria");
     const year = extractPaperYear(paper) || "—";
     const date = paper?.updatedAt || paper?.createdAt;
     const row = document.createElement("tr");
@@ -2126,9 +2122,12 @@ async function renderPapersTable() {
     // Use a light tint from the selected category so the title stays readable.
     const category = getPaperCategory(p, hl);
     const metricType = getPaperMetricType(p, hl);
+    const isInheritedPaper = Boolean(p?.inherited || String(p?.entryType || "").toLowerCase() === "inherited");
     const categoryDisplayLabel = p?.autoDuplicate
       ? "Duplicado automático"
-      : (category?.title || category?.label || "Sem categoria");
+      : isInheritedPaper
+        ? "Sem categoria"
+        : (category?.title || category?.label || "Sem categoria");
     const categoryColor = getPaperCategoryColor(p, hl);
     const rowStyle = categoryColor
       ? `style="--paper-category-color:${escapeHtml(categoryColor)};--paper-category-tint:${escapeHtml(hexToRgba(categoryColor, 0.25))};--paper-category-tint-hover:${escapeHtml(hexToRgba(categoryColor, 0.50))}"`
@@ -2154,6 +2153,7 @@ async function renderPapersTable() {
               ${categoryMarker}
               <span>${escapeHtml(categoryDisplayLabel)}</span>
             </span>
+            ${isInheritedPaper ? `<span class="paperOutcomeBadge paperOutcomeBadge--pending" title="Artigo herdado da fase anterior">Herdado</span>` : ""}
             <span class="paperOutcomeBadge paperOutcomeBadge--${escapeHtml(metricType)}">${escapeHtml(getPaperMetricLabel(metricType))}</span>
             ${metricType === "duplicate" ? renderDuplicateOriginalSelect(p, duplicateCandidates) : ""}
           </span>
