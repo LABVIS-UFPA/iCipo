@@ -742,6 +742,9 @@ function getPaperMetricType(paper, highlightedLinks = {}) {
     return "duplicate";
   }
 
+  const isInheritedPaper = Boolean(paper?.inherited || String(paper?.entryType || "").toLowerCase() === "inherited");
+  if (isInheritedPaper) return "included";
+
   const classification = getPaperClassification(paper);
   return normalizeMetricType(
     classification?.outcome ?? paper?.status,
@@ -1937,6 +1940,7 @@ function renderOverviewRecentArticles(papers, highlightedLinks = {}) {
   tbody.replaceChildren();
 
   const recent = [...papers]
+    .filter(paper => !(paper?.inherited || String(paper?.entryType || "").toLowerCase() === "inherited"))
     .sort((a, b) => String(b?.updatedAt || b?.createdAt || "").localeCompare(String(a?.updatedAt || a?.createdAt || "")))
     .slice(0, 5);
 
@@ -2128,7 +2132,7 @@ async function renderPapersTable() {
       : isInheritedPaper
         ? "Sem categoria"
         : (category?.title || category?.label || "Sem categoria");
-    const categoryColor = getPaperCategoryColor(p, hl);
+    const categoryColor = isInheritedPaper ? "#A5ADBA" : getPaperCategoryColor(p, hl);
     const rowStyle = categoryColor
       ? `style="--paper-category-color:${escapeHtml(categoryColor)};--paper-category-tint:${escapeHtml(hexToRgba(categoryColor, 0.25))};--paper-category-tint-hover:${escapeHtml(hexToRgba(categoryColor, 0.50))}"`
       : "";
