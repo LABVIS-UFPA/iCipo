@@ -34,6 +34,12 @@ let lastDataRevisionId = '';
 const TUTORIAL_TRANSITION_DELAY = 2000;
 const LIVE_REFRESH_DEBOUNCE_MS = 220;
 
+const DEFAULT_CATEGORY_BLUEPRINTS = Object.freeze([
+  { title: "Semente", label: "semente", color: "#4CAF50", description: "Artigos iniciais do projeto." },
+  { title: "Backward", label: "backward", color: "#2196F3", description: "Artigos anteriores vinculados ao tema." },
+  { title: "Forward", label: "forward", color: "#9C27B0", description: "Artigos posteriores vinculados ao tema." },
+]);
+
 const PAPER_METRIC_LABELS = Object.freeze({
   included: "Incluídos",
   excluded: "Excluídos",
@@ -61,6 +67,21 @@ const PAPER_BULK_ACTION_COPY = Object.freeze({
     plural: "marcados como pendentes",
   },
 });
+
+function ensureDefaultProjectCategories(project) {
+  if (!project || !project.id) return { project, changed: false };
+  const categories = Array.isArray(project.categories) ? project.categories : [];
+  if (categories.length) return { project, changed: false };
+
+  project.categories = DEFAULT_CATEGORY_BLUEPRINTS.map((category) => ({
+    ...category,
+    label: category.label || makeLabel(category.title),
+    metricType: "pending",
+    criteria: [],
+  }));
+
+  return { project, changed: true };
+}
 
 function projectHasCategories() {
   return Array.isArray(state?.project?.categories) && state.project.categories.length > 0;
@@ -719,18 +740,10 @@ function getPaperMetricType(paper, highlightedLinks = {}) {
     return "duplicate";
   }
 
-  const category = getPaperCategory(paper, highlightedLinks);
-  if (category) {
-    return normalizeMetricType(category.metricType, inferMetricTypeFromCategory(category));
-  }
-
   const classification = getPaperClassification(paper);
-  const fallbackCategory = classification?.categoryLabel
-    || paper?.categoryLabel
-    || (Array.isArray(paper?.tags) ? paper.tags.join(" ") : "");
   return normalizeMetricType(
     classification?.outcome ?? paper?.status,
-    inferMetricTypeFromCategory(fallbackCategory)
+    "pending"
   );
 }
 
@@ -779,15 +792,11 @@ function applyCategoryMetricToPaper(paper, category, previousLabel = category?.l
 
   if (!matches) return false;
 
-  const metricType = normalizeCategoryMetricType(category.metricType, inferMetricTypeFromCategory(category));
   paper.categoryLabel = category.label;
-  paper.status = metricType;
-  if (metricType !== "duplicate") paper.duplicateOfId = null;
   paper.tags = [...new Set(tags.map(tag => labels.has(tag) ? category.label : tag))];
 
   for (const classification of matchingClassifications) {
     classification.categoryLabel = category.label;
-    classification.outcome = metricType;
   }
 
   return true;
@@ -931,11 +940,6 @@ function loadCategories({ refreshContextMenu = true } = {}) {
     meta.style.fontFamily = "monospace";
     meta.style.fontSize = "12px";
 
-    const metricBadge = document.createElement("span");
-    metricBadge.className = `categoryMetricBadge categoryMetricBadge--${metricType}`;
-    metricBadge.textContent = getPaperMetricLabel(metricType);
-    metricBadge.title = `Impacto na métrica: ${getPaperMetricLabel(metricType)}`;
-
     const editBtn = document.createElement("button");
     editBtn.textContent = "Editar";
     editBtn.addEventListener("click", () => {
@@ -958,7 +962,6 @@ function loadCategories({ refreshContextMenu = true } = {}) {
       }
     });
 
-    right.appendChild(metricBadge);
     right.appendChild(meta);
     right.appendChild(editBtn);
     right.appendChild(btn);
@@ -1267,7 +1270,11 @@ async function loadState() {
         else if (papersRes?.data && Array.isArray(papersRes.data)) papers = papersRes.data;
       }
 
-      state = { project, papers };
+      const { project: ensuredProject, changed } = ensureDefaultProjectCategories(project);
+      if (changed) {
+        await storage.saveProject(ensuredProject);
+      }
+      state = { project: ensuredProject, papers };
       dashboardAccessState = 'ready';
       phaseCreationRequired = !projectHasPhases();
       dashboardIntroRequired = phaseCreationRequired && !hasSeenDashboardIntro(project.id);
@@ -2253,19 +2260,14 @@ function getActivePhaseCategoriesForOutcome(outcome) {
   const activePhase = getActivePhaseForPaperBulkActions();
   if (!activePhase) return [];
 
-  const normalizedOutcome = normalizeCategoryMetricType(outcome, "pending");
   const allowedLabels = new Set(
     (Array.isArray(activePhase.categories) ? activePhase.categories : []).filter(Boolean)
   );
+  const phaseCategories = (Array.isArray(state?.project?.categories) ? state.project.categories : [])
+    .filter(category => allowedLabels.has(category?.label));
 
-  return (Array.isArray(state?.project?.categories) ? state.project.categories : [])
-    .filter(category => allowedLabels.has(category?.label))
-    .filter(category => (
-      normalizeCategoryMetricType(
-        category?.metricType,
-        inferMetricTypeFromCategory(category)
-      ) === normalizedOutcome
-    ));
+  if (phaseCategories.length) return phaseCategories;
+  return (Array.isArray(state?.project?.categories) ? state.project.categories : []);
 }
 
 function getSelectedRenderedPapers() {
@@ -2331,7 +2333,7 @@ function updatePaperBulkActionState() {
     const disabled = paperBulkBusy || phaseLocked || classifiableCount === 0;
 
     button.disabled = disabled;
-    button.classList.toggle("paperBulkOutcomeBtn--unavailable", categories.length === 0);
+    button.classList.toggle("paperBulkOutcomeBtn--unavailable", false);
 
     if (!activePhase) {
       button.title = "Crie uma fase antes de classificar artigos.";
@@ -2341,12 +2343,10 @@ function updatePaperBulkActionState() {
       button.title = "Selecione pelo menos um artigo.";
     } else if (!classifiableCount) {
       button.title = "Duplicatas automáticas não podem ser reclassificadas manualmente.";
-    } else if (!categories.length) {
-      button.title = `A fase ativa não possui uma categoria vinculada ao resultado ${copy.result}.`;
     } else if (categories.length === 1) {
       button.title = `${copy.button} usando a categoria “${categories[0].title || categories[0].label}”.`;
     } else {
-      button.title = `${copy.button}: escolha uma das ${categories.length} categorias compatíveis da fase ativa.`;
+      button.title = `${copy.button}: aplica o resultado diretamente na aba Artigos e mantém a categoria do artigo marcado.`;
     }
   });
 
@@ -2474,11 +2474,8 @@ function findPaperIndexForBulk(collection, paper) {
   ));
 }
 
-function createBulkClassifiedPaper(previousPaper, category, phaseLabel, classifiedAt) {
-  const metricType = normalizeCategoryMetricType(
-    category?.metricType,
-    inferMetricTypeFromCategory(category)
-  );
+function createBulkClassifiedPaper(previousPaper, category, phaseLabel, classifiedAt, requestedOutcome = "pending") {
+  const metricType = normalizeMetricType(requestedOutcome, "pending");
   const normalizedUrl = normalizeUrl(previousPaper?.url || "");
   const rawId = previousPaper?.id;
   const hasStableId = (rawId || rawId === 0) && !String(rawId).startsWith("marked:");
@@ -2603,18 +2600,8 @@ async function requestPaperBulkOutcome(outcome) {
   }
 
   const categories = getActivePhaseCategoriesForOutcome(normalizedOutcome);
-  const copy = PAPER_BULK_ACTION_COPY[normalizedOutcome] || PAPER_BULK_ACTION_COPY.pending;
-  if (!categories.length) {
-    alert(`A fase ativa não possui uma categoria relacionada a “${copy.result}”. Edite a fase e marque pelo menos uma categoria com esse impacto antes de usar esta ação.`);
-    return;
-  }
-
-  if (categories.length === 1) {
-    await applyPaperBulkCategory(categories[0], normalizedOutcome);
-    return;
-  }
-
-  openPaperBulkCategoryModal(normalizedOutcome, categories, classifiablePapers.length);
+  const fallbackCategory = categories[0] || null;
+  await applyPaperBulkCategory(fallbackCategory, normalizedOutcome);
 }
 
 async function applyPaperBulkCategory(category, requestedOutcome) {
@@ -2625,16 +2612,9 @@ async function applyPaperBulkCategory(category, requestedOutcome) {
   }
 
   const normalizedOutcome = normalizeCategoryMetricType(requestedOutcome, "pending");
-  const categoryOutcome = normalizeCategoryMetricType(
-    category?.metricType,
-    inferMetricTypeFromCategory(category)
-  );
   const allowedCategories = getActivePhaseCategoriesForOutcome(normalizedOutcome);
-  if (
-    categoryOutcome !== normalizedOutcome
-    || !allowedCategories.some(item => item?.label === category?.label)
-  ) {
-    alert("A categoria selecionada não está ativa nesta fase ou não corresponde ao resultado escolhido.");
+  if (category && !allowedCategories.some(item => item?.label === category?.label)) {
+    alert("A categoria selecionada não está ativa nesta fase.");
     return;
   }
 
@@ -2683,9 +2663,14 @@ async function applyPaperBulkCategory(category, requestedOutcome) {
 
       const nextPaper = createBulkClassifiedPaper(
         previousPaper,
-        category,
+        category || {
+          label: previousPaper?.categoryLabel || "custom",
+          title: previousPaper?.categoryLabel || "Categoria",
+          color: previousPaper?.highlightedColor || "#A5ADBA",
+        },
         activePhase.label,
-        classifiedAt
+        classifiedAt,
+        normalizedOutcome
       );
       const paperKey = String(nextPaper.id);
       if (processedIds.has(paperKey)) continue;
@@ -3266,7 +3251,7 @@ function bindEvents() {
       label: editingCategoryLabel || makeLabel(title),
       description: categoryDescriptionInput.value.trim(),
       color: categoryColorInput.value,
-      metricType: normalizeCategoryMetricType(categoryMetricTypeInput?.value, "pending"),
+      metricType: "pending",
       criteria: [...categoryDraftCriteria],
     };
 
@@ -3492,10 +3477,7 @@ function bindEvents() {
         const txt = document.createElement('span');
         txt.className = 'phaseCategoryName';
         txt.textContent = cat.title || value;
-        const metric = document.createElement('small');
-        metric.className = `phaseCategoryMetric phaseCategoryMetric--${cat.metricType}`;
-        metric.textContent = getPaperMetricLabel(cat.metricType);
-        textWrap.append(txt, metric);
+        textWrap.append(txt);
         wrap.appendChild(cb);
         wrap.appendChild(pill);
         wrap.appendChild(textWrap);

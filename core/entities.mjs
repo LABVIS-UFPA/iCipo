@@ -230,17 +230,19 @@ class Project {
     }
   }
 
-  _syncCategoryMetricReferences(categoryLabel, metricType) {
-    const normalizedMetricType = normalizeCategoryMetricType(metricType, "pending");
+  _syncCategoryMetricReferences(categoryLabel) {
     for (const paper of checkArray(this.papers)) {
       const matchesTopLevel = paper.categoryLabel === categoryLabel;
       const matchesTag = checkArray(paper.tags).includes(categoryLabel);
-      if (matchesTopLevel || matchesTag) paper.status = normalizedMetricType;
+
+      if (matchesTopLevel || matchesTag) {
+        paper.categoryLabel = categoryLabel;
+      }
 
       if (paper.classifications && typeof paper.classifications === "object") {
         for (const classification of Object.values(paper.classifications)) {
           if (classification?.categoryLabel === categoryLabel) {
-            classification.outcome = normalizedMetricType;
+            classification.categoryLabel = categoryLabel;
           }
         }
       }
