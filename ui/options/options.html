@@ -3,139 +3,194 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Configurações •  iCipó</title>
+    <title>Configurações • iCipó</title>
     <link rel="stylesheet" href="options.css" />
     <script defer type="module" src="options.js"></script>
 
-    <!-- #region Favicons -->
     <link rel="icon" type="image/png" href="/img/favicon-96x96.png" sizes="96x96" />
     <link rel="icon" type="image/svg+xml" href="/img/favicon.svg" />
     <link rel="shortcut icon" href="/img/favicon.ico" />
     <link rel="apple-touch-icon" sizes="180x180" href="/img/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-title" content="iCipó" />
     <link rel="manifest" href="/img/site.webmanifest" />
-    <!-- #endregion -->
-
-
   </head>
   <body>
-    <div class="layout">
-      <header class="topbar">
-        <div class="brand">
-          <div class="logo">
-            <picture>
-              <source srcset="/img/icipo_logo[dark].png" media="(prefers-color-scheme: dark)">
-              <img class="brandLogo" src="/img/icipo_logo.png" alt="iCipó" />
-            </picture>
-          </div>
-          <div class="brandText">
-            <div class="brandTitle">Configurações</div>
-            <div class="brandSub">Marcalink</div>
-          </div>
+    <div class="settingsApp">
+      <aside class="settingsSidebar">
+        <div class="brandModern">
+          <picture class="brandPicture">
+            <img class="brandLogo" src="/img/icipo_logo[dark].png" alt="iCipó" />
+          </picture>
         </div>
 
-        <div class="topbarActions">
-          <label class="toggle">
-            <input type="checkbox" id="checkOnOff" />
-            <span>Ativar extensão</span>
-          </label>
+        <div class="sidebarIntro">
+          <span class="sidebarEyebrow">Central de controle</span>
+          <strong>Configurações</strong>
+          <p>Gerencie a conexão do iCipó.</p>
         </div>
-      </header>
 
-      <div class="main">
-        <aside class="sidenav" aria-label="Navegação das configurações">
-          <!-- Categorias e Documentos movidos para Dashboard -->
-
+        <nav class="settingsNav" aria-label="Navegação das configurações">
           <button class="sideItem" type="button" data-target="panel-backup">
-            <span class="icon" aria-hidden="true">💾</span>
-            <span>Backup</span>
+            <span class="navIcon" aria-hidden="true">⇩</span>
+            <span class="navText">
+              <strong>Backup</strong>
+              <small>Exportar e restaurar dados</small>
+            </span>
           </button>
 
-          <!-- SERVER -->
           <button class="sideItem" type="button" data-target="panel-server">
-            <span class="icon" aria-hidden="true">🔌</span>
-            <span>Server</span>
+            <span class="navIcon" aria-hidden="true">⌁</span>
+            <span class="navText">
+              <strong>Servidor</strong>
+              <small>Conexão WebSocket local</small>
+            </span>
           </button>
+        </nav>
 
-          <div class="sideSpacer"></div>
-        </aside>
+        <div class="sidebarBottom">
+          <div class="extensionStateCard">
+            <div class="extensionStateTop">
+              <span class="statusDot" id="extensionStatusDot" aria-hidden="true"></span>
+              <div>
+                <strong id="extensionStatusText">Verificando extensão...</strong>
+                <small>Disponibilidade no navegador</small>
+              </div>
+            </div>
+            <label class="switchControl" for="checkOnOff">
+              <input type="checkbox" id="checkOnOff" disabled />
+              <span class="switchTrack" aria-hidden="true"><span></span></span>
+              <span id="extensionToggleText">Carregando estado...</span>
+            </label>
+          </div>
 
-        <main class="workarea">
-          <!-- Categorias e Links movidos para o Dashboard -->
+          <button id="btnDashboard" class="sidebarBack dashboardReturnButton" type="button">
+            <span class="dashboardReturnIcon" aria-hidden="true">⌂</span>
+            <span>Voltar ao dashboard</span>
+          </button>
+        </div>
+      </aside>
 
-          <!-- BACKUP -->
+      <main class="settingsMain">
+        <header class="settingsTopbar">
+          <div>
+            <span class="topbarEyebrow">iCipó</span>
+            <strong>Configurações da extensão</strong>
+          </div>
+        </header>
+
+        <div class="settingsWorkspace">
+          <section class="pageHeading">
+            <div>
+              <h1>Configurações</h1>
+              <p>Controle seus backups e a comunicação com o servidor local.</p>
+            </div>
+            <div class="securityBadge">
+              <span aria-hidden="true">✓</span>
+              <div><strong>Dados no seu dispositivo</strong><small>As configurações ficam armazenadas localmente.</small></div>
+            </div>
+          </section>
+
           <section class="panel" id="panel-backup">
             <div class="panelHeader">
-              <h2>Backup do armazenamento</h2>
-              <p>Faça download de um backup (JSON) ou envie um arquivo para restaurar. Isso pode sobrescrever dados existentes.</p>
-            </div>
-
-            <div class="card">
-              <div class="formRow" style="align-items:flex-end">
-                <div class="field fieldActions">
-                  <label>&nbsp;</label>
-                  <button id="downloadStorage" class="btn">Download</button>
-                </div>
-
-                <div class="field" style="min-width:260px">
-                  <label for="uploadStorage">Upload</label>
-                  <input id="uploadStorage" type="file" accept=".json" />
-                </div>
-              </div>
-
-              <div class="note">
-                Dica: após alterar categorias, recarregue a aba do Google Scholar (F5) para ver as opções atualizadas no clique direito.
+              <div class="panelTitleIcon" aria-hidden="true">⇩</div>
+              <div>
+                <h2>Backup do armazenamento</h2>
+                <p>Exporte uma cópia de segurança ou restaure os dados da extensão.</p>
               </div>
             </div>
+
+            <div class="settingsGrid backupGrid">
+              <article class="settingsCard actionCard">
+                <div class="cardIcon cardIconGreen" aria-hidden="true">↓</div>
+                <div class="cardContent">
+                  <span class="cardEyebrow">Exportação</span>
+                  <h3>Baixar backup</h3>
+                  <p>Gere um arquivo JSON com os dados atualmente salvos na extensão.</p>
+                </div>
+                <button id="downloadStorage" class="btn primary" type="button">
+                  <span aria-hidden="true">↓</span> Baixar arquivo JSON
+                </button>
+              </article>
+
+              <article class="settingsCard actionCard">
+                <div class="cardIcon cardIconPurple" aria-hidden="true">↑</div>
+                <div class="cardContent">
+                  <span class="cardEyebrow">Restauração</span>
+                  <h3>Importar backup</h3>
+                  <p>Selecione um arquivo JSON. A importação pode substituir dados existentes.</p>
+                </div>
+                <label class="filePicker" for="uploadStorage">
+                  <span class="filePickerIcon" aria-hidden="true">＋</span>
+                  <span><strong>Selecionar arquivo</strong><small id="uploadFileName">Nenhum arquivo escolhido</small></span>
+                  <input id="uploadStorage" type="file" accept=".json,application/json" />
+                </label>
+              </article>
+            </div>
+
+            <aside class="infoCallout">
+              <span class="calloutIcon" aria-hidden="true">i</span>
+              <div>
+                <strong>Antes de restaurar</strong>
+                <p>Faça um backup atual. Após uma restauração, recarregue as páginas abertas para atualizar as informações exibidas.</p>
+              </div>
+            </aside>
           </section>
 
-          <!-- ✅ SERVER -->
           <section class="panel" id="panel-server">
             <div class="panelHeader">
-              <h2>Server (WebSocket)</h2>
-              <p>Conecte em um servidor WebSocket para testes. As mensagens recebidas serão salvas localmente em <code>server_messages</code>.</p>
+              <div class="panelTitleIcon" aria-hidden="true">⌁</div>
+              <div>
+                <h2>Servidor WebSocket</h2>
+                <p>Configure a comunicação entre a extensão e o servidor local do projeto.</p>
+              </div>
             </div>
 
-            <div class="card">
-              <div class="formRow" style="align-items:flex-end">
-                <div class="field" style="flex:1">
+            <div class="settingsCard serverConnectionCard">
+              <div class="serverCardHeader">
+                <div>
+                  <span class="cardEyebrow">Conexão local</span>
+                  <h3>Endereço do servidor</h3>
+                </div>
+                <div class="serverStatusPill" id="serverStatusPill">
+                  <span></span><b id="serverStatus">Desconectado</b>
+                </div>
+              </div>
+
+              <div class="connectionForm">
+                <div class="field fieldUrl">
                   <label for="serverUrl">URL</label>
-                  <input type="text" id="serverUrl" placeholder="ws://localhost" />
+                  <div class="inputShell"><span aria-hidden="true">⌂</span><input type="text" id="serverUrl" placeholder="ws://localhost" autocomplete="off" /></div>
+                  <small>Use o protocolo <code>ws://</code> para conexões locais.</small>
                 </div>
 
-                <div class="field" style="min-width:140px">
-                  <label for="serverPort">Port</label>
-                  <input type="number" id="serverPort" placeholder="8080" />
-                </div>
-
-                <div class="field fieldActions">
-                  <label>&nbsp;</label>
-                  <div class="btnRow">
-                    <button id="connectBtn" class="btn primary">Conectar</button>
-                    <button id="sendPingBtn" class="btn">Enviar Ping</button>
-                  </div>
+                <div class="field fieldPort">
+                  <label for="serverPort">Porta</label>
+                  <div class="inputShell"><span aria-hidden="true">#</span><input type="number" id="serverPort" placeholder="8080" min="1" max="65535" /></div>
+                  <small>Porta padrão do projeto: 8080.</small>
                 </div>
               </div>
 
-              <div class="note" style="display:flex;gap:8px;align-items:center;justify-content:space-between">
-                <div>Status: <b id="serverStatus">Desconectado</b></div>
-                <div class="muted" style="font-size:12px">
-                  Guarda as últimas 500 mensagens.
-                </div>
+              <div class="connectionActions">
+                <button id="connectBtn" class="btn primary" type="button">Conectar</button>
+                <button id="sendPingBtn" class="btn secondary" type="button"><span aria-hidden="true">↗</span> Enviar ping</button>
+                <span class="connectionHint">As últimas 500 mensagens são mantidas no armazenamento local.</span>
               </div>
+            </div>
 
-              <div class="listHead">
-                <h3>Log</h3>
-                <div class="muted" style="font-size:12px">
-                  <button id="clearServerLog" class="btn small">Limpar log</button>
+            <div class="settingsCard logCard">
+              <div class="logHeader">
+                <div>
+                  <span class="cardEyebrow">Diagnóstico</span>
+                  <h3>Log de comunicação</h3>
                 </div>
+                <button id="clearServerLog" class="btn tertiary small" type="button">Limpar log</button>
               </div>
-
-              <pre id="serverLog" class="serverLog"></pre>
+              <pre id="serverLog" class="serverLog" aria-live="polite"></pre>
+              <div class="emptyLogHint">As mensagens da conexão aparecerão aqui.</div>
             </div>
           </section>
-        </main>
-      </div>
+        </div>
+      </main>
     </div>
   </body>
 </html>

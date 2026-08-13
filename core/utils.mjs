@@ -35,6 +35,184 @@ export function removeArrayItem(values, targetValue) {
     return checkArray(values).filter(value => value !== targetValue);
 }
 
+export const PAPER_METRIC_TYPES = Object.freeze([
+    "included",
+    "excluded",
+    "duplicate",
+    "pending",
+]);
+
+// Categorias representam decisões humanas. A duplicidade deixou de ser uma
+// decisão manual e passou a ser identificada automaticamente pelo endereço do
+// artigo, por isso não é um tipo válido para novas categorias.
+export const CATEGORY_METRIC_TYPES = Object.freeze([
+    "included",
+    "excluded",
+    "pending",
+]);
+
+function normalizeMetricToken(value) {
+    return String(value || "")
+        .trim()
+        .toLowerCase()
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+}
+
+/**
+ * Normaliza o resultado consolidado usado nas métricas dos artigos.
+ * O formato persistido é sempre um dos quatro valores canônicos abaixo.
+ */
+export function normalizeMetricType(value, fallback = "pending") {
+    const token = normalizeMetricToken(value);
+    const aliases = {
+        included: "included",
+        include: "included",
+        incluido: "included",
+        incluida: "included",
+        inclusao: "included",
+        aprovado: "included",
+        aprovada: "included",
+        aceito: "included",
+        aceita: "included",
+        selected: "included",
+        selecionado: "included",
+        selecionada: "included",
+
+        excluded: "excluded",
+        exclude: "excluded",
+        excluido: "excluded",
+        excluida: "excluded",
+        exclusao: "excluded",
+        rejeitado: "excluded",
+        rejeitada: "excluded",
+        descartado: "excluded",
+        descartada: "excluded",
+
+        duplicate: "duplicate",
+        duplicated: "duplicate",
+        duplicado: "duplicate",
+        duplicada: "duplicate",
+        duplicidade: "duplicate",
+        repetido: "duplicate",
+        repetida: "duplicate",
+
+        pending: "pending",
+        pendente: "pending",
+        unclassified: "pending",
+        sem_classificacao: "pending",
+        nao_contabilizar: "pending",
+        none: "pending",
+    };
+
+    if (aliases[token]) return aliases[token];
+
+    const normalizedFallback = normalizeMetricToken(fallback);
+    if (PAPER_METRIC_TYPES.includes(normalizedFallback)) return normalizedFallback;
+    return "pending";
+}
+
+/**
+ * Normaliza o impacto permitido para categorias. Projetos antigos que ainda
+ * possuem uma categoria manual de duplicidade são migrados para "pending";
+ * registros de artigos duplicados continuam usando normalizeMetricType().
+ */
+export function normalizeCategoryMetricType(value, fallback = "pending") {
+    const normalized = normalizeMetricType(value, fallback);
+    if (CATEGORY_METRIC_TYPES.includes(normalized)) return normalized;
+
+    const normalizedFallback = normalizeMetricType(fallback, "pending");
+    return CATEGORY_METRIC_TYPES.includes(normalizedFallback)
+        ? normalizedFallback
+        : "pending";
+}
+
+/**
+ * Gera uma identidade estável para comparar links de artigos. Mantém os
+ * parâmetros funcionais da URL e remove somente fragmentos e parâmetros de
+ * rastreamento conhecidos, evitando duplicatas causadas por pequenas
+ * variações do mesmo endereço.
+ */
+export function normalizeArticleUrl(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+
+    try {
+        const url = new URL(raw);
+        url.hash = "";
+        url.hostname = url.hostname.toLowerCase();
+
+        const removableParams = new Set([
+            "casa_token",
+            "utm_source",
+            "utm_medium",
+            "utm_campaign",
+            "utm_term",
+            "utm_content",
+            "gclid",
+            "fbclid",
+        ]);
+
+        for (const key of [...url.searchParams.keys()]) {
+            if (removableParams.has(key.toLowerCase())) {
+                url.searchParams.delete(key);
+            }
+        }
+
+        const sortedParams = [...url.searchParams.entries()]
+            .sort(([keyA, valueA], [keyB, valueB]) => {
+                const keyComparison = keyA.localeCompare(keyB);
+                return keyComparison || valueA.localeCompare(valueB);
+            });
+        url.search = "";
+        for (const [key, itemValue] of sortedParams) {
+            url.searchParams.append(key, itemValue);
+        }
+
+        if (url.pathname.length > 1) {
+            url.pathname = url.pathname.replace(/\/+$/g, "");
+        }
+
+        return url.toString();
+    } catch {
+        return raw
+            .replace(/([?&])casa_token=[^&#]*/gi, "$1")
+            .replace(/[?&]+$/g, "")
+            .replace(/#.*$/g, "")
+            .replace(/\/+$/g, "");
+    }
+}
+
+/**
+ * Compatibilidade com projetos antigos que ainda não possuem metricType.
+ * Novas categorias devem persistir metricType explicitamente.
+ */
+export function inferMetricTypeFromCategory(category) {
+    if (category && typeof category === "object") {
+        const explicit = normalizeMetricType(
+            category.metricType ?? category.metric ?? category.outcome,
+            ""
+        );
+        if (explicit && PAPER_METRIC_TYPES.includes(explicit)) {
+            const rawExplicit = category.metricType ?? category.metric ?? category.outcome;
+            if (String(rawExplicit || "").trim()) return explicit;
+        }
+    }
+
+    const source = category && typeof category === "object"
+        ? `${category.label || ""} ${category.title || ""}`
+        : String(category || "");
+    const token = normalizeMetricToken(source);
+
+    if (/(^|_)(nao_(incl|aprov|aceit|selecion)|ineleg|fora_dos_criterios)/.test(token)) return "excluded";
+    if (/(^|_)(excl|rejeit|descart|ineleg)/.test(token)) return "excluded";
+    if (/(^|_)(duplic|repet)/.test(token)) return "duplicate";
+    if (/(^|_)(incl|aprov|aceit|selecion|elegivel|atende)/.test(token)) return "included";
+    return "pending";
+}
+
 export function tokenSet(title) {
     return new Set(normalizeStr(title)
         .replace(/[^a-z0-9\s]/g, " ")
@@ -87,16 +265,16 @@ export function hashId(input) {
 }
 
 export function inferFromCategory(category) {
-    const c = (category || "").toLowerCase();
+    const categoryText = category && typeof category === "object"
+        ? `${category.label || ""} ${category.title || ""}`
+        : String(category || "");
+    const c = categoryText.toLowerCase();
     const origin = c.includes("seed") || c.includes("semente") ? "seed"
         : c.includes("back") || c.includes("refer") ? "backward"
         : c.includes("forw") || c.includes("cita") ? "forward"
         : "unknown";
 
-    const status = c.includes("incl") ? "included"
-        : c.includes("excl") ? "excluded"
-        : c.includes("duplic") ? "duplicate"
-        : "pending";
+    const status = inferMetricTypeFromCategory(category);
 
     return { origin, status };
 }

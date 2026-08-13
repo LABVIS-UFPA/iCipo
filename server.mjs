@@ -38,21 +38,32 @@ wss.on("connection", (ws) => {
     }
 
     const act = payload.act;
+    const requestId = payload.requestId || null;
     if (!act) {
-      ws.send(JSON.stringify({ act: "error", status: "error", message: "Missing act attribute" }));
+      ws.send(JSON.stringify({ act: "error", requestId, status: "error", message: "Missing act attribute" }));
       return;
     }
 
     if(messageHandler[act] instanceof Function) {
-      const response = await messageHandler[act](payload.payload);
-      if (response) {
-        console.log("📤 Enviando resposta:", response);
-        ws.send(JSON.stringify({ act, status: "ok", payload: response}));
-      }else{ 
-        ws.send(JSON.stringify({ act, status: "error", message: "No response from server" }));
+      try {
+        const response = await messageHandler[act](payload.payload);
+        if (response) {
+          console.log("📤 Enviando resposta:", response);
+          ws.send(JSON.stringify({ act, requestId, status: "ok", payload: response}));
+        }else{ 
+          ws.send(JSON.stringify({ act, requestId, status: "error", message: "No response from server" }));
+        }
+      } catch (error) {
+        console.error(`❌ Falha ao executar a ação ${act}:`, error);
+        ws.send(JSON.stringify({
+          act,
+          requestId,
+          status: "error",
+          message: error?.message || String(error),
+        }));
       }
     }else{
-      ws.send(JSON.stringify({ act: "unknown", status: "error", message: "Unknown act" }));
+      ws.send(JSON.stringify({ act: "unknown", requestId, status: "error", message: "Unknown act" }));
       console.warn(`⚠️ Ação desconhecida recebida: ${act}`);
     }
     

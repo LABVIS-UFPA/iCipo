@@ -23,11 +23,17 @@ class WebsocketManager {
     this.socket = null;
     this._closedFinalized = false;
     this.onOpenListeners = [];
-    this.tryAutoConnect();
     this.autoConnectionTime = 100;
+    // Cada requisição WebSocket recebe um requestId próprio. Antes, os
+    // callbacks eram indexados apenas por `act`, portanto duas leituras
+    // simultâneas de `storage_get` sobrescreviam uma à outra e uma das
+    // Promises ficava sem resposta. O mapa continua aceitando `act` como
+    // fallback para manter compatibilidade com mensagens antigas.
     this.responseHandlers = {};
+    this.legacyResponseQueues = {};
     // Variável global para o supressor saber qual URL ignorar
     this.currentConnectingUrl = "";
+    this.tryAutoConnect();
   }
 
   buildWsUrl(url, port) {
@@ -146,15 +152,7 @@ class WebsocketManager {
     };
 
     this.socket.onmessage = (e) => {
-      // tenta despachar para o handler registrado
-      try{
-        const msg = JSON.parse(e.data);
-        if(msg && msg.act && this.responseHandlers[msg.act] instanceof Function){
-          this.responseHandlers[msg.act](msg.payload);
-          return;
-        }
-      }catch(err){console.warn("Erro ao despachar mensagem recebida:", err);}
-      
+      if (this.dispatchIncomingMessage(e.data)) return;
       this.appendLog("MSG: " + e.data);
     };
 
@@ -176,13 +174,54 @@ class WebsocketManager {
   send(data, responseHandler) {
     console.log("WebsocketManager.send", data);
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-      this.setResponseHandler(data.act, responseHandler);
+      const responseKey = data && typeof data === 'object'
+        ? (data.requestId || data.act)
+        : null;
+      if (responseKey && typeof responseHandler === 'function') {
+        this.setResponseHandler(responseKey, responseHandler);
+        if (data?.requestId && data?.act) {
+          const queue = this.legacyResponseQueues[data.act] || [];
+          queue.push(responseKey);
+          this.legacyResponseQueues[data.act] = queue;
+        }
+      }
       this.socket.send(JSON.stringify(data));
       this.appendLog("➡️ " + (typeof data === 'string' ? data : JSON.stringify(data)));
       return true;
     }
     console.warn("WebSocket não está conectado. Não foi possível enviar a mensagem.");
     return false;
+  }
+
+  dispatchIncomingMessage(rawData) {
+    try {
+      const msg = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+      let responseKey = msg?.requestId || null;
+
+      // Compatibilidade temporária com servidores anteriores que ainda não
+      // devolvem requestId. Nesse caso, consome a fila do respectivo `act`.
+      if (!responseKey && msg?.act) {
+        const queue = this.legacyResponseQueues[msg.act] || [];
+        while (queue.length && !this.responseHandlers[queue[0]]) queue.shift();
+        responseKey = queue.shift() || msg.act;
+        if (queue.length) this.legacyResponseQueues[msg.act] = queue;
+        else delete this.legacyResponseQueues[msg.act];
+      }
+
+      const handler = responseKey ? this.responseHandlers[responseKey] : null;
+      if (!(handler instanceof Function)) return false;
+
+      delete this.responseHandlers[responseKey];
+      if (msg?.requestId) this.removeFromLegacyQueues(responseKey);
+      const response = msg.payload !== undefined
+        ? msg.payload
+        : { status: msg.status, message: msg.message };
+      handler(response);
+      return true;
+    } catch (err) {
+      console.warn("Erro ao despachar mensagem recebida:", err);
+      return false;
+    }
   }
 
   // Register a callback to be called when WebSocket opens/reconnects
@@ -195,8 +234,22 @@ class WebsocketManager {
       this.onOpenListeners.push(callback);
     }
   }
-  setResponseHandler(act, handler) {
-    this.responseHandlers[act] = handler;
+  setResponseHandler(responseKey, handler) {
+    this.responseHandlers[responseKey] = handler;
+  }
+
+  removeResponseHandler(responseKey) {
+    if (!responseKey) return;
+    delete this.responseHandlers[responseKey];
+    this.removeFromLegacyQueues(responseKey);
+  }
+
+  removeFromLegacyQueues(responseKey) {
+    for (const [act, queue] of Object.entries(this.legacyResponseQueues)) {
+      const nextQueue = queue.filter((item) => item !== responseKey);
+      if (nextQueue.length) this.legacyResponseQueues[act] = nextQueue;
+      else delete this.legacyResponseQueues[act];
+    }
   }
 
   tryAutoConnect() {
@@ -216,3 +269,4 @@ class WebsocketManager {
 }
 
 export const wsManager = new WebsocketManager();
+export { WebsocketManager };

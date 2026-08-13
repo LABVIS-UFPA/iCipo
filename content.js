@@ -5,6 +5,79 @@ let highlightsEnabled = true;
 let refreshPromise = null;
 let mutationTimer = null;
 
+/**
+ * Mantém a mesma regra de identidade usada pelo servidor para que uma URL
+ * continue sendo reconhecida mesmo quando o Scholar/navegador altera a ordem
+ * dos parâmetros ou acrescenta identificadores de rastreamento.
+ */
+function normalizeHighlightUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  try {
+    const url = new URL(raw, window.location.href);
+    url.hash = '';
+    url.hostname = url.hostname.toLowerCase();
+
+    const removableParams = new Set([
+      'casa_token',
+      'utm_source',
+      'utm_medium',
+      'utm_campaign',
+      'utm_term',
+      'utm_content',
+      'gclid',
+      'fbclid'
+    ]);
+
+    for (const key of [...url.searchParams.keys()]) {
+      if (removableParams.has(key.toLowerCase())) {
+        url.searchParams.delete(key);
+      }
+    }
+
+    const sortedParams = [...url.searchParams.entries()]
+      .sort(([keyA, valueA], [keyB, valueB]) => {
+        const keyComparison = keyA.localeCompare(keyB);
+        return keyComparison || valueA.localeCompare(valueB);
+      });
+    url.search = '';
+    for (const [key, itemValue] of sortedParams) {
+      url.searchParams.append(key, itemValue);
+    }
+
+    if (url.pathname.length > 1) {
+      url.pathname = url.pathname.replace(/\/+$/g, '');
+    }
+
+    return url.toString();
+  } catch {
+    return raw
+      .replace(/([?&])casa_token=[^&#]*/gi, '$1')
+      .replace(/[?&]+$/g, '')
+      .replace(/#.*$/g, '')
+      .replace(/\/+$/g, '');
+  }
+}
+
+function linkMatchesStoredUrl(anchorHref, storedUrl) {
+  const href = String(anchorHref || '').trim();
+  const target = String(storedUrl || '').trim();
+  if (!href || !target) return false;
+
+  const normalizedHref = normalizeHighlightUrl(href);
+  const normalizedTarget = normalizeHighlightUrl(target);
+  const prefixSuffix = href.startsWith(target) ? href.slice(target.length) : null;
+  const safeLegacyPrefix = prefixSuffix !== null
+    && (prefixSuffix === '' || /^[?&#]/.test(prefixSuffix));
+
+  return (
+    (normalizedHref && normalizedTarget && normalizedHref === normalizedTarget)
+    || href === target
+    || safeLegacyPrefix
+  );
+}
+
 function paintHighlights() {
   document.querySelectorAll('a.ic-highlighted-link').forEach((link) => {
     link.style.backgroundColor = '';
@@ -19,7 +92,7 @@ function paintHighlights() {
     // Evita seletor CSS com URL não escapada. A comparação por href também lida
     // melhor com URLs que contêm caracteres especiais.
     document.querySelectorAll('a[href]').forEach((link) => {
-      if (link.href && link.href.startsWith(linkUrl)) {
+      if (linkMatchesStoredUrl(link.href, linkUrl)) {
         link.classList.add('ic-highlighted-link');
         link.style.backgroundColor = color;
       }
@@ -85,7 +158,7 @@ chrome.runtime.onMessage.addListener((msg) => {
 // This focuses on Google Scholar's common DOM structure, but degrades gracefully.
 function extractMetadataForLink(linkUrl) {
   const anchors = Array.from(document.querySelectorAll('a'))
-    .filter(a => a.href && a.href.startsWith(linkUrl));
+    .filter(a => linkMatchesStoredUrl(a.href, linkUrl));
   const a = anchors[0];
   if (!a) {
     return { title: linkUrl, authorsRaw: "", year: null };

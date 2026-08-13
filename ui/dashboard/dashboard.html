@@ -20,122 +20,203 @@
     <div class="app">
       
       <aside class="sidebar u-flex-fill-col">
-        <div class="brand">
-          <div class="logo">
-            <picture>
-              <source srcset="/img/icipo_logo[dark].png" media="(prefers-color-scheme: dark)">
-              <img class="brandLogo" src="/img/icipo_logo.png" alt="iCipó" />
-            </picture>
-          </div>
-          <div>
-            <div class="brandTitle">Dashboard</div>
-            <div class="brandSub" id="brandSub">—</div>
-          </div>
+        <div class="brand brandModern">
+          <picture class="brandPicture">
+            <source srcset="/img/icipo_logo[dark].png" media="(prefers-color-scheme: dark)">
+            <img class="brandLogo" src="/img/icipo_logo[dark].png" alt="iCipó" />
+          </picture>
+          <span class="brandFallback">iCipó</span>
+          <span class="brandSub hidden" id="brandSub">—</span>
         </div>
 
-        <nav class="nav u-flex-fill-col u-scroll-y">
-          <button class="navBtn active" data-view="overview">📌 Visão geral</button>
-          <button class="navBtn" data-view="phases">🧭 Fases</button>
-          <button class="navBtn" data-view="categories">🎨 Categorias</button>
-          <button class="navBtn" data-view="papers">📚 Artigos</button>
-          <button class="navBtn" data-view="iterations">🔁 Iterações</button>
-          <button class="navBtn" data-view="criteria">✅ Critérios</button>
-          <button class="navBtn" data-view="citations">🔗 Conexões</button>
-          <button class="navBtn" data-view="graph">🕸️ Grafo</button>
-          <button class="navBtn" data-view="insights">✨ Insights</button>
+        <nav class="nav u-flex-fill-col u-scroll-y" aria-label="Navegação principal">
+          <button class="navBtn active" data-view="overview"><span class="navIcon">⌂</span><span>Visão Geral</span></button>
+          <button class="navBtn" data-view="phases"><span class="navIcon">◇</span><span>Fases</span></button>
+          <button class="navBtn" data-view="categories"><span class="navIcon">□</span><span>Categorias</span></button>
+          <button class="navBtn" data-view="papers"><span class="navIcon">▤</span><span>Artigos</span></button>
         </nav>
 
-        <div class="sideFooter">
-          <button id="btnProjects" class="ghost">📁 Projetos</button>
-          <button id="btnOptions" class="ghost">⚙️ Configurações</button>
-          <div class="hint">Dica: marque artigos no Scholar com botão direito → “Marcar link” → categoria.</div>
+        <div class="sideFooter sideFooterModern">
+          <div class="sidebarProjectSummary" aria-label="Informações do projeto">
+            <div class="sidebarSectionTitle">Sobre o projeto</div>
+            <div class="sidebarInfoBlock">
+              <span>Pesquisadores</span>
+              <strong id="sidebarResearchers">—</strong>
+            </div>
+            <div class="sidebarInfoBlock">
+              <span>Objetivo</span>
+              <strong id="sidebarObjective">—</strong>
+            </div>
+            <div class="sidebarInfoBlock">
+              <span>ID do projeto</span>
+              <strong id="sidebarProjectId">—</strong>
+            </div>
+          </div>
+          <div class="sidebarFooterActions">
+            <button id="btnProjects" class="ghost">Projetos</button>
+            <button id="btnOptions" class="ghost">Configurações</button>
+          </div>
         </div>
       </aside>
 
       <main class="main">
         <header class="topbar">
-          <div class="topLeft">
-            <h1 id="projectTitle">Projeto</h1>
-            <div class="meta" id="projectMeta">—</div>
+          <div class="currentProjectBlock">
+            <span class="topbarEyebrow">Projeto atual</span>
+            <div class="currentProjectPill">
+              <strong id="projectTitle">Projeto</strong>
+              <span class="projectStatus"><i></i> Ativo</span>
+            </div>
+            <div class="meta visually-hidden" id="projectMeta">—</div>
           </div>
         </header>
 
+
+        <!-- INTRODUÇÃO OBRIGATÓRIA DO DASHBOARD -->
+        <div id="dashboardIntroModal" class="dashboardIntroModal hidden" role="dialog" aria-modal="true" aria-labelledby="dashboardIntroTitle" aria-describedby="dashboardIntroDescription" aria-hidden="true">
+          <div class="dashboardIntroCard">
+            <div class="dashboardIntroEyebrow">Tutorial · Etapa 1 de 4</div>
+            <div class="dashboardIntroIcon" aria-hidden="true">⌂</div>
+            <h2 id="dashboardIntroTitle">Bem-vindo ao dashboard</h2>
+            <p id="dashboardIntroDescription">Aqui você acompanha o andamento do projeto, organiza as etapas da revisão e consulta os artigos marcados durante a pesquisa.</p>
+
+            <div class="dashboardIntroFeatures" aria-label="Recursos principais do dashboard">
+              <div><strong>Fases</strong><span>Estruturam o processo de seleção e análise.</span></div>
+              <div><strong>Categorias</strong><span>Classificam os artigos em cada etapa.</span></div>
+              <div><strong>Visão Geral</strong><span>Resume a distribuição e a evolução dos estudos.</span></div>
+            </div>
+
+            <div class="dashboardIntroNextStep">
+              <strong>Primeiro passo</strong>
+              <span>Crie a primeira fase para definir como os artigos serão avaliados.</span>
+            </div>
+
+            <div class="dashboardIntroActions">
+              <button id="btnDashboardIntroProjects" type="button" class="btn ghost">Voltar aos projetos</button>
+              <button id="btnContinueDashboardIntro" type="button" class="btn dashboardIntroPrimary">Começar</button>
+            </div>
+          </div>
+        </div>
+
         <!-- OVERVIEW -->
-        <section class="view u-flex-fill-col" id="view_overview">
-          <div class="kpiGrid">
-            <div class="kpi"><div class="kpiLabel">Total</div><div class="kpiVal" id="kpi_total">0</div></div>
-            <div class="kpi"><div class="kpiLabel">Incluídos</div><div class="kpiVal" id="kpi_included">0</div></div>
-            <div class="kpi"><div class="kpiLabel">Excluídos</div><div class="kpiVal" id="kpi_excluded">0</div></div>
-            <div class="kpi"><div class="kpiLabel">Pendentes</div><div class="kpiVal" id="kpi_pending">0</div></div>
-            <div class="kpi"><div class="kpiLabel">Duplicados</div><div class="kpiVal" id="kpi_duplicate">0</div></div>
-            <div class="kpi"><div class="kpiLabel">Seeds</div><div class="kpiVal" id="kpi_seed">0</div></div>
+        <section class="view overviewView u-flex-fill-col" id="view_overview">
+          <div class="overviewHeading">
+            <div>
+              <h2>Visão Geral</h2>
+              <p>Acompanhe o progresso do seu projeto e explore os principais indicadores.</p>
+            </div>
+            <div class="overviewUpdated"><span aria-hidden="true">◷</span><span id="overviewUpdatedAt">Última atualização: —</span></div>
           </div>
 
-          <div class="grid2">
-            <div class="card">
-              <div class="cardTitle">Status dos artigos</div>
-              <div id="statusBars" class="bars"></div>
-            </div>
-            <div class="card">
-              <div class="cardTitle">Publicações por ano</div>
-              <svg id="timeline" width="100%" height="180" role="img" aria-label="Histograma por ano"></svg>
-            </div>
+          <div class="paperMetricsGrid" aria-label="Resumo da seleção de artigos">
+            <button class="paperMetricCard paperMetricCard--total" type="button" data-paper-metric="all" aria-label="Ver todos os artigos">
+              <span class="paperMetricIcon" aria-hidden="true">▤</span>
+              <span class="paperMetricContent">
+                <span class="paperMetricLabel">Total de artigos</span>
+                <strong id="paperMetricTotal">0</strong>
+                <small id="paperMetricTotalDetail">Nenhum artigo registrado</small>
+              </span>
+              <span class="paperMetricArrow" aria-hidden="true">→</span>
+            </button>
+
+            <button class="paperMetricCard paperMetricCard--included" type="button" data-paper-metric="included" aria-label="Ver artigos incluídos">
+              <span class="paperMetricIcon" aria-hidden="true">✓</span>
+              <span class="paperMetricContent">
+                <span class="paperMetricLabel">Incluídos</span>
+                <strong id="paperMetricIncluded">0</strong>
+                <small id="paperMetricIncludedDetail">0% do total</small>
+              </span>
+              <span class="paperMetricArrow" aria-hidden="true">→</span>
+            </button>
+
+            <button class="paperMetricCard paperMetricCard--excluded" type="button" data-paper-metric="excluded" aria-label="Ver artigos excluídos">
+              <span class="paperMetricIcon" aria-hidden="true">×</span>
+              <span class="paperMetricContent">
+                <span class="paperMetricLabel">Excluídos</span>
+                <strong id="paperMetricExcluded">0</strong>
+                <small id="paperMetricExcludedDetail">0% do total</small>
+              </span>
+              <span class="paperMetricArrow" aria-hidden="true">→</span>
+            </button>
+
+            <button class="paperMetricCard paperMetricCard--pending" type="button" data-paper-metric="pending" aria-label="Ver artigos pendentes">
+              <span class="paperMetricIcon" aria-hidden="true">◷</span>
+              <span class="paperMetricContent">
+                <span class="paperMetricLabel">Pendentes</span>
+                <strong id="paperMetricPending">0</strong>
+                <small id="paperMetricPendingDetail">0% do total</small>
+              </span>
+              <span class="paperMetricArrow" aria-hidden="true">→</span>
+            </button>
+
+            <button class="paperMetricCard paperMetricCard--duplicate" type="button" data-paper-metric="duplicate" aria-label="Ver artigos duplicados">
+              <span class="paperMetricIcon" aria-hidden="true">⧉</span>
+              <span class="paperMetricContent">
+                <span class="paperMetricLabel">Duplicados</span>
+                <strong id="paperMetricDuplicate">0</strong>
+                <small id="paperMetricDuplicateDetail">0% do total</small>
+              </span>
+              <span class="paperMetricArrow" aria-hidden="true">→</span>
+            </button>
           </div>
 
-          <div class="grid2">
-            <div class="card">
-              <div class="cardTitle">Fluxo (PRISMA adaptado)</div>
-              <div id="flow" class="flow"></div>
-            </div>
-            <div class="card">
-              <div class="cardTitle">Pendentes recentes</div>
-              <div class="tableWrap">
-                <table class="table" id="pendingTable">
-                  <thead><tr><th>Título</th><th>Origem</th><th>Iter.</th><th>Ações</th></tr></thead>
-                  <tbody></tbody>
-                </table>
+          <div class="overviewLayout overviewLayoutTop overviewLayoutPrimary">
+            <article class="overviewCard categoryDistributionCard">
+              <div class="overviewCardHeader">
+                <div class="overviewCardTitle"><span class="overviewTitleIcon">◫</span> Distribuição por categoria</div>
               </div>
-            </div>
+              <div class="categoryDistributionBody">
+                <div id="categoryDonut" class="categoryDonut" role="img" aria-label="Distribuição dos artigos por categoria">
+                  <div class="categoryDonutCenter"><strong id="categoryDonutTotal">0</strong><span>Total</span></div>
+                </div>
+                <div id="categoryLegend" class="categoryLegend"></div>
+              </div>
+              <button class="overviewCardLink" type="button" data-overview-view="categories">Ver todas as categorias <span>→</span></button>
+            </article>
+
+            <article class="overviewCard phaseProgressCard">
+              <div class="overviewCardHeader">
+                <div class="overviewCardTitle"><span class="overviewTitleIcon">▧</span> Progresso das fases</div>
+              </div>
+              <div id="phaseProgressList" class="phaseProgressList"></div>
+              <button class="overviewCardLink" type="button" data-overview-view="phases">Ver todas as fases <span>→</span></button>
+            </article>
           </div>
+
+          <article class="overviewCard recentArticlesCard">
+            <div class="overviewCardHeader">
+              <div class="overviewCardTitle"><span class="overviewTitleIcon">▣</span> Artigos recentes</div>
+            </div>
+            <div class="overviewRecentTableWrap">
+              <table class="overviewRecentTable" id="overviewRecentTable">
+                <thead>
+                  <tr><th>Título</th><th>Autores</th><th>Ano</th><th>Categoria</th><th>Fase</th><th>Adicionado em</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <button class="overviewCardLink" type="button" data-overview-view="papers">Ver todos os artigos <span>→</span></button>
+          </article>
         </section>
 
         <!-- PAPERS -->
         <section class="view hidden u-flex-fill-col" id="view_papers">
-          <div class="toolbar">
+          <div class="toolbar papersToolbar">
             <input id="search" class="input" placeholder="Buscar por título, autor, tag…" />
-            <select id="f_status" class="select">
-              <option value="all">Status: todos</option>
-              <option value="pending">Pendentes</option>
-              <option value="included">Incluídos</option>
-              <option value="excluded">Excluídos</option>
-              <option value="duplicate">Duplicados</option>
-            </select>
-            <select id="f_origin" class="select">
-              <option value="all">Origem: todas</option>
-              <option value="seed">Seed</option>
-              <option value="backward">Backward</option>
-              <option value="forward">Forward</option>
-              <option value="unknown">Desconhecida</option>
-            </select>
-            <select id="f_iteration" class="select">
-              <option value="all">Iteração: todas</option>
-            </select>
-
-            <div class="menu" id="downloadCitationsMenu">
-              <button id="btnDownloadCitations" class="btn">⬇️ Download Citations</button>
-              <div id="downloadCitationsPanel" class="menuPanel" aria-label="Menu de Download Citations">
-                <button class="menuItem" data-format="bibtex">BibTeX (.bib)</button>
-                <button class="menuItem" data-format="abnt">ABNT (texto)</button>
-                <button class="menuItem" data-format="apa">APA (texto)</button>
-                <button class="menuItem" data-format="endnote">EndNote / RIS (.ris)</button>
-              </div>
+            <div class="paperBulkActions" aria-label="Ações para os artigos selecionados">
+              <span id="paperSelectionCount" class="paperSelectionCount" aria-live="polite">0 selecionados</span>
+              <button id="btnBulkDeleteMarked" class="btn paperBulkUnmarkBtn" type="button" disabled title="Retirar os artigos selecionados da fase ativa">Remover marcados</button>
+              <span class="paperBulkDivider" aria-hidden="true"></span>
+              <button id="btnBulkInclude" class="btn paperBulkOutcomeBtn paperBulkOutcomeBtn--included" type="button" data-paper-bulk-outcome="included" disabled title="Classificar os artigos selecionados como incluídos">Incluir</button>
+              <button id="btnBulkExclude" class="btn paperBulkOutcomeBtn paperBulkOutcomeBtn--excluded" type="button" data-paper-bulk-outcome="excluded" disabled title="Classificar os artigos selecionados como removidos da triagem, sem apagar a marcação">Remover</button>
+              <button id="btnBulkPending" class="btn paperBulkOutcomeBtn paperBulkOutcomeBtn--pending" type="button" data-paper-bulk-outcome="pending" disabled title="Classificar os artigos selecionados como pendentes">Pendente</button>
             </div>
+            <span id="paperBulkStatus" class="paperBulkStatus" role="status" aria-live="polite"></span>
+          </div>
 
-            <button id="btnBulkInclude" class="btn">Incluir</button>
-            <button id="btnBulkExclude" class="btn">Excluir</button>
-            <button id="btnBulkPending" class="btn">Pendente</button>
-            <button id="btnBulkDuplicate" class="btn">Duplicado</button>
-            <button id="btnBulkDeleteMarked" class="btn">Remover marcado</button>
+          <div id="paperFilterBar" class="paperFilterBar hidden" role="status" aria-live="polite">
+            <span id="paperFilterText"></span>
+            <button id="btnClearPaperFilters" type="button" class="btn">Limpar filtro</button>
           </div>
 
           <div class="tableWrap u-flex-fill-col u-scroll-y">
@@ -145,10 +226,7 @@
                   <th style="width:36px"><input type="checkbox" id="checkAll" /></th>
                   <th>Título</th>
                   <th style="width:72px">Ano</th>
-                  <th style="width:110px">Origem</th>
-                  <th style="width:90px">Iter.</th>
-                  <th style="width:110px">Status</th>
-                  <th style="width:140px">Critério</th>
+                  <th style="width:260px">Categoria</th>
                   <th style="width:160px">Tags</th>
                   <th style="width:90px">Link</th>
                 </tr>
@@ -159,157 +237,11 @@
           </div>
         </section>
 
-        <!-- ITERATIONS -->
-        <section class="view hidden u-flex-fill-col" id="view_iterations">
-          <div class="card">
-            <div class="cardTitle">Iterações</div>
-            <div class="row">
-              <input id="newIterId" class="input" placeholder="Ex.: I2" style="max-width:140px" />
-              <select id="newIterMode" class="select" style="max-width:220px">
-                <option value="seed">Seed</option>
-                <option value="backward">Backward</option>
-                <option value="forward">Forward</option>
-                <option value="both">Backward + Forward</option>
-              </select>
-              <button id="btnAddIteration" class="btn">Adicionar</button>
-              <button id="btnSetCurrentIteration" class="btn">Definir como atual</button>
-            </div>
-            <div class="tableWrap">
-              <table class="table" id="iterationsTable">
-                <thead><tr><th>ID</th><th>Tipo</th><th>Modo</th><th>Criada em</th><th>Ações</th></tr></thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
-        <!-- CRITERIA -->
-        <section class="view hidden u-flex-fill-col" id="view_criteria">
-          <div class="grid2">
-            <div class="card">
-              <div class="cardTitle">Cadastrar critérios</div>
-              <div class="row">
-                <input id="critId" class="input" placeholder="Ex.: C1" style="max-width:120px" />
-                <input id="critDesc" class="input" placeholder="Descrição do critério" />
-                <button id="btnAddCriterion" class="btn">Salvar</button>
-              </div>
-              <div class="tableWrap">
-                <table class="table" id="criteriaTable">
-                  <thead><tr><th>ID</th><th>Descrição</th><th>Qtd.</th><th>Ações</th></tr></thead>
-                  <tbody></tbody>
-                </table>
-              </div>
-            </div>
-            <div class="card">
-              <div class="cardTitle">Excluídos (auditável)</div>
-              <div class="tableWrap">
-                <table class="table" id="excludedTable">
-                  <thead><tr><th>Título</th><th>Critério</th><th>Iter.</th><th>Link</th></tr></thead>
-                  <tbody></tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- CITATIONS -->
-        <section class="view hidden u-flex-fill-col" id="view_citations">
-          <div class="card">
-            <div class="cardTitle">Criar conexão (manual)</div>
-            <div class="row">
-              <select id="c_from" class="select"></select>
-              <select id="c_type" class="select" style="max-width:200px">
-                <option value="backward">Backward (referência)</option>
-                <option value="forward">Forward (citação)</option>
-              </select>
-              <select id="c_to" class="select"></select>
-              <button id="btnAddCitation" class="btn">Adicionar</button>
-            </div>
-            <div class="tableWrap">
-              <table class="table" id="citationsTable">
-                <thead><tr><th>De</th><th>Tipo</th><th>Para</th><th>Ações</th></tr></thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
-        <!-- GRAPH -->
-        <section class="view hidden u-flex-fill-col" id="view_graph">
-          <div class="grid2">
-            <div class="card">
-              <div class="cardTitle">Grafo de citações (simples, offline)</div>
-              <div class="row">
-                <select id="g_filterIteration" class="select" style="max-width:220px"></select>
-                <select id="g_filterStatus" class="select" style="max-width:220px">
-                  <option value="all">Status: todos</option>
-                  <option value="pending">Pendentes</option>
-                  <option value="included">Incluídos</option>
-                  <option value="excluded">Excluídos</option>
-                  <option value="duplicate">Duplicados</option>
-                </select>
-                <button id="btnGraphReset" class="btn">Recalcular layout</button>
-              </div>
-              <svg id="graph" width="100%" height="520" role="img" aria-label="Grafo"></svg>
-              <div class="hint">Dica: clique em um nó para abrir o link. O grafo usa as conexões criadas na aba “Conexões”.</div>
-            </div>
-            <div class="card">
-              <div class="cardTitle">Detalhes</div>
-              <div id="graphDetails" class="details">Selecione um nó…</div>
-            </div>
-          </div>
-        </section>
-
-        <!-- INSIGHTS -->
-        <section class="view hidden u-flex-fill-col" id="view_insights">
-          <div class="grid2">
-            <div class="card">
-              <div class="cardTitle">Resumo automático da revisão</div>
-              <div class="row">
-                <button id="btnGenerateSummary" class="btn">Gerar resumo</button>
-                <button id="btnCopySummary" class="btn">Copiar</button>
-              </div>
-              <textarea id="summaryText" class="input" style="width:100%;min-height:220px;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace" placeholder="Clique em 'Gerar resumo'..."></textarea>
-              <div class="hint" style="margin-top:8px">Use este texto como base do relatório/TCC (ajuste conforme necessário).</div>
-            </div>
-            <div class="card">
-              <div class="cardTitle">Saturação (alerta)</div>
-              <div id="saturationBox" class="hint">—</div>
-              <div class="cardTitle" style="margin-top:16px">Possíveis duplicatas (sugestão)</div>
-              <div class="row">
-                <button id="btnFindDuplicates" class="btn">Detectar duplicatas</button>
-                <select id="dupThreshold" class="select" style="max-width:240px">
-                  <option value="0.9">Limite: 0.90 (mais rígido)</option>
-                  <option value="0.85" selected>Limite: 0.85 (recomendado)</option>
-                  <option value="0.8">Limite: 0.80 (mais sensível)</option>
-                </select>
-              </div>
-              <div class="tableWrap">
-                <table class="table" id="dupsTable">
-                  <thead><tr><th>Par sugerido</th><th>Similaridade</th><th>Ações</th></tr></thead>
-                  <tbody></tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <div class="card" style="margin-top:16px">
-            <div class="cardTitle">Histórico (audit trail)</div>
-            <div class="hint">Clique no título de um artigo em <b>Artigos</b> para ver o histórico aqui.</div>
-            <div class="tableWrap" style="margin-top:10px">
-              <table class="table" id="historyTable">
-                <thead><tr><th>Quando</th><th>Ação</th><th>Detalhes</th></tr></thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
         <!-- CATEGORIES (moved from options) -->
         <section class="view hidden u-flex-fill-col" id="view_categories">
           <div class="panelHeader">
             <h2>Categorias</h2>
-            <p>Crie cores para marcar artigos</p>
+            <p>Crie categorias e defina como cada classificação afeta as métricas.</p>
           </div>
 
           <div class="toolbar">
@@ -321,7 +253,7 @@
 
           <div class="card u-flex-fill-col" style="margin-top:12px">
             <div class="cardTitle">Lista de categorias</div>
-            <div class="muted" style="margin-bottom:8px">Clique em <b>Excluir</b> para remover uma categoria.</div>
+            <div class="muted" style="margin-bottom:8px">Use <b>Editar</b> para ajustar a finalidade da categoria ou <b>Excluir</b> para removê-la.</div>
 
             <div class="tableWrap u-flex-fill-col" style="margin-top:8px">
               <ul id="categoryList" class="categoryList u-flex-fill-col u-scroll-y"></ul>
@@ -339,7 +271,7 @@
           <div class="toolbar">
             <div style="display:flex;gap:8px;align-items:center">
               <button id="btnShowAddPhase" class="btn">Adicionar nova fase</button>
-              <div class="muted">As fases são exibidas como blocos lado a lado para visualizar a progressão.</div>
+              <div class="muted">As fases são organizadas em ordem. Clique em uma fase concluída para consultar os artigos selecionados, removidos e herdados.</div>
             </div>
           </div>
 
@@ -369,6 +301,21 @@
           </div>
         </div>
 
+        <!-- BULK CATEGORY CHOOSER -->
+        <div id="paperBulkCategoryModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="paperBulkCategoryModalTitle" aria-describedby="paperBulkCategoryModalDescription" aria-hidden="true">
+          <div class="modalCard paperBulkCategoryModalCard">
+            <div class="paperBulkCategoryModalHeader">
+              <div>
+                <div id="paperBulkCategoryModalEyebrow" class="paperBulkCategoryModalEyebrow">Classificação em lote</div>
+                <div id="paperBulkCategoryModalTitle" class="paperBulkCategoryModalTitle">Escolha uma categoria</div>
+              </div>
+              <button id="btnClosePaperBulkCategory" class="btn" type="button">Fechar</button>
+            </div>
+            <p id="paperBulkCategoryModalDescription" class="paperBulkCategoryModalDescription"></p>
+            <div id="paperBulkCategoryOptions" class="paperBulkCategoryOptions" role="list"></div>
+          </div>
+        </div>
+
         <!-- SIDE PANEL: Add / Edit Phase -->
         <div id="sideOverlay" class="sideOverlay" aria-hidden="true"></div>
 
@@ -379,6 +326,12 @@
             <button id="btnCloseCategory" class="btn">Fechar</button>
           </div>
           <div class="sidePanelBody u-scroll-y">
+            <div id="categoryRequiredNotice" class="phaseRequiredNotice hidden" role="alert" aria-live="assertive">
+              <span class="requiredStepLabel">Tutorial · Etapa 3 de 4</span>
+              <strong>Crie a primeira categoria para continuar</strong>
+              <span>As categorias organizam e identificam os artigos durante cada fase. Preencha o título e salve pelo menos uma categoria para avançar no tutorial.</span>
+            </div>
+
             <label for="categoryTitle">Título da categoria</label>
             <input id="categoryTitle" class="input" placeholder="Ex.: Incluído" />
             <div id="categoryTitleError" class="fieldError" aria-live="polite"></div>
@@ -392,10 +345,13 @@
               <span id="categoryColorValue" class="categoryColorValue">#4CAF50</span>
             </div>
 
-            <fieldset class="categoryFieldset">
-              <legend>Fases em que a categoria pode ser usada</legend>
-              <div id="categoryPhases" class="categoriesList categoryRequirementsList" aria-live="polite"></div>
-            </fieldset>
+            <label for="categoryMetricType">Impacto na métrica</label>
+            <select id="categoryMetricType" class="input select">
+              <option value="included">Incluído</option>
+              <option value="excluded">Excluído</option>
+              <option value="pending">Não contabilizar / Pendente</option>
+            </select>
+            <div class="categoryMetricHelp">Define em qual indicador da Visão Geral os artigos desta categoria serão contabilizados. Duplicatas são identificadas automaticamente pelo link.</div>
 
             <fieldset class="categoryFieldset">
               <legend>Critérios da categoria</legend>
@@ -413,12 +369,63 @@
           </div>
         </div>
 
-        <div id="phasePanel" class="sidePanel" aria-hidden="true">
+
+
+        <!-- SIDE PANEL: Tutorial da aba Artigos -->
+        <div id="articleTutorialPanel" class="sidePanel articleTutorialPanel" aria-hidden="true" inert>
           <div class="sidePanelHeader">
-            <div style="font-weight:900">Nova fase</div>
+            <div>
+              <div class="tutorialEyebrow">Tutorial · Etapa 4 de 4</div>
+              <div style="font-weight:900">Como funciona a aba Artigos</div>
+            </div>
+            <button id="btnCloseArticleTutorial" class="btn">Entendi</button>
+          </div>
+          <div class="sidePanelBody u-scroll-y">
+            <p class="articleTutorialIntro">Esta aba concentra os artigos marcados para o projeto e permite revisar rapidamente os dados coletados.</p>
+
+            <div class="articleTutorialStep">
+              <span class="articleTutorialNumber">1</span>
+              <div><strong>Adicione artigos pelo navegador</strong><span>No Google Scholar, clique com o botão direito em um resultado, escolha “Marcar link” e selecione uma categoria.</span></div>
+            </div>
+            <div class="articleTutorialStep">
+              <span class="articleTutorialNumber">2</span>
+              <div><strong>Pesquise os artigos</strong><span>Use a busca para localizar títulos, autores, anos, tags e categorias.</span></div>
+            </div>
+            <div class="articleTutorialStep">
+              <span class="articleTutorialNumber">3</span>
+              <div><strong>Confira ano, categoria e resultado</strong><span>A categoria registra o motivo detalhado; o sistema identifica duplicatas automaticamente pelo link.</span></div>
+            </div>
+            <div class="articleTutorialStep">
+              <span class="articleTutorialNumber">4</span>
+              <div><strong>Abra a fonte original</strong><span>Use o botão da coluna Link para acessar a página do artigo e consultar o conteúdo completo.</span></div>
+            </div>
+            <div class="articleTutorialStep">
+              <span class="articleTutorialNumber">5</span>
+              <div><strong>Classifique vários artigos de uma vez</strong><span>Selecione os artigos pela caixa lateral e use “Incluir”, “Remover” ou “Pendente”. A ação aplica uma categoria ativa com o resultado correspondente e atualiza as métricas da fase.</span></div>
+            </div>
+            <div class="articleTutorialStep">
+              <span class="articleTutorialNumber">6</span>
+              <div><strong>Retire marcações quando necessário</strong><span>Use “Remover marcados” apenas para retirar os registros da fase ativa. Essa ação é diferente de classificá-los como removidos da triagem.</span></div>
+            </div>
+
+            <div class="articleTutorialTip">
+              <strong>Próximo passo</strong>
+              <span>Abra o Google Scholar, marque um artigo em uma categoria e volte a esta tela para acompanhar a coleta.</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="phasePanel" class="sidePanel" aria-hidden="true" inert>
+          <div class="sidePanelHeader">
+            <div id="phasePanelTitle" style="font-weight:900">Nova fase</div>
             <button id="btnClosePhase" class="btn">Fechar</button>
           </div>
           <div class="sidePanelBody u-scroll-y">
+            <div id="phaseRequiredNotice" class="phaseRequiredNotice hidden" role="alert" aria-live="assertive">
+              <span class="requiredStepLabel">Tutorial · Etapa 2 de 4</span>
+              <strong>Crie a primeira fase para continuar</strong>
+              <span>Este projeto ainda não possui fases. Preencha os campos obrigatórios e salve uma fase para liberar o dashboard.</span>
+            </div>
             <label class="visually-hidden" for="phaseTitle">Título</label>
             <input id="phaseTitle" class="input" placeholder="Título da fase" />
             <div id="phaseTitleError" class="fieldError" aria-live="polite"></div>
@@ -431,10 +438,13 @@
             <textarea id="phaseCriteria" class="input" style="min-height:120px" placeholder="Critérios (texto livre)"></textarea>
             <div id="phaseCriteriaError" class="fieldError" aria-live="polite"></div>
 
-            <!-- rótulo removido -->
-
-            <label class="visually-hidden" for="phaseCategories">Categorias</label>
+            <label for="phaseCategories" class="phaseFieldLabel">Categorias usadas nesta fase</label>
+            <div class="categoryMetricHelp phaseTriageHelp">
+              <strong>Controle da triagem:</strong> somente as categorias selecionadas aparecem no menu de marcação e somente os links classificados com elas são realçados no Scholar. Na fase seguinte, os artigos incluídos na fase anterior entram novamente como <strong>Pendentes</strong>.
+              <span>Pendente → fila da triagem · Incluído → selecionado para a próxima fase · Excluído → removido da progressão.</span>
+            </div>
             <div id="phaseCategories" class="categoriesList" aria-live="polite"></div>
+            <div id="phaseCategoriesError" class="fieldError" aria-live="polite"></div>
 
             <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
               <span class="muted">Rótulo:</span>
@@ -448,7 +458,6 @@
           </div>
         </div>
 
-        <!-- (removed duplicate INSIGHTS + modal) -->
       </main>
 
       <div id="noActiveProjectNotice" class="floatingNotice hidden" role="status" aria-live="polite">
