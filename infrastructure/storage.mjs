@@ -140,13 +140,15 @@ class NodeFsStrategy {
       return normalized;
     }
 
-    // O fluxo é sequencial: a fase mais recente é sempre a fase ativa e todas
-    // as anteriores permanecem concluídas enquanto houver uma posterior.
-    const latestIndex = normalized.phases.length - 1;
-    normalized.phases.forEach((phase, index) => {
-      if (index < latestIndex) phase.completed = true;
-    });
-    normalized.activePhaseLabel = normalized.phases[latestIndex].label;
+    // Criação e progressão são independentes: várias fases podem existir como
+    // planejamento, mas somente uma fase não concluída participa da triagem.
+    // Mantém a fase ativa persistida quando ela ainda é válida; caso contrário,
+    // recupera a primeira fase não concluída na ordem do plano.
+    const persistedActive = normalized.phases.find(
+      phase => phase?.label === normalized.activePhaseLabel && !phase?.completed
+    );
+    const firstPendingPhase = normalized.phases.find(phase => !phase?.completed) || null;
+    normalized.activePhaseLabel = (persistedActive || firstPendingPhase)?.label || null;
 
     // Projetos antigos podem chegar sem categorias vinculadas. Quando já há
     // categorias no projeto, garante ao menos uma opção ativa em cada fase.
@@ -904,8 +906,8 @@ class NodeFsStrategy {
       || {};
     const project = this.normalizeProjectPhaseCategoryModel(rawProject);
     const phases = Array.isArray(project.phases) ? project.phases : [];
-    const activePhase = phases.find(phase => phase?.label === project.activePhaseLabel)
-      || phases.at(-1)
+    const activePhase = phases.find(phase => phase?.label === project.activePhaseLabel && !phase?.completed)
+      || phases.find(phase => !phase?.completed)
       || null;
     if (!activePhase) {
       return {
@@ -1042,26 +1044,10 @@ class NodeFsStrategy {
     if (!Array.isArray(project.categories)) project.categories = [];
     this.syncPhasePaperBuckets(projectID, project);
 
-    const latestPhase = project.phases.at(-1) || null;
-    if (latestPhase && !latestPhase.completed) {
-      return {
-        status: 'error',
-        message: `Conclua a fase "${latestPhase.title || latestPhase.label}" antes de criar uma nova fase.`,
-      };
-    }
-    const latestPendingCount = Array.isArray(latestPhase?.papers?.new)
-      ? latestPhase.papers.new.length
-      : 0;
-    if (latestPhase && latestPendingCount > 0) {
-      return {
-        status: 'error',
-        message: `A fase "${latestPhase.title || latestPhase.label}" ainda possui ${latestPendingCount} artigo(s) pendente(s). Conclua a triagem antes de criar a próxima fase.`,
-      };
-    }
-
     const phase = this.normalizePhase(phaseData);
-    // Toda nova fase inicia em análise. Os artigos incluídos na etapa anterior
-    // são copiados para esta fase como pendentes e precisam ser triados de novo.
+    // A criação serve apenas para montar o plano de pesquisa. Toda nova fase
+    // nasce pendente/planejada e não recebe artigos até chegar a sua vez na
+    // progressão sequencial.
     phase.completed = false;
     if (project.phases.some((item) => item.label === phase.label)) {
       return { status: 'error', message: `Já existe uma fase com o rótulo "${phase.label}".` };
@@ -1076,11 +1062,10 @@ class NodeFsStrategy {
       return { status: 'error', message: 'Selecione pelo menos uma categoria para a nova fase.' };
     }
 
-    const inheritanceResult = this.inheritIncludedPapers(projectID, project, latestPhase, phase);
-    if (inheritanceResult?.status === 'error') return inheritanceResult;
-
     project.phases.push(phase);
-    project.activePhaseLabel = phase.label;
+    // Somente a primeira fase é ativada no momento da criação. As seguintes
+    // permanecem planejadas até a fase ativa ser concluída.
+    if (!project.activePhaseLabel) project.activePhaseLabel = phase.label;
     project.updatedAt = new Date().toISOString();
     this.syncPhasePaperBuckets(projectID, project);
 
@@ -1090,12 +1075,13 @@ class NodeFsStrategy {
     console.log('✅ Fase salva no project.json:', phase);
     return {
       status: 'ok',
-      message: inheritanceResult?.inheritedCount
-        ? `Fase salva com ${inheritanceResult.inheritedCount} artigo(s) herdado(s) para nova triagem.`
-        : 'Fase salva com sucesso.',
+      message: project.activePhaseLabel === phase.label && project.phases.length === 1
+        ? 'Primeira fase salva e ativada com sucesso.'
+        : 'Fase adicionada ao plano de pesquisa. Ela será ativada quando chegar sua vez.',
       data: {
         ...phase,
-        inheritedCount: inheritanceResult?.inheritedCount || 0,
+        inheritedCount: 0,
+        activePhaseLabel: project.activePhaseLabel,
       },
     };
   }
@@ -1132,23 +1118,42 @@ class NodeFsStrategy {
 
     phase.inheritanceCategoryLabel = this.getPhasePendingCategory(project, phase)?.label || null;
     const pendingCount = Array.isArray(phase?.papers?.new) ? phase.papers.new.length : 0;
-    if (phase.completed && pendingCount > 0) {
+    const isActivePhase = project.activePhaseLabel === phaseLabel;
+    const isCompletingNow = !current.completed && phase.completed;
+    const isReopening = current.completed && !phase.completed;
+
+    if (isCompletingNow && !isActivePhase) {
+      return {
+        status: 'error',
+        message: 'Somente a fase ativa pode ser concluída. As fases futuras permanecem planejadas até chegar a vez delas.',
+      };
+    }
+    if (isReopening) {
+      return {
+        status: 'error',
+        message: 'Uma fase já concluída não pode ser reaberta depois que a progressão avançou.',
+      };
+    }
+    if (isCompletingNow && pendingCount > 0) {
       return {
         status: 'error',
         message: `Classifique os ${pendingCount} artigo(s) pendente(s) como incluídos ou excluídos antes de concluir esta fase.`,
       };
     }
 
-    const isLatestPhase = idx === project.phases.length - 1;
-    if (!isLatestPhase && !phase.completed) {
-      return {
-        status: 'error',
-        message: 'Fases anteriores permanecem concluídas enquanto existir uma fase posterior. Remova a fase atual para retornar.'
-      };
+    let nextPhase = idx < project.phases.length - 1 ? project.phases[idx + 1] : null;
+    let inheritanceResult = null;
+    if (isCompletingNow && nextPhase) {
+      inheritanceResult = this.inheritIncludedPapers(projectID, project, current, nextPhase);
+      if (inheritanceResult?.status === 'error') return inheritanceResult;
     }
 
     project.phases[idx] = phase;
-    if (isLatestPhase || project.activePhaseLabel === phaseLabel) project.activePhaseLabel = phase.label;
+    if (isActivePhase) {
+      project.activePhaseLabel = isCompletingNow
+        ? (nextPhase?.label || null)
+        : phase.label;
+    }
     project.updatedAt = new Date().toISOString();
 
     if (phase.label !== phaseLabel) {
@@ -1258,16 +1263,29 @@ class NodeFsStrategy {
     if (this.activeProjectID === projectID) this.activeProjectData = project;
 
     console.log('✅ Fase atualizada no project.json:', phase);
-    return { status: 'ok', message: 'Fase atualizada com sucesso.', data: phase };
+    return {
+      status: 'ok',
+      message: isCompletingNow
+        ? (nextPhase
+          ? `Fase concluída. A próxima fase foi ativada com ${inheritanceResult?.inheritedCount || 0} artigo(s) herdado(s).`
+          : 'Fase concluída. O plano de pesquisa não possui outra fase para ativar.')
+        : 'Fase atualizada com sucesso.',
+      data: {
+        ...phase,
+        activePhaseLabel: project.activePhaseLabel,
+        inheritedCount: inheritanceResult?.inheritedCount || 0,
+      },
+    };
   }
 
   async deletePhase(projectID, phaseLabel) {
     const relPath = this.path.join(projectID, 'project.json');
-    const project = this.readJson(relPath);
+    const rawProject = this.readJson(relPath);
 
     console.log('🧭 NodeFsStrategy.deletePhase', { projectID, phaseLabel, relPath });
 
-    if (!project) return { status: 'error', message: 'Projeto não encontrado.' };
+    if (!rawProject) return { status: 'error', message: 'Projeto não encontrado.' };
+    const project = this.normalizeProjectPhaseCategoryModel(rawProject);
     if (!Array.isArray(project.phases)) project.phases = [];
 
     if (project.phases.length <= 1) {
@@ -1283,16 +1301,21 @@ class NodeFsStrategy {
       };
     }
 
+    const deletingActivePhase = project.activePhaseLabel === phaseLabel;
     project.phases.pop();
-    const previousPhase = project.phases.at(-1);
-    previousPhase.completed = false;
-    project.activePhaseLabel = previousPhase.label;
+    const previousPhase = project.phases.at(-1) || null;
+    if (deletingActivePhase && previousPhase) {
+      // Mantém o comportamento de rollback somente quando a própria fase ativa
+      // é removida. Excluir uma fase futura planejada não altera a progressão.
+      previousPhase.completed = false;
+      project.activePhaseLabel = previousPhase.label;
+    }
 
     const phaseDir = this.path.join(this.baseDir, projectID, 'phases', phaseLabel);
     if (this.fs.existsSync(phaseDir)) {
       this.fs.rmSync(phaseDir, { recursive: true, force: true });
     }
-    this.cleanupDeletedPhasePaperReferences(projectID, phaseLabel, previousPhase.label);
+    this.cleanupDeletedPhasePaperReferences(projectID, phaseLabel, project.activePhaseLabel || previousPhase?.label || null);
 
     project.updatedAt = new Date().toISOString();
     this.syncPhasePaperBuckets(projectID, project);
@@ -1305,25 +1328,25 @@ class NodeFsStrategy {
 
   async setActivePhase(projectID, phaseLabel) {
     const relPath = this.path.join(projectID, 'project.json');
-    const project = this.readJson(relPath);
+    const rawProject = this.readJson(relPath);
 
     console.log('🟢 NodeFsStrategy.setActivePhase', { projectID, phaseLabel, relPath });
 
-    if (!project) return { status: 'error', message: 'Projeto não encontrado.' };
+    if (!rawProject) return { status: 'error', message: 'Projeto não encontrado.' };
+    const project = this.normalizeProjectPhaseCategoryModel(rawProject);
     if (!Array.isArray(project.phases)) project.phases = [];
 
-    const phaseExists = project.phases.some((p) => p.label === phaseLabel);
-    if (!phaseExists) return { status: 'error', message: 'Fase não encontrada.' };
+    const phase = project.phases.find((p) => p.label === phaseLabel);
+    if (!phase) return { status: 'error', message: 'Fase não encontrada.' };
 
-    const latestPhase = project.phases.at(-1);
-    if (latestPhase?.label !== phaseLabel) {
+    if (project.activePhaseLabel !== phaseLabel) {
       return {
         status: 'error',
-        message: 'A fase mais recente é a única que pode ficar ativa. Para retornar à anterior, remova a fase atual.'
+        message: 'A progressão é sequencial. Conclua a fase ativa para liberar a próxima fase planejada.'
       };
     }
 
-    if (Array.isArray(project.categories) && project.categories.length && !latestPhase.categories?.length) {
+    if (Array.isArray(project.categories) && project.categories.length && !phase.categories?.length) {
       return { status: 'error', message: 'A fase ativa deve possuir pelo menos uma categoria.' };
     }
 

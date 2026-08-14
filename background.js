@@ -133,8 +133,8 @@ async function createContextMenu() {
     
     if (project && Array.isArray(project.categories)) {
       const phases = Array.isArray(project.phases) ? project.phases : [];
-      const activePhase = phases.find(phase => phase?.label === project.activePhaseLabel)
-        || phases.at(-1)
+      const activePhase = phases.find(phase => phase?.label === project.activePhaseLabel && !phase?.completed)
+        || phases.find(phase => !phase?.completed)
         || null;
       const activeCategoryLabels = new Set(
         Array.isArray(activePhase?.categories) ? activePhase.categories : []
@@ -473,8 +473,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     }
 
     const phases = Array.isArray(activeProject?.phases) ? activeProject.phases : [];
-    const activePhase = phases.find(phase => phase?.label === activeProject?.activePhaseLabel)
-      || phases.at(-1)
+    const activePhase = phases.find(phase => phase?.label === activeProject?.activePhaseLabel && !phase?.completed)
+      || phases.find(phase => !phase?.completed)
       || null;
     const selectedCategory = Array.isArray(activeProject?.categories)
       ? activeProject.categories.find(category => category?.label === categoryLabel) || null
@@ -749,7 +749,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     ]);
     const activeProject = activeProjectResult?.data || activeProjectResult || null;
     const activePhaseLabel = activeProject?.activePhaseLabel
-      || activeProject?.phases?.at?.(-1)?.label
+      || activeProject?.phases?.find?.(phase => !phase?.completed)?.label
       || null;
     if (!activePhaseLabel) return;
 

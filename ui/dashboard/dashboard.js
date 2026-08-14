@@ -1650,7 +1650,7 @@ async function loadOverviewContext() {
   };
 
   const activePhaseLabel = state?.project?.activePhaseLabel
-    || state?.project?.phases?.at?.(-1)?.label
+    || state?.project?.phases?.find?.(phase => !phase?.completed)?.label
     || null;
   const activeConsolidatedPapers = (Array.isArray(state?.papers) ? state.papers : [])
     .filter(paper => !activePhaseLabel || getPaperClassificationForPhase(paper, activePhaseLabel));
@@ -2235,8 +2235,8 @@ function selectedPaperIds() {
 
 function getActivePhaseForPaperBulkActions() {
   const phases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
-  return phases.find(phase => phase?.label === state?.project?.activePhaseLabel)
-    || phases.at(-1)
+  return phases.find(phase => phase?.label === state?.project?.activePhaseLabel && !phase?.completed)
+    || phases.find(phase => !phase?.completed)
     || null;
 }
 
@@ -3388,18 +3388,18 @@ function bindEvents() {
   }
 
   function canCreateNextPhase() {
-    const latest = getLatestPhase();
-    return !latest || !!latest.completed;
+    // O plano pode ser montado livremente; a conclusão controla apenas a
+    // progressão/ativação e a herança de artigos.
+    return true;
   }
 
   function updatePhaseCreationAvailability() {
     if (!btnShowAddPhase) return;
     const latest = getLatestPhase();
-    const allowed = canCreateNextPhase();
-    btnShowAddPhase.disabled = !allowed;
-    btnShowAddPhase.title = allowed
-      ? (latest ? 'Adicionar a próxima fase' : 'Adicionar a primeira fase')
-      : `Conclua a fase "${latest?.title || latest?.label || 'atual'}" antes de criar outra.`;
+    btnShowAddPhase.disabled = false;
+    btnShowAddPhase.title = latest
+      ? 'Adicionar uma fase planejada ao plano de pesquisa'
+      : 'Adicionar a primeira fase';
   }
 
   function updateToggleButtonUI(){
@@ -3413,8 +3413,8 @@ function bindEvents() {
   if(btnTogglePhaseStatus){
     btnTogglePhaseStatus.addEventListener('click', (e) => {
       e.preventDefault();
-      if (!phaseEditingLabel || !isLatestPhaseLabel(phaseEditingLabel)) {
-        alert('Somente a fase atual mais recente pode ter o rótulo alterado. Para retornar a uma fase anterior, remova a fase atual.');
+      if (!phaseEditingLabel || state?.project?.activePhaseLabel !== phaseEditingLabel) {
+        alert('Somente a fase ativa pode ser concluída. As fases futuras permanecem planejadas até chegar a vez delas.');
         return;
       }
       if (phaseLabelStatus !== 'done') {
@@ -3560,12 +3560,14 @@ function bindEvents() {
     const stats = phaseData.stats || getPhaseStats(phaseData);
     const isFirstPhase = phaseIndex === 0;
     const isLatestPhase = phaseIndex === phaseCount - 1;
+    const isActivePhase = state?.project?.activePhaseLabel === label;
+    const isPlannedPhase = !isCompleted && !isActivePhase;
     const archivePanelId = getPhaseArchiveDomId(label);
 
     const el = document.createElement('div');
     el.className = 'phaseCard';
-    if (state?.project?.activePhaseLabel === label) el.classList.add('active');
-    if (!isLatestPhase) el.classList.add('phaseCard--locked');
+    if (isActivePhase) el.classList.add('active');
+    if (isPlannedPhase) el.classList.add('phaseCard--locked');
     if (isCompleted) {
       el.classList.add('phaseCard--completed');
       el.setAttribute('aria-controls', archivePanelId);
@@ -3597,7 +3599,7 @@ function bindEvents() {
             <div title="Artigos classificados por categorias de inclusão"><span class="muted">Selecionados:</span> <strong>${s.selected}</strong></div>
             <div title="Artigos excluídos ou identificados como duplicados"><span class="muted">Removidos:</span> <strong>${s.removed}</strong></div>
           </div>
-          <div class="papersUtil">Rótulo: <strong class="phaseLabelStatus ${labelStatus === 'done' ? 'done' : 'pending'}">${labelStatus === 'done' ? 'Concluído' : 'Em análise'}</strong></div>
+          <div class="papersUtil">Rótulo: <strong class="phaseLabelStatus ${isCompleted ? 'done' : 'pending'}">${isCompleted ? 'Concluído' : (isActivePhase ? 'Em análise' : 'Planejada')}</strong></div>
         </div>
       </div>
       <div class="phaseCardFooter">
@@ -3625,10 +3627,12 @@ function bindEvents() {
       phaseLabelStatus = el.dataset.labelStatus || labelStatus || 'pending';
       phaseEditingLabel = el.dataset.label || label;
       if (btnTogglePhaseStatus) {
-        btnTogglePhaseStatus.disabled = !isLatestPhase;
-        btnTogglePhaseStatus.title = isLatestPhase
-          ? 'Alterar o rótulo da fase atual'
-          : 'Fases anteriores permanecem concluídas enquanto existir uma fase posterior.';
+        btnTogglePhaseStatus.disabled = !isActivePhase;
+        btnTogglePhaseStatus.title = isActivePhase
+          ? 'Concluir a fase ativa e avançar para a próxima planejada'
+          : (isCompleted
+            ? 'Esta fase já foi concluída.'
+            : 'Esta fase está planejada e será liberada após a conclusão da fase ativa.');
       }
       updateToggleButtonUI();
       phaseEditingCard = el;
@@ -3649,8 +3653,9 @@ function bindEvents() {
         return;
       }
 
-      if (!isLatestPhase) {
-        alert('A fase mais recente é a única que pode ficar ativa. Para retornar a esta fase, remova o card da fase atual.');
+      if (!isActivePhase) {
+        const active = getProjectPhases().find(phase => phase?.label === state?.project?.activePhaseLabel);
+        alert(`Conclua a fase ativa "${active?.title || active?.label || 'atual'}" para liberar esta fase.`);
         return;
       }
 
@@ -3686,9 +3691,6 @@ function bindEvents() {
     );
     if (expandedCompletedPhaseLabel && !completedLabels.has(expandedCompletedPhaseLabel)) {
       expandedCompletedPhaseLabel = null;
-    }
-    if (phases.length) {
-      state.project.activePhaseLabel = phases.at(-1).label;
     }
     phases.forEach((phase, index) => {
       phasesList.appendChild(createPhaseCard(phase, index, phases.length));
@@ -3977,12 +3979,6 @@ function bindEvents() {
       return;
     }
 
-    if (!phaseEditingLabel && !canCreateNextPhase()) {
-      const latest = getLatestPhase();
-      alert(`Conclua a fase "${latest?.title || latest?.label || 'atual'}" antes de criar uma nova fase.`);
-      return;
-    }
-
     let categories = [];
     if(phaseCategoriesInput){
       const checked = Array.from(phaseCategoriesInput.querySelectorAll('input[type=checkbox]:checked'));
@@ -4004,19 +4000,6 @@ function bindEvents() {
       normalizeCategoryMetricType(category?.metricType, 'pending') === 'pending'
     ));
 
-    if (!phaseEditingLabel) {
-      const previousPhase = getLatestPhase();
-      const previousStats = previousPhase ? getPhaseStats(previousPhase) : null;
-      if (previousPhase && previousStats?.selected > 0 && !inheritanceCategory) {
-        if (phaseCategoriesError) {
-          phaseCategoriesError.textContent = `Selecione uma categoria com impacto Pendente para receber os ${previousStats.selected} artigo(s) incluído(s) da fase anterior.`;
-          phaseCategoriesError.classList.add('visible');
-        }
-        phaseCategoriesInput?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        return;
-      }
-    }
-
     if (phaseEditingLabel && phaseLabelStatus === 'done') {
       const editedPhase = getProjectPhases().find(phase => phase?.label === phaseEditingLabel);
       const editedStats = getPhaseStats(editedPhase || {});
@@ -4026,8 +4009,8 @@ function bindEvents() {
       }
     }
 
-    if (phaseEditingLabel && !isLatestPhaseLabel(phaseEditingLabel) && phaseLabelStatus !== 'done') {
-      alert('Fases anteriores permanecem concluídas enquanto existir uma fase posterior. Para retornar, remova a fase atual.');
+    if (phaseEditingLabel && phaseLabelStatus === 'done' && state?.project?.activePhaseLabel !== phaseEditingLabel) {
+      alert('Somente a fase ativa pode ser concluída. As fases futuras permanecem planejadas.');
       return;
     }
 
