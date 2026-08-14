@@ -3797,7 +3797,6 @@ function bindEvents() {
     updateToggleButtonUI();
     if(phaseTitleError){ phaseTitleError.classList.remove('visible'); phaseTitleError.textContent=''; }
     if(phaseDescError){ phaseDescError.classList.remove('visible'); phaseDescError.textContent=''; }
-    if(phaseCriteriaError){ phaseCriteriaError.classList.remove('visible'); phaseCriteriaError.textContent=''; }
     if(phaseCategoriesError){ phaseCategoriesError.classList.remove('visible'); phaseCategoriesError.textContent=''; }
     if(btnDeletePhase) btnDeletePhase.style.display = 'none';
   }
@@ -3908,7 +3907,7 @@ function bindEvents() {
 
   // Disable save until required fields are filled
   function updateSaveState(){
-    const ok = (phaseTitleInput?.value || '').trim() && (phaseDescInput?.value || '').trim() && (phaseCriteriaInput?.value || '').trim();
+    const ok = (phaseTitleInput?.value || '').trim() && (phaseDescInput?.value || '').trim();
     if(btnSavePhase) {
       if(ok) btnSavePhase.classList.add('ready'); else btnSavePhase.classList.remove('ready');
     }
@@ -3916,7 +3915,7 @@ function bindEvents() {
   // Init
   // keep button enabled so user can attempt save and see validation messages
   updateSaveState();
-  [phaseTitleInput, phaseDescInput, phaseCriteriaInput].forEach(inp => {
+  [phaseTitleInput, phaseDescInput].forEach(inp => {
     if(!inp) return;
     inp.addEventListener('input', (e) => {
       updateSaveState();
@@ -3925,7 +3924,6 @@ function bindEvents() {
       const id = e.target.id;
       if(id === 'phaseTitle' && phaseTitleError){ phaseTitleError.classList.remove('visible'); phaseTitleError.textContent=''; }
       if(id === 'phaseDesc' && phaseDescError){ phaseDescError.classList.remove('visible'); phaseDescError.textContent=''; }
-      if(id === 'phaseCriteria' && phaseCriteriaError){ phaseCriteriaError.classList.remove('visible'); phaseCriteriaError.textContent=''; }
     });
   });
   async function reloadActiveProjectAfterPhaseChange(){
@@ -3954,23 +3952,18 @@ function bindEvents() {
     const completesRequiredFirstPhase = phaseCreationRequired && !phaseEditingLabel;
     const title = (phaseTitleInput?.value || '').trim();
     const desc = (phaseDescInput?.value || '').trim();
-    const criteriaText = (phaseCriteriaInput?.value || '').trim();
     if(phaseTitleError){ phaseTitleError.classList.remove('visible'); phaseTitleError.textContent=''; }
     if(phaseDescError){ phaseDescError.classList.remove('visible'); phaseDescError.textContent=''; }
-    if(phaseCriteriaError){ phaseCriteriaError.classList.remove('visible'); phaseCriteriaError.textContent=''; }
     if(phaseCategoriesError){ phaseCategoriesError.classList.remove('visible'); phaseCategoriesError.textContent=''; }
 
     const emptyFields = [];
     if(!title) emptyFields.push('title');
     if(!desc) emptyFields.push('desc');
-    if(!criteriaText) emptyFields.push('criteria');
     if(emptyFields.length){
       if(emptyFields.includes('title') && phaseTitleError){ phaseTitleError.textContent = 'Preencha o título da fase.'; phaseTitleError.classList.add('visible'); }
       if(emptyFields.includes('desc') && phaseDescError){ phaseDescError.textContent = 'Preencha a descrição da fase.'; phaseDescError.classList.add('visible'); }
-      if(emptyFields.includes('criteria') && phaseCriteriaError){ phaseCriteriaError.textContent = 'Preencha os critérios da fase.'; phaseCriteriaError.classList.add('visible'); }
       if(emptyFields[0] === 'title') phaseTitleInput?.focus();
       else if(emptyFields[0] === 'desc') phaseDescInput?.focus();
-      else if(emptyFields[0] === 'criteria') phaseCriteriaInput?.focus();
       return;
     }
 
@@ -4020,7 +4013,9 @@ function bindEvents() {
       completed: phaseLabelStatus === 'done',
       categories,
       inheritanceCategoryLabel: inheritanceCategory?.label || null,
-      criteria: phaseTextToCriteria(criteriaText)
+      criteria: phaseEditingLabel
+        ? (getProjectPhases().find(phase => phase?.label === phaseEditingLabel)?.criteria || [])
+        : []
     };
 
     try {
