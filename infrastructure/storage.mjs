@@ -298,7 +298,7 @@ class NodeFsStrategy {
 
         const outcome = normalizeMetricType(classification.outcome ?? paper.status, 'pending');
         if (outcome === 'included') selected.add(reference);
-        else if (outcome === 'excluded' || outcome === 'duplicate') removed.add(reference);
+        else if (outcome === 'excluded') removed.add(reference);
         else pending.add(reference);
       }
 
@@ -342,8 +342,7 @@ class NodeFsStrategy {
         // estão classificados por uma categoria de impacto Pendente.
         new: [...pending],
         selected: [...selected],
-        // Excluídos e duplicatas automáticas deixam a fila e são removidos da
-        // progressão para a fase seguinte.
+        // Artigos excluídos deixam a fila e são removidos da progressão para a fase seguinte.
         removed: [...removed],
       };
     }
@@ -362,7 +361,7 @@ class NodeFsStrategy {
 
     const byIdentity = new Map();
     const mergePaper = (paper) => {
-      if (!paper || typeof paper !== 'object' || paper.visited === false || paper.autoDuplicate) return;
+      if (!paper || typeof paper !== 'object' || paper.visited === false) return;
       const identity = (paper.id || paper.id === 0)
         ? `id:${String(paper.id)}`
         : `url:${normalizeArticleUrl(paper.url || '')}`;
@@ -441,7 +440,7 @@ class NodeFsStrategy {
       };
 
       const baseTags = (Array.isArray(sourcePaper.tags) ? sourcePaper.tags : [])
-        .filter(tag => !categoryLabels.has(tag) && tag !== 'duplicado-automatico');
+        .filter(tag => !categoryLabels.has(tag));
       const tags = pendingCategory?.label
         ? [...new Set([...baseTags, pendingCategory.label])]
         : baseTags;
@@ -465,9 +464,6 @@ class NodeFsStrategy {
         phaseLabel: nextPhase.label,
         iterationId: nextPhase.label,
         classifications,
-        duplicateOfId: null,
-        autoDuplicate: false,
-        duplicateSequence: null,
         tags,
         visited: true,
         inherited: true,
@@ -574,13 +570,6 @@ class NodeFsStrategy {
         paper.inheritedFromPhaseLabel = latestClassification?.inheritedFromPhaseLabel || null;
         paper.updatedAt = new Date().toISOString();
         changed = true;
-      }
-
-      if (!Object.keys(classifications).length && paper.autoDuplicate) {
-        try {
-          this.fs.unlinkSync(this.path.join(papersDir, filename));
-        } catch (_) { /* arquivo já removido */ }
-        continue;
       }
 
       if (!Object.keys(classifications).length) {
@@ -937,7 +926,7 @@ class NodeFsStrategy {
       if (!paper || typeof paper !== 'object' || paper.visited === false) continue;
       const normalizedUrl = normalizeArticleUrl(paper.url || '');
       if (normalizedUrl) paperUrls.add(normalizedUrl);
-      if (!normalizedUrl || paper.autoDuplicate) continue;
+      if (!normalizedUrl) continue;
 
       const classification = this.getPaperClassificationForPhase(paper, activePhase.label);
       const categoryLabel = classification?.categoryLabel
@@ -947,7 +936,6 @@ class NodeFsStrategy {
       const category = categoryMap.get(categoryLabel);
       if (!category) continue;
       const outcome = normalizeMetricType(classification?.outcome ?? paper.status, 'pending');
-      if (outcome === 'duplicate') continue;
 
       const rawUrl = String(paper.url || '').trim();
       if (!rawUrl) continue;

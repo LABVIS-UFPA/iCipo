@@ -485,11 +485,6 @@ class Paper {
     this.classifications = data.classifications && typeof data.classifications === "object" && !Array.isArray(data.classifications)
       ? { ...data.classifications }
       : {};
-    this.duplicateOfId = data.duplicateOfId || null;
-    this.autoDuplicate = !!data.autoDuplicate;
-    this.duplicateSequence = Number.isFinite(Number(data.duplicateSequence))
-      ? Number(data.duplicateSequence)
-      : null;
     this.iterationId = data.iterationId || null;
     this.criteriaId = data.criteriaId || null;
     this.tags = checkArray(data.tags);
@@ -584,9 +579,6 @@ class Paper {
       categoryLabel: this.categoryLabel,
       phaseLabel: this.phaseLabel,
       classifications: this.classifications,
-      duplicateOfId: this.duplicateOfId,
-      autoDuplicate: this.autoDuplicate,
-      duplicateSequence: this.duplicateSequence,
       iterationId: this.iterationId,
       criteriaId: this.criteriaId,
       tags: this.tags,

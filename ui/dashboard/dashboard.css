@@ -1734,7 +1734,6 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
 .paperMetricCard--included{--metric-color:#168455;--metric-soft:#edf9f3;--metric-border:#d6eee2}
 .paperMetricCard--excluded{--metric-color:#c2414a;--metric-soft:#fff2f3;--metric-border:#f2dadd}
 .paperMetricCard--pending{--metric-color:#59677c;--metric-soft:#f2f5f8;--metric-border:#dfe5ec}
-.paperMetricCard--duplicate{--metric-color:#b56a09;--metric-soft:#fff8eb;--metric-border:#f1e1bf}
 .paperMetricIcon{
   width:38px;
   height:38px;
@@ -1797,7 +1796,6 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
 }
 .paperOutcomeBadge--included{border-color:#cce8d9;background:#eaf8f0;color:#16764b}
 .paperOutcomeBadge--excluded{border-color:#f0cfd3;background:#fff0f1;color:#b83a44}
-.paperOutcomeBadge--duplicate{border-color:#ecd7ad;background:#fff7e8;color:#a96008}
 .paperOutcomeBadge--pending{border-color:#dce2e9;background:#f3f5f8;color:#667085}
 
 /* Vínculo da categoria com os indicadores consolidados. */
@@ -1831,7 +1829,6 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
 }
 .categoryMetricBadge--included::before{background:#168455}
 .categoryMetricBadge--excluded::before{background:#c2414a}
-.categoryMetricBadge--duplicate::before{background:#b56a09}
 .categoryMetricBadge--pending::before{background:#7b8799}
 
 @media (max-width:1320px){
@@ -2300,7 +2297,6 @@ a.phaseArchiveArticleTitle:hover{color:#146fd1;text-decoration:underline}
 }
 .phaseArchiveOutcome--included{border-color:#bfe4ce;background:#eaf8f0;color:#16784a}
 .phaseArchiveOutcome--excluded{border-color:#efc8ce;background:#fff0f1;color:#b43d47}
-.phaseArchiveOutcome--duplicate{border-color:#efd8b7;background:#fff6e8;color:#9b650e}
 .phaseArchiveOutcome--pending{border-color:#d7dee7;background:#f1f4f7;color:#59677b}
 .phaseArchiveArticleMeta{
   overflow:hidden;
