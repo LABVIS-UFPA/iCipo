@@ -108,6 +108,16 @@
             <div class="overviewUpdated"><span aria-hidden="true">◷</span><span id="overviewUpdatedAt">Última atualização: —</span></div>
           </div>
 
+          <div class="overviewMetricScope" aria-label="Escopo das métricas da visão geral">
+            <label for="overviewMetricScopeSelect">
+              <span>Visualizar métricas</span>
+              <select id="overviewMetricScopeSelect" aria-label="Selecionar escopo das métricas">
+                <option value="all">Projeto geral</option>
+              </select>
+            </label>
+            <small id="overviewMetricScopeHint">Resumo consolidado de todas as fases do projeto.</small>
+          </div>
+
           <div class="paperMetricsGrid" aria-label="Resumo da seleção de artigos">
             <button class="paperMetricCard paperMetricCard--total" type="button" data-paper-metric="all" aria-label="Ver todos os artigos">
               <span class="paperMetricIcon" aria-hidden="true">▤</span>
@@ -145,16 +155,6 @@
                 <span class="paperMetricLabel">Pendentes</span>
                 <strong id="paperMetricPending">0</strong>
                 <small id="paperMetricPendingDetail">0% do total</small>
-              </span>
-              <span class="paperMetricArrow" aria-hidden="true">→</span>
-            </button>
-
-            <button class="paperMetricCard paperMetricCard--duplicate" type="button" data-paper-metric="duplicate" aria-label="Ver artigos duplicados">
-              <span class="paperMetricIcon" aria-hidden="true">⧉</span>
-              <span class="paperMetricContent">
-                <span class="paperMetricLabel">Duplicados</span>
-                <strong id="paperMetricDuplicate">0</strong>
-                <small id="paperMetricDuplicateDetail">0% do total</small>
               </span>
               <span class="paperMetricArrow" aria-hidden="true">→</span>
             </button>
