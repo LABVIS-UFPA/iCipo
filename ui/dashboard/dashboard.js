@@ -2979,6 +2979,9 @@ function bindEvents() {
   const btnAddCategoryCriterion = document.getElementById("btnAddCategoryCriterion");
   const categoryTitleError = document.getElementById("categoryTitleError");
   const categoryRequiredNotice = document.getElementById("categoryRequiredNotice");
+  const defaultCategoriesSuggestion = document.getElementById("defaultCategoriesSuggestion");
+  const btnCreateDefaultCategories = document.getElementById("btnCreateDefaultCategories");
+  const defaultCategoriesError = document.getElementById("defaultCategoriesError");
   const articleTutorialPanel = document.getElementById("articleTutorialPanel");
   const btnCloseArticleTutorial = document.getElementById("btnCloseArticleTutorial");
   const highlightSearch = document.getElementById("highlightSearch");
@@ -2989,6 +2992,33 @@ function bindEvents() {
   const makeLabel = (value) => String(value || "")
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+  const DEFAULT_TUTORIAL_CATEGORIES = Object.freeze([
+    {
+      title: "Incluir",
+      label: "incluir",
+      description: "Artigos que atendem aos critérios da fase e devem seguir para a próxima etapa da pesquisa.",
+      color: "#22C55E",
+      metricType: "included",
+      criteria: [],
+    },
+    {
+      title: "Excluir",
+      label: "excluir",
+      description: "Artigos que não atendem aos critérios da fase e não devem seguir na progressão.",
+      color: "#EF4444",
+      metricType: "excluded",
+      criteria: [],
+    },
+    {
+      title: "Pendente",
+      label: "pendente",
+      description: "Artigos que ainda precisam ser analisados antes de uma decisão de inclusão ou exclusão.",
+      color: "#F59E0B",
+      metricType: "pending",
+      criteria: [],
+    },
+  ]);
 
   function renderCategoryCriteria() {
     if (!categoryCriteriaInput) return;
@@ -3101,6 +3131,11 @@ function bindEvents() {
     document.body.classList.toggle('categoryCreationRequired', categoryCreationRequired);
     categoryPanel?.classList.toggle('categoryCreationRequiredPanel', categoryCreationRequired);
     categoryRequiredNotice?.classList.toggle('hidden', !categoryCreationRequired);
+    defaultCategoriesSuggestion?.classList.toggle('hidden', !categoryCreationRequired);
+    if (defaultCategoriesError) {
+      defaultCategoriesError.textContent = "";
+      defaultCategoriesError.classList.remove("visible");
+    }
 
     if (categoryPanelTitle && !editingCategoryLabel) {
       categoryPanelTitle.textContent = categoryCreationRequired ? 'Crie a primeira categoria' : 'Nova categoria';
@@ -3225,6 +3260,80 @@ function bindEvents() {
     }
   }
 
+  async function createDefaultTutorialCategories() {
+    const project = state?.project;
+    if (!project?.id) return alert("Nenhum projeto ativo.");
+
+    if (defaultCategoriesError) {
+      defaultCategoriesError.textContent = "";
+      defaultCategoriesError.classList.remove("visible");
+    }
+
+    const originalText = btnCreateDefaultCategories?.textContent;
+    if (btnCreateDefaultCategories) {
+      btnCreateDefaultCategories.disabled = true;
+      btnCreateDefaultCategories.textContent = "Criando categorias...";
+    }
+
+    try {
+      const existingMetricTypes = new Set(
+        (project.categories || []).map(category => normalizeCategoryMetricType(
+          category?.metricType,
+          inferMetricTypeFromCategory(category || {})
+        ))
+      );
+
+      for (const categoryData of DEFAULT_TUTORIAL_CATEGORIES) {
+        if (existingMetricTypes.has(categoryData.metricType)) continue;
+        project.addCategory({ ...categoryData, criteria: [...categoryData.criteria] });
+        existingMetricTypes.add(categoryData.metricType);
+      }
+
+      // As categorias essenciais precisam estar disponíveis na fase ativa para
+      // que Incluir, Excluir e Pendente funcionem imediatamente na triagem.
+      const activePhase = project.getActivePhase?.()
+        || project.phases?.find(phase => phase.label === project.activePhaseLabel)
+        || null;
+      if (activePhase) {
+        const essentialLabels = (project.categories || [])
+          .filter(category => DEFAULT_TUTORIAL_CATEGORIES.some(item => (
+            normalizeCategoryMetricType(category?.metricType, inferMetricTypeFromCategory(category || {})) === item.metricType
+          )))
+          .map(category => category.label)
+          .filter(Boolean);
+        activePhase.categories = [...new Set([...(activePhase.categories || []), ...essentialLabels])];
+      }
+
+      await storage.saveProject(project);
+      await reloadCategoryProjectFromWebSocket(project.id);
+      loadCategories();
+      renderPhaseCategories?.([]);
+      renderAll();
+
+      try {
+        await updateScholarCategoryMenu();
+      } catch (menuError) {
+        console.warn('As categorias padrão foram salvas, mas o menu do Google Scholar não pôde ser atualizado imediatamente.', menuError);
+      }
+
+      applyCategoryRequirementUI(false);
+      closeCategoryPanel(true);
+      scheduleArticlesTutorial(TUTORIAL_TRANSITION_DELAY);
+    } catch (error) {
+      console.warn("default category creation failed", error);
+      if (defaultCategoriesError) {
+        defaultCategoriesError.textContent = error?.message || "Não foi possível criar as categorias padrão.";
+        defaultCategoriesError.classList.add("visible");
+      }
+    } finally {
+      if (btnCreateDefaultCategories) {
+        btnCreateDefaultCategories.disabled = false;
+        btnCreateDefaultCategories.textContent = originalText || "Criar categorias padrão";
+      }
+    }
+  }
+
+  btnCreateDefaultCategories?.addEventListener("click", createDefaultTutorialCategories);
   btnShowAddCategory?.addEventListener("click", () => openCategoryPanel());
   btnCloseCategory?.addEventListener("click", () => {
     if (categoryCreationRequired) {

@@ -2369,3 +2369,51 @@ a.phaseArchiveArticleTitle:hover{color:#146fd1;text-decoration:underline}
   .phaseArchiveGroups{grid-template-columns:1fr}
   .phaseArchiveArticleList{max-height:360px}
 }
+
+/* Tutorial: criação rápida das categorias essenciais */
+.defaultCategoriesSuggestion{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  margin:2px 0 14px;
+  padding:14px;
+  border:1px solid rgba(110,168,255,.28);
+  border-radius:14px;
+  background:linear-gradient(135deg,rgba(110,168,255,.10),rgba(59,225,155,.06));
+}
+.defaultCategoriesSuggestion.hidden{display:none}
+.defaultCategoriesSuggestionHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.defaultCategoriesSuggestionHeader > div{display:flex;flex-direction:column;gap:2px}
+.defaultCategoriesSuggestionHeader strong{font-size:14px}
+.defaultCategoriesSuggestionBadge{
+  flex:0 0 auto;
+  padding:4px 8px;
+  border-radius:999px;
+  background:rgba(110,168,255,.14);
+  border:1px solid rgba(110,168,255,.25);
+  color:var(--accent);
+  font-size:10px;
+  font-weight:900;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
+.defaultCategoriesSuggestion p{margin:0;color:var(--muted);font-size:12px;line-height:1.5}
+.defaultCategoriesPreview{display:flex;flex-wrap:wrap;gap:7px}
+.defaultCategoriesPreview span{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:6px 9px;
+  border:1px solid var(--border);
+  border-radius:999px;
+  background:rgba(255,255,255,.045);
+  font-size:11px;
+  font-weight:800;
+}
+.defaultCategoryDot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.defaultCategoryDotIncluded{background:#22c55e}
+.defaultCategoryDotExcluded{background:#ef4444}
+.defaultCategoryDotPending{background:#f59e0b}
+.defaultCategoriesButton{width:100%;justify-content:center}
+.categoryManualDivider{display:flex;align-items:center;gap:9px;margin:1px 0 6px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:800}
+.categoryManualDivider::before,.categoryManualDivider::after{content:"";height:1px;flex:1;background:var(--border)}
