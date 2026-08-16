@@ -20,6 +20,7 @@ let overviewResizeTimer = null;
 let paperMetricFilter = "all";
 let paperCategoryFilter = "all";
 let paperPhaseFilter = "active";
+let overviewMetricScope = "all"; // all | active | <phaseLabel>
 let renderedPapersById = new Map();
 let paperBulkBusy = false;
 let paperBulkPendingOutcome = null;
@@ -1461,11 +1462,24 @@ function getLatestPaperClassification(paper) {
     || null;
 }
 
-function getOverviewMetricType(paper, phaseLabel = "all", highlightedLinks = {}) {
+function getActivePhaseLabel() {
+  return state?.project?.activePhaseLabel
+    || state?.project?.phases?.find?.(phase => !isPhaseCompleted(phase))?.label
+    || null;
+}
+
+function resolveOverviewPhaseLabel(scope = overviewMetricScope) {
+  if (!scope || scope === "all") return "all";
+  if (scope === "active") return getActivePhaseLabel() || "all";
+  return scope;
+}
+
+function getOverviewMetricType(paper, scope = "all", highlightedLinks = {}) {
   let metricType;
+  const phaseLabel = resolveOverviewPhaseLabel(scope);
   if (phaseLabel && phaseLabel !== "all") {
     const classification = getPaperClassificationForPhase(paper, phaseLabel);
-    if (!classification) return null;
+    if (!classification || isInheritedPhaseClassification(classification)) return null;
     metricType = normalizeMetricType(classification.outcome ?? paper?.status, "pending");
   } else {
     const latestClassification = getLatestPaperClassification(paper);
@@ -1478,6 +1492,55 @@ function getOverviewMetricType(paper, phaseLabel = "all", highlightedLinks = {})
   // eventualmente marcados como duplicate entram em Excluídos para manter o
   // total consolidado coerente sem reintroduzir a métrica removida.
   return metricType === "duplicate" ? "excluded" : metricType;
+}
+
+function getOverviewScopedPapers(papers = [], scope = overviewMetricScope) {
+  const phaseLabel = resolveOverviewPhaseLabel(scope);
+  if (!phaseLabel || phaseLabel === "all") return [...papers];
+
+  return papers.filter((paper) => {
+    const classification = getPaperClassificationForPhase(paper, phaseLabel);
+    return Boolean(classification) && !isInheritedPhaseClassification(classification);
+  });
+}
+
+function getOverviewPaperCategory(paper, scope = overviewMetricScope, highlightedLinks = {}) {
+  const phaseLabel = resolveOverviewPhaseLabel(scope);
+  if (!phaseLabel || phaseLabel === "all") return getPaperCategory(paper, highlightedLinks);
+
+  const classification = getPaperClassificationForPhase(paper, phaseLabel);
+  if (!classification || isInheritedPhaseClassification(classification)) return null;
+
+  const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
+  const candidates = [
+    classification.categoryLabel,
+    classification.categoryId,
+  ].map(value => String(value || "").trim().toLowerCase()).filter(Boolean);
+
+  const matched = categories.find((category) => {
+    const refs = [category?.label, category?.title, category?.id]
+      .map(value => String(value || "").trim().toLowerCase())
+      .filter(Boolean);
+    return refs.some(ref => candidates.includes(ref));
+  });
+  if (matched) return matched;
+
+  // Compatibilidade com registros legados: usa a categoria gravada diretamente
+  // no artigo somente quando o próprio artigo pertence à fase selecionada.
+  const paperPhase = paper?.phaseLabel || paper?.phaseId || paper?.iterationId;
+  if (paperPhase === phaseLabel) {
+    const fallbackCandidates = [paper?.categoryLabel, paper?.categoryId]
+      .map(value => String(value || "").trim().toLowerCase())
+      .filter(Boolean);
+    return categories.find((category) => {
+      const refs = [category?.label, category?.title, category?.id]
+        .map(value => String(value || "").trim().toLowerCase())
+        .filter(Boolean);
+      return refs.some(ref => fallbackCandidates.includes(ref));
+    }) || null;
+  }
+
+  return null;
 }
 
 function computeOverviewMetrics(papers = [], highlightedLinks = {}, phaseLabel = "all") {
@@ -1511,13 +1574,20 @@ function renderOverviewMetricScope() {
   if (!select) return;
 
   const phases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
+  const activePhaseLabel = getActivePhaseLabel();
   const availableLabels = new Set(phases.map(phase => phase?.label).filter(Boolean));
-  if (overviewMetricScope !== "all" && !availableLabels.has(overviewMetricScope)) {
+
+  // Mantém compatibilidade com a opção "active" criada anteriormente, mas
+  // converte a seleção para o rótulo real da fase para permitir navegar entre
+  // qualquer fase do projeto no mesmo seletor.
+  if (overviewMetricScope === "active") {
+    overviewMetricScope = activePhaseLabel || "all";
+  } else if (overviewMetricScope !== "all" && !availableLabels.has(overviewMetricScope)) {
     overviewMetricScope = "all";
   }
 
-  const previousValue = overviewMetricScope;
   select.replaceChildren();
+
   const generalOption = document.createElement("option");
   generalOption.value = "all";
   generalOption.textContent = "Projeto geral";
@@ -1527,23 +1597,29 @@ function renderOverviewMetricScope() {
     if (!phase?.label) return;
     const option = document.createElement("option");
     option.value = phase.label;
-    option.textContent = phase.title || phase.label || `Fase ${index + 1}`;
+    const phaseName = phase.title || phase.label || `Fase ${index + 1}`;
+    option.textContent = phase.label === activePhaseLabel
+      ? `${phaseName} (ativa)`
+      : phaseName;
     select.appendChild(option);
   });
-  select.value = previousValue;
+
+  select.value = overviewMetricScope;
 
   if (hint) {
     if (overviewMetricScope === "all") {
       hint.textContent = "Resumo consolidado de todas as fases do projeto.";
     } else {
-      const phase = phases.find(item => item?.label === overviewMetricScope);
-      hint.textContent = `Exibindo somente os artigos classificados em ${phase?.title || phase?.label || "fase selecionada"}.`;
+      const selectedPhase = phases.find(phase => phase?.label === overviewMetricScope);
+      const phaseName = selectedPhase?.title || selectedPhase?.label || "fase selecionada";
+      const activeSuffix = overviewMetricScope === activePhaseLabel ? " Esta é a fase ativa." : "";
+      hint.textContent = `Métricas somente de ${phaseName}.${activeSuffix} Artigos herdados não entram nessa contagem.`;
     }
   }
 }
 
-function renderPaperMetrics(papers, highlightedLinks = {}, phaseLabel = overviewMetricScope) {
-  const metrics = computeOverviewMetrics(papers, highlightedLinks, phaseLabel);
+function renderPaperMetrics(papers, highlightedLinks = {}, scope = overviewMetricScope) {
+  const metrics = computeOverviewMetrics(papers, highlightedLinks, scope);
   const total = $("#paperMetricTotal");
   const included = $("#paperMetricIncluded");
   const excluded = $("#paperMetricExcluded");
@@ -1560,7 +1636,7 @@ function renderPaperMetrics(papers, highlightedLinks = {}, phaseLabel = overview
 
   if (totalDetail) {
     totalDetail.textContent = !metrics.total
-      ? (phaseLabel === "all" ? "Nenhum artigo registrado" : "Nenhum artigo nesta fase")
+      ? (scope === "all" ? "Nenhum artigo registrado" : "Nenhum artigo selecionado nesta fase")
       : metrics.pending
         ? `${metrics.pending} pendente${metrics.pending === 1 ? "" : "s"} de classificação`
         : "Todos os artigos estão classificados";
@@ -1822,7 +1898,7 @@ function getPaperMetricTypeForPhase(paper, phaseLabel, highlightedLinks = {}) {
   if (!phaseLabel || phaseLabel === "all") return getPaperMetricType(paper, highlightedLinks);
   const classification = getPaperClassificationForPhase(paper, phaseLabel);
   if (!classification) return "pending";
-  const category = getPaperCategoryForPhase(paper, phaseLabel, highlightedLinks);
+  const category = getOverviewPaperCategory(paper, scope, highlightedLinks);
   if (category) return normalizeMetricType(category.metricType, inferMetricTypeFromCategory(category));
   return normalizeMetricType(classification.outcome ?? paper?.status, "pending");
 }
@@ -1922,13 +1998,24 @@ function clearPaperFilters({ clearSearch = false, render = true } = {}) {
 function openPapersFromOverview(categoryKey = "all", year = "", metricType = "all") {
   paperCategoryFilter = categoryKey || "all";
   paperMetricFilter = metricType === "all" ? "all" : normalizeMetricType(metricType, "pending");
+
+  const overviewPhaseLabel = resolveOverviewPhaseLabel(overviewMetricScope);
+  paperPhaseFilter = overviewPhaseLabel === "all" ? "all" : overviewPhaseLabel;
+
   setActiveView("papers");
   const searchInput = $("#search");
   if (searchInput) searchInput.value = year === "Sem ano" ? "" : String(year || "");
   const metricSelect = $("#filterPaperMetric");
   const categorySelect = $("#filterPaperCategory");
+  const currentToggle = $("#filterCurrentPhase");
+  const phaseSelect = $("#filterPaperPhase");
   if (metricSelect) metricSelect.value = paperMetricFilter;
   if (categorySelect) categorySelect.value = paperCategoryFilter;
+  if (currentToggle) currentToggle.checked = false;
+  if (phaseSelect) {
+    phaseSelect.disabled = false;
+    phaseSelect.value = paperPhaseFilter;
+  }
   updatePaperFilterBar();
   renderPapersTable();
 }
@@ -1955,13 +2042,20 @@ async function renderOverview() {
   renderOverviewMetricScope();
   const consolidatedPapers = (Array.isArray(state?.papers) ? state.papers : [])
     .filter(paper => paper?.visited !== false);
+
+  // A seleção da Visão Geral controla todo o conteúdo da página. Para uma
+  // fase específica, entram somente os artigos realmente adicionados/classificados
+  // naquela fase; herdados continuam visíveis na área de fases, mas não são
+  // contabilizados como trabalho novo da fase selecionada.
+  const overviewPapers = getOverviewScopedPapers(consolidatedPapers, overviewMetricScope);
+
   renderPaperMetrics(consolidatedPapers, highlightedLinks, overviewMetricScope);
-  renderCategoryDistribution(papers, highlightedLinks);
-  renderPhaseProgress(papers);
-  renderOverviewRecentArticles(papers, highlightedLinks);
+  renderCategoryDistribution(overviewPapers, highlightedLinks, overviewMetricScope);
+  renderPhaseProgress(overviewPapers, overviewMetricScope);
+  renderOverviewRecentArticles(overviewPapers, highlightedLinks, overviewMetricScope);
 }
 
-function buildCategoryDistribution(papers, highlightedLinks = {}) {
+function buildCategoryDistribution(papers, highlightedLinks = {}, scope = overviewMetricScope) {
   const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
   const entries = categories.map(category => ({
     key: getPaperCategoryKey(category),
@@ -1972,8 +2066,9 @@ function buildCategoryDistribution(papers, highlightedLinks = {}) {
   const byKey = new Map(entries.map(entry => [entry.key, entry]));
   let uncategorized = 0;
 
+  const phaseLabel = resolveOverviewPhaseLabel(scope);
   for (const paper of papers) {
-    const category = getPaperCategory(paper, highlightedLinks);
+    const category = getPaperCategoryForPhase(paper, phaseLabel, highlightedLinks);
     const key = getPaperCategoryKey(category);
     if (key && byKey.has(key)) byKey.get(key).count += 1;
     else uncategorized += 1;
@@ -1986,13 +2081,13 @@ function buildCategoryDistribution(papers, highlightedLinks = {}) {
   return entries;
 }
 
-function renderCategoryDistribution(papers, highlightedLinks = {}) {
+function renderCategoryDistribution(papers, highlightedLinks = {}, scope = overviewMetricScope) {
   const donut = $("#categoryDonut");
   const totalElement = $("#categoryDonutTotal");
   const legend = $("#categoryLegend");
   if (!donut || !legend) return;
 
-  const entries = buildCategoryDistribution(papers, highlightedLinks);
+  const entries = buildCategoryDistribution(papers, highlightedLinks, scope);
   const total = papers.length;
   if (totalElement) totalElement.textContent = String(total);
 
@@ -2048,11 +2143,15 @@ function getPhaseOverviewStats(phase, paperCount) {
   return { total, processed, percentage };
 }
 
-function renderPhaseProgress(papers) {
+function renderPhaseProgress(papers, scope = overviewMetricScope) {
   const container = $("#phaseProgressList");
   if (!container) return;
   container.replaceChildren();
-  const phases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
+  const allPhases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
+  const phaseLabel = resolveOverviewPhaseLabel(scope);
+  const phases = phaseLabel && phaseLabel !== "all"
+    ? allPhases.filter(phase => phase?.label === phaseLabel)
+    : allPhases;
 
   if (!phases.length) {
     container.innerHTML = `<div class="overviewEmptyState">Crie uma fase para acompanhar o progresso do projeto.</div>`;
@@ -2060,14 +2159,16 @@ function renderPhaseProgress(papers) {
   }
 
   phases.slice(0, 6).forEach((phase, index) => {
+    const originalIndex = allPhases.findIndex(item => item?.label === phase?.label);
+    const displayIndex = originalIndex >= 0 ? originalIndex : index;
     const stats = getPhaseOverviewStats(phase, papers.length);
     const row = document.createElement("button");
     row.type = "button";
     row.className = "phaseProgressRow";
     row.innerHTML = `
-      <span class="phaseProgressNumber">${index + 1}</span>
+      <span class="phaseProgressNumber">${displayIndex + 1}</span>
       <span class="phaseProgressContent">
-        <span class="phaseProgressTop"><strong>${escapeHtml(phase.title || `Fase ${index + 1}`)}</strong><span>${stats.processed}/${stats.total}</span></span>
+        <span class="phaseProgressTop"><strong>${escapeHtml(phase.title || `Fase ${displayIndex + 1}`)}</strong><span>${stats.processed}/${stats.total}</span></span>
         <span class="phaseProgressTrack"><i style="width:${stats.percentage}%"></i></span>
       </span>
     `;
@@ -2085,13 +2186,21 @@ function getPaperPhaseTitle(paper) {
   return active?.title || active?.label || "—";
 }
 
-function renderOverviewRecentArticles(papers, highlightedLinks = {}) {
+function renderOverviewRecentArticles(papers, highlightedLinks = {}, scope = overviewMetricScope) {
   const tbody = $("#overviewRecentTable tbody");
   if (!tbody) return;
   tbody.replaceChildren();
 
+  const phaseLabel = resolveOverviewPhaseLabel(scope);
+  const getRecentDate = (paper) => {
+    if (phaseLabel && phaseLabel !== "all") {
+      const classification = getPaperClassificationForPhase(paper, phaseLabel);
+      return classification?.classifiedAt || paper?.updatedAt || paper?.createdAt || "";
+    }
+    return paper?.updatedAt || paper?.createdAt || "";
+  };
   const recent = [...papers]
-    .sort((a, b) => String(b?.updatedAt || b?.createdAt || "").localeCompare(String(a?.updatedAt || a?.createdAt || "")))
+    .sort((a, b) => String(getRecentDate(b)).localeCompare(String(getRecentDate(a))))
     .slice(0, 5);
 
   if (!recent.length) {
@@ -2102,11 +2211,13 @@ function renderOverviewRecentArticles(papers, highlightedLinks = {}) {
   }
 
   for (const paper of recent) {
-    const category = getPaperCategory(paper, highlightedLinks);
-    const color = getPaperCategoryColor(paper, highlightedLinks) || "#A5ADBA";
+    const category = getOverviewPaperCategory(paper, scope, highlightedLinks);
+    const color = category?.color
+      ? normalizeHexColor(category.color, "#A5ADBA")
+      : (phaseLabel === "all" ? getPaperCategoryColor(paper, highlightedLinks) : "#A5ADBA");
     const categoryLabel = category?.title || category?.label || "Sem categoria";
     const year = extractPaperYear(paper) || "—";
-    const date = paper?.updatedAt || paper?.createdAt;
+    const date = getRecentDate(paper);
     const row = document.createElement("tr");
     const title = escapeHtml(paper?.title || paper?.url || "(sem título)");
     const titleContent = paper?.url
@@ -2117,7 +2228,9 @@ function renderOverviewRecentArticles(papers, highlightedLinks = {}) {
       <td>${escapeHtml(getPaperAuthorsText(paper))}</td>
       <td>${escapeHtml(year)}</td>
       <td><span class="overviewCategoryBadge"><i style="background:${escapeHtml(color)}"></i>${escapeHtml(categoryLabel)}</span></td>
-      <td>${escapeHtml(getPaperPhaseTitle(paper))}</td>
+      <td>${escapeHtml(phaseLabel && phaseLabel !== "all"
+        ? (state?.project?.phases?.find(item => item?.label === phaseLabel)?.title || phaseLabel)
+        : getPaperPhaseTitle(paper))}</td>
       <td>${escapeHtml(formatOverviewDate(date, true))}</td>
     `;
     tbody.appendChild(row);
