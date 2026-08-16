@@ -78,7 +78,6 @@ wsManager.addOnOpenListener(async () => {
 //   "Forward": "#9C27B0",
 //   "Included": "#2E7D32",
 //   "Excluded": "#D32F2F",
-//   "Duplicate": "#757575",
 //   "Pending": "#FBC02D",
 // };
 
@@ -368,8 +367,7 @@ function removePaperFromPhase(paper, phaseLabel, project = null) {
       phaseLabel: null,
       iterationId: null,
       categoryLabel: null,
-      status: paper.autoDuplicate ? 'duplicate' : 'pending',
-      duplicateOfId: paper.autoDuplicate ? (paper.duplicateOfId || null) : null,
+      status: 'pending',
       inherited: false,
       entryType: 'new',
       inheritedFromPhaseLabel: null,
@@ -385,19 +383,13 @@ function removePaperFromPhase(paper, phaseLabel, project = null) {
       ? project.categories.map(category => category?.label).filter(Boolean)
       : []
   );
-  const categoryLabel = paper.autoDuplicate
-    ? null
-    : (latestClassification?.categoryLabel || null);
+  const categoryLabel = latestClassification?.categoryLabel || null;
   const baseTags = Array.isArray(paper.tags)
-    ? paper.tags.filter(tag => !projectCategoryLabels.has(tag) && tag !== 'duplicado-automatico')
+    ? paper.tags.filter(tag => !projectCategoryLabels.has(tag))
     : [];
-  const tags = paper.autoDuplicate
-    ? [...new Set([...baseTags, 'duplicado-automatico'])]
-    : [...new Set([...baseTags, ...(categoryLabel ? [categoryLabel] : [])])];
+  const tags = [...new Set([...baseTags, ...(categoryLabel ? [categoryLabel] : [])])];
 
-  const status = paper.autoDuplicate
-    ? 'duplicate'
-    : normalizeMetricType(latestClassification?.outcome, 'pending');
+  const status = normalizeMetricType(latestClassification?.outcome, 'pending');
 
   return {
     ...paper,
@@ -406,7 +398,6 @@ function removePaperFromPhase(paper, phaseLabel, project = null) {
     iterationId: latestClassification?.phaseLabel || latestPhaseLabel,
     categoryLabel,
     status,
-    duplicateOfId: paper.autoDuplicate ? (paper.duplicateOfId || null) : null,
     inherited: latestClassification?.inherited === true
       || String(latestClassification?.entryType || '').toLowerCase() === 'inherited',
     entryType: latestClassification?.entryType
@@ -534,15 +525,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     project.currentIterationId = activePhase.label;
 
     const papers = Array.isArray(data.svat_papers) ? [...data.svat_papers] : [];
-    const originalIndex = papers.findIndex(paper => (
-      !paper?.autoDuplicate
-      && normalizeArticleUrl(paper?.url) === canonicalUrl
-    ));
+    const originalIndex = papers.findIndex(paper => normalizeArticleUrl(paper?.url) === canonicalUrl);
     const scopedOriginal = originalIndex >= 0 ? papers[originalIndex] : null;
     const categoryChanged = !!scopedOriginal && scopedOriginal.categoryLabel !== categoryLabel;
     const colorChanged = !!scopedOriginal
       && String(previousHighlightColor || "").toLowerCase() !== String(color || "").toLowerCase();
-    const repeatedSameClassification = !!scopedOriginal && !categoryChanged && !colorChanged;
     const phaseLabel = activePhase.label;
     const classifiedAt = nowIso();
 
@@ -555,73 +542,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         }).then(response => (response?.ok ? response.meta : meta)).catch(() => meta);
       }
     } catch (_) { /* metadados são opcionais */ }
-
-    if (repeatedSameClassification) {
-      const originalId = scopedOriginal.id || hashId(canonicalUrl);
-      const duplicateSequence = papers
-        .filter(paper => paper?.autoDuplicate && paper?.duplicateOfId === originalId)
-        .reduce((max, paper) => Math.max(max, Number(paper?.duplicateSequence) || 0), 0) + 1;
-      // O mesmo artigo pode aparecer novamente em fases diferentes. Inclui a
-      // identidade da fase no ID para que uma duplicata da fase atual não
-      // sobrescreva o arquivo de uma duplicata registrada em fase anterior.
-      const phaseIdentity = hashId(phaseLabel).replace(/^p_/, '');
-      const duplicateId = `${originalId}__dup_${phaseIdentity}_${duplicateSequence}`;
-      const duplicatePaper = {
-        id: duplicateId,
-        url: rawUrl,
-        title: meta.title && meta.title !== rawUrl ? meta.title : (scopedOriginal.title || rawUrl),
-        authors: Array.isArray(scopedOriginal.authors) ? scopedOriginal.authors : [],
-        authorsRaw: meta.authorsRaw || scopedOriginal.authorsRaw || "",
-        year: meta.year || scopedOriginal.year || null,
-        origin: scopedOriginal.origin || inferFromCategory(selectedCategory).origin,
-        status: "duplicate",
-        categoryLabel: null,
-        phaseLabel,
-        classifications: {
-          [phaseLabel]: {
-            phaseLabel,
-            categoryLabel: null,
-            outcome: "duplicate",
-            classifiedAt,
-            duplicateOfId: originalId,
-            automatic: true,
-            inherited: false,
-            entryType: 'new',
-            inheritedFromPhaseLabel: null,
-          },
-        },
-        duplicateOfId: originalId,
-        autoDuplicate: true,
-        duplicateSequence,
-        iterationId: phaseLabel,
-        criteriaId: null,
-        tags: ["duplicado-automatico"],
-        inherited: false,
-        entryType: 'new',
-        inheritedFromPhaseLabel: null,
-        visited: true,
-        createdAt: classifiedAt,
-        updatedAt: classifiedAt,
-        history: [{
-          ts: classifiedAt,
-          action: "duplicate_detected",
-          details: {
-            duplicateOfId: originalId,
-            phaseLabel,
-            reason: "same_link_same_category",
-            url: canonicalUrl,
-          },
-        }],
-      };
-
-      papers.push(duplicatePaper);
-      await storage.set({ highlightedLinks, svat_project: project, svat_papers: papers });
-      await storage.savePaper(duplicatePaper).catch((error) => {
-        console.warn('iCipo: não foi possível salvar a duplicata automática.', error);
-      });
-      await broadcastHighlightsRefresh();
-      return;
-    }
 
     const originalId = scopedOriginal?.id || hashId(canonicalUrl);
     let persistedPaper = {};
@@ -681,7 +601,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     );
     const tags = [...new Set([
       ...(Array.isArray(previousPaper.tags)
-        ? previousPaper.tags.filter(tag => !projectCategoryLabels.has(tag) && tag !== "duplicado-automatico")
+        ? previousPaper.tags.filter(tag => !projectCategoryLabels.has(tag))
         : []),
       categoryLabel,
     ])];
@@ -714,9 +634,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       categoryLabel,
       phaseLabel,
       classifications,
-      duplicateOfId: null,
-      autoDuplicate: false,
-      duplicateSequence: null,
       iterationId: phaseLabel,
       criteriaId: previousPaper.criteriaId || null,
       tags,

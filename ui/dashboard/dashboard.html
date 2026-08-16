@@ -149,15 +149,6 @@
               <span class="paperMetricArrow" aria-hidden="true">→</span>
             </button>
 
-            <button class="paperMetricCard paperMetricCard--duplicate" type="button" data-paper-metric="duplicate" aria-label="Ver artigos duplicados">
-              <span class="paperMetricIcon" aria-hidden="true">⧉</span>
-              <span class="paperMetricContent">
-                <span class="paperMetricLabel">Duplicados</span>
-                <strong id="paperMetricDuplicate">0</strong>
-                <small id="paperMetricDuplicateDetail">0% do total</small>
-              </span>
-              <span class="paperMetricArrow" aria-hidden="true">→</span>
-            </button>
           </div>
 
           <div class="overviewLayout overviewLayoutTop overviewLayoutPrimary">
@@ -349,9 +340,29 @@
           <div class="sidePanelBody u-scroll-y">
             <div id="categoryRequiredNotice" class="phaseRequiredNotice hidden" role="alert" aria-live="assertive">
               <span class="requiredStepLabel">Tutorial · Etapa 3 de 4</span>
-              <strong>Crie a primeira categoria para continuar</strong>
-              <span>As categorias organizam e identificam os artigos durante cada fase. Preencha o título e salve pelo menos uma categoria para avançar no tutorial.</span>
+              <strong>Crie as categorias da sua triagem</strong>
+              <span>As categorias organizam e identificam os artigos durante cada fase. Você pode criá-las manualmente ou usar a sugestão padrão do iCipó com um clique.</span>
             </div>
+
+            <div id="defaultCategoriesSuggestion" class="defaultCategoriesSuggestion hidden">
+              <div class="defaultCategoriesSuggestionHeader">
+                <div>
+                  <span class="tutorialEyebrow">Sugestão do iCipó</span>
+                  <strong>Categorias essenciais para começar</strong>
+                </div>
+                <span class="defaultCategoriesSuggestionBadge">1 clique</span>
+              </div>
+              <p>Crie automaticamente as três categorias necessárias para o fluxo de triagem. Você poderá editar nome, descrição, cor e critérios depois.</p>
+              <div class="defaultCategoriesPreview" aria-label="Categorias padrão sugeridas">
+                <span><i class="defaultCategoryDot defaultCategoryDotIncluded"></i>Incluir</span>
+                <span><i class="defaultCategoryDot defaultCategoryDotExcluded"></i>Excluir</span>
+                <span><i class="defaultCategoryDot defaultCategoryDotPending"></i>Pendente</span>
+              </div>
+              <button id="btnCreateDefaultCategories" type="button" class="btn defaultCategoriesButton">Criar categorias padrão</button>
+              <div id="defaultCategoriesError" class="fieldError" aria-live="polite"></div>
+            </div>
+
+            <div class="categoryManualDivider"><span>ou crie manualmente</span></div>
 
             <label for="categoryTitle">Título da categoria</label>
             <input id="categoryTitle" class="input" placeholder="Ex.: Incluído" />

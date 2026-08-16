@@ -38,7 +38,6 @@ const LIVE_REFRESH_DEBOUNCE_MS = 220;
 const PAPER_METRIC_LABELS = Object.freeze({
   included: "Incluídos",
   excluded: "Excluídos",
-  duplicate: "Duplicados",
   pending: "Pendentes",
 });
 
@@ -252,7 +251,6 @@ function getDynamicPhaseStats(phaseLabel) {
     inherited: 0,
     included: 0,
     excluded: 0,
-    duplicate: 0,
     pending: 0,
     processed: 0,
   };
@@ -271,7 +269,6 @@ function getDynamicPhaseStats(phaseLabel) {
     if (legacyInherited) stats.inherited += 1;
     else if (outcome === "included") stats.included += 1;
     else if (outcome === "excluded") stats.excluded += 1;
-    else if (outcome === "duplicate") stats.duplicate += 1;
     else stats.pending += 1;
   }
 
@@ -424,12 +421,11 @@ function getPhaseArchiveOutcomeLabel(outcome) {
   const normalizedOutcome = normalizeMetricType(outcome, "pending");
   if (normalizedOutcome === "included") return "Selecionado";
   if (normalizedOutcome === "excluded") return "Removido";
-  if (normalizedOutcome === "duplicate") return "Duplicado";
   return "Pendente";
 }
 
 function getPhaseArchiveCategory(record) {
-  if (!record || record.outcome === "duplicate") return null;
+  if (!record) return null;
   const categoryLabel = String(record.categoryLabel || "").trim().toLowerCase();
   if (!categoryLabel) return null;
   return (Array.isArray(state?.project?.categories) ? state.project.categories : []).find((category) => {
@@ -444,9 +440,7 @@ function createPhaseArchiveArticleItem(record) {
   const outcome = normalizeMetricType(record?.outcome, "pending");
   const category = getPhaseArchiveCategory(record);
   const categoryColor = normalizeHexColor(category?.color, "#A5ADBA");
-  const categoryName = outcome === "duplicate"
-    ? "Duplicado automático"
-    : (category?.title || category?.label || record?.categoryLabel || "Sem categoria");
+  const categoryName = category?.title || category?.label || record?.categoryLabel || "Sem categoria";
   const title = String(paper.title || paper.url || paper.id || "Artigo sem título").trim();
   const article = document.createElement("article");
   article.className = `phaseArchiveArticle phaseArchiveArticle--${outcome}`;
@@ -657,7 +651,7 @@ function createCompletedPhaseArchivePanel(phase = {}) {
   }));
   groups.appendChild(createPhaseArchiveGroup({
     title: "Removidos",
-    description: "Artigos excluídos ou identificados automaticamente como duplicados.",
+    description: "Artigos excluídos ao final da triagem desta fase.",
     tone: "removed",
     records: removed,
   }));
@@ -714,7 +708,6 @@ function toggleCompletedPhaseArchive(phaseLabel) {
 }
 
 function getPaperCategory(paper, highlightedLinks = {}) {
-  if (paper?.autoDuplicate) return null;
   const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
   const classification = getPaperClassification(paper);
   const explicitCategoryCandidates = [
@@ -761,10 +754,6 @@ function getPaperCategory(paper, highlightedLinks = {}) {
 }
 
 function getPaperMetricType(paper, highlightedLinks = {}) {
-  if (paper?.autoDuplicate || (paper?.duplicateOfId && normalizeMetricType(paper?.status, "pending") === "duplicate")) {
-    return "duplicate";
-  }
-
   const category = getPaperCategory(paper, highlightedLinks);
   if (category) {
     return normalizeMetricType(category.metricType, inferMetricTypeFromCategory(category));
@@ -784,32 +773,8 @@ function getPaperMetricLabel(metricType) {
   return PAPER_METRIC_LABELS[normalizeMetricType(metricType, "pending")] || "Pendentes";
 }
 
-function getDuplicateCandidateLabel(paper) {
-  const title = String(paper?.title || paper?.url || paper?.id || "Artigo sem título").trim();
-  const compactTitle = title.length > 72 ? `${title.slice(0, 69)}…` : title;
-  const year = extractPaperYear(paper);
-  return year ? `${compactTitle} (${year})` : compactTitle;
-}
-
-function renderDuplicateOriginalSelect(paper, candidates = []) {
-  const selectedId = String(paper?.duplicateOfId ?? "");
-  const original = candidates.find(candidate => String(candidate?.id ?? "") === selectedId) || null;
-  const originalLabel = original
-    ? getDuplicateCandidateLabel(original)
-    : (selectedId ? `Registro ${selectedId}` : "Original não localizado");
-
-  return `
-    <span class="duplicateRelation">
-      <span class="duplicateOriginalAutomatic" title="Vínculo identificado automaticamente pelo endereço do artigo">
-        Original: ${escapeHtml(originalLabel)}
-      </span>
-      <small>Vínculo automático pelo mesmo link</small>
-    </span>
-  `;
-}
-
 function applyCategoryMetricToPaper(paper, category, previousLabel = category?.label) {
-  if (!paper || paper.autoDuplicate || !category?.label) return false;
+  if (!paper || !category?.label) return false;
   const labels = new Set([previousLabel, category.label].filter(Boolean));
   const tags = Array.isArray(paper.tags) ? paper.tags : [];
   const classifications = paper.classifications
@@ -828,7 +793,6 @@ function applyCategoryMetricToPaper(paper, category, previousLabel = category?.l
   const metricType = normalizeCategoryMetricType(category.metricType, inferMetricTypeFromCategory(category));
   paper.categoryLabel = category.label;
   paper.status = metricType;
-  if (metricType !== "duplicate") paper.duplicateOfId = null;
   paper.tags = [...new Set(tags.map(tag => labels.has(tag) ? category.label : tag))];
 
   for (const classification of matchingClassifications) {
@@ -1071,8 +1035,7 @@ function removePaperClassificationFromActivePhase(paper) {
       phaseLabel: null,
       iterationId: null,
       categoryLabel: null,
-      status: paper.autoDuplicate ? "duplicate" : "pending",
-      duplicateOfId: paper.autoDuplicate ? (paper.duplicateOfId || null) : null,
+      status: "pending",
       visited: false,
       updatedAt,
       history,
@@ -1085,14 +1048,10 @@ function removePaperClassificationFromActivePhase(paper) {
       .map(category => category?.label)
       .filter(Boolean)
   );
-  const categoryLabel = paper.autoDuplicate
-    ? null
-    : (latestClassification?.categoryLabel || null);
+  const categoryLabel = latestClassification?.categoryLabel || null;
   const baseTags = (Array.isArray(paper.tags) ? paper.tags : [])
-    .filter(tag => !categoryLabels.has(tag) && tag !== "duplicado-automatico");
-  const tags = paper.autoDuplicate
-    ? [...new Set([...baseTags, "duplicado-automatico"])]
-    : [...new Set([...baseTags, ...(categoryLabel ? [categoryLabel] : [])])];
+    .filter(tag => !categoryLabels.has(tag));
+  const tags = [...new Set([...baseTags, ...(categoryLabel ? [categoryLabel] : [])])];
 
   return {
     ...paper,
@@ -1100,10 +1059,7 @@ function removePaperClassificationFromActivePhase(paper) {
     phaseLabel: latestClassification?.phaseLabel || latestPhaseLabel,
     iterationId: latestClassification?.phaseLabel || latestPhaseLabel,
     categoryLabel,
-    status: paper.autoDuplicate
-      ? "duplicate"
-      : normalizeMetricType(latestClassification?.outcome, "pending"),
-    duplicateOfId: paper.autoDuplicate ? (paper.duplicateOfId || null) : null,
+    status: normalizeMetricType(latestClassification?.outcome, "pending"),
     tags,
     visited: true,
     updatedAt,
@@ -1501,7 +1457,6 @@ function computeOverviewMetrics(papers = [], highlightedLinks = {}) {
     total: 0,
     included: 0,
     excluded: 0,
-    duplicate: 0,
     pending: 0,
   };
 
@@ -1510,7 +1465,6 @@ function computeOverviewMetrics(papers = [], highlightedLinks = {}) {
     const metricType = getPaperMetricType(paper, highlightedLinks);
     if (metricType === "included") metrics.included += 1;
     else if (metricType === "excluded") metrics.excluded += 1;
-    else if (metricType === "duplicate") metrics.duplicate += 1;
     else metrics.pending += 1;
   }
 
@@ -1528,18 +1482,15 @@ function renderPaperMetrics(papers, highlightedLinks = {}) {
   const included = $("#paperMetricIncluded");
   const excluded = $("#paperMetricExcluded");
   const pending = $("#paperMetricPending");
-  const duplicate = $("#paperMetricDuplicate");
   const totalDetail = $("#paperMetricTotalDetail");
   const includedDetail = $("#paperMetricIncludedDetail");
   const excludedDetail = $("#paperMetricExcludedDetail");
   const pendingDetail = $("#paperMetricPendingDetail");
-  const duplicateDetail = $("#paperMetricDuplicateDetail");
 
   if (total) total.textContent = String(metrics.total);
   if (included) included.textContent = String(metrics.included);
   if (excluded) excluded.textContent = String(metrics.excluded);
   if (pending) pending.textContent = String(metrics.pending);
-  if (duplicate) duplicate.textContent = String(metrics.duplicate);
 
   if (totalDetail) {
     totalDetail.textContent = !metrics.total
@@ -1551,7 +1502,6 @@ function renderPaperMetrics(papers, highlightedLinks = {}) {
   if (includedDetail) includedDetail.textContent = formatMetricPercentage(metrics.included, metrics.total);
   if (excludedDetail) excludedDetail.textContent = formatMetricPercentage(metrics.excluded, metrics.total);
   if (pendingDetail) pendingDetail.textContent = formatMetricPercentage(metrics.pending, metrics.total);
-  if (duplicateDetail) duplicateDetail.textContent = formatMetricPercentage(metrics.duplicate, metrics.total);
 }
 
 function ensureHistory(p) {
@@ -1638,9 +1588,6 @@ function unwrapStoragePayload(response) {
 }
 
 function getOverviewPaperKey(paper, fallbackIndex = 0) {
-  if (paper?.autoDuplicate && (paper?.id || paper?.id === 0)) {
-    return `duplicate:${paper.id}`;
-  }
   const normalizedUrl = normalizeUrl(paper?.url || "").trim().toLowerCase();
   if (normalizedUrl) return `url:${normalizedUrl}`;
   if (paper?.id || paper?.id === 0) return `id:${paper.id}`;
@@ -2250,10 +2197,6 @@ async function renderPapersTable() {
 
   const allRows = [...byKey.values()]
     .filter(paper => paper?.visited !== false);
-  const duplicateCandidates = allRows
-    .filter(paper => paper?.id || paper?.id === 0)
-    .filter(paper => getPaperMetricType(paper, hl) !== "duplicate")
-    .sort((a, b) => String(a.title || a.url || "").localeCompare(String(b.title || b.url || ""), "pt-BR"));
   const rows = allRows
     .filter(paper => paperMatchesFilters(paper, f, hl))
     .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
@@ -2301,7 +2244,6 @@ async function renderPapersTable() {
               <span>${escapeHtml(categoryDisplayLabel)}</span>
             </span>
             <span class="paperOutcomeBadge paperOutcomeBadge--${escapeHtml(metricType)}">${escapeHtml(getPaperMetricLabel(metricType))}</span>
-            ${metricType === "duplicate" ? renderDuplicateOriginalSelect(p, duplicateCandidates) : ""}
           </span>
         </td>
         <td><input class="cellInput" data-field="tags" data-id="${escapeHtml(p.id)}" value="${escapeHtml(tags)}" placeholder="ex: vis;ml" /></td>
@@ -2393,73 +2335,13 @@ function getActivePhaseForPaperBulkActions() {
     || null;
 }
 
-function isProtectedAutomaticDuplicate(paper, phaseLabel = getActivePhaseForPaperBulkActions()?.label) {
-  if (!paper || typeof paper !== "object") return false;
-  const classification = phaseLabel
-    ? getPaperClassificationForPhase(paper, phaseLabel)
-    : null;
-  const outcome = normalizeMetricType(classification?.outcome ?? paper.status, "pending");
-  return paper.autoDuplicate === true || Boolean(paper.duplicateOfId) || outcome === "duplicate";
-}
-
-function getActivePhaseCategoriesForOutcome(outcome) {
-  const activePhase = getActivePhaseForPaperBulkActions();
-  if (!activePhase) return [];
-
-  const normalizedOutcome = normalizeCategoryMetricType(outcome, "pending");
-  const allowedLabels = new Set(
-    (Array.isArray(activePhase.categories) ? activePhase.categories : []).filter(Boolean)
-  );
-
-  return (Array.isArray(state?.project?.categories) ? state.project.categories : [])
-    .filter(category => allowedLabels.has(category?.label))
-    .filter(category => (
-      normalizeCategoryMetricType(
-        category?.metricType,
-        inferMetricTypeFromCategory(category)
-      ) === normalizedOutcome
-    ));
-}
-
-function getSelectedRenderedPapers() {
-  return selectedPaperIds()
-    .map(id => renderedPapersById.get(String(id)))
-    .filter(Boolean);
-}
-
-function setPaperBulkStatus(message = "", tone = "", autoClear = true) {
-  clearTimeout(paperBulkStatusTimer);
-  paperBulkStatusTimer = null;
-
-  const status = document.getElementById("paperBulkStatus");
-  if (!status) return;
-
-  status.textContent = message;
-  status.classList.toggle("paperBulkStatus--success", tone === "success");
-  status.classList.toggle("paperBulkStatus--error", tone === "error");
-  status.classList.toggle("paperBulkStatus--loading", tone === "loading");
-
-  if (message && autoClear && tone !== "loading") {
-    paperBulkStatusTimer = setTimeout(() => {
-      status.textContent = "";
-      status.classList.remove(
-        "paperBulkStatus--success",
-        "paperBulkStatus--error",
-        "paperBulkStatus--loading"
-      );
-      paperBulkStatusTimer = null;
-    }, tone === "error" ? 8000 : 6000);
-  }
-}
-
 function updatePaperBulkActionState() {
   const rowChecks = $$("#papersTable .rowCheck");
   const selectedChecks = rowChecks.filter(check => check.checked);
   const selectedPapers = selectedChecks
     .map(check => renderedPapersById.get(String(check.getAttribute("data-id"))))
     .filter(Boolean);
-  const classifiableCount = selectedPapers.filter(paper => !isProtectedAutomaticDuplicate(paper)).length;
-  const automaticDuplicateCount = selectedPapers.length - classifiableCount;
+  const classifiableCount = selectedPapers.length;
   const activePhase = getActivePhaseForPaperBulkActions();
   const phaseLocked = !activePhase || isPhaseCompleted(activePhase);
 
@@ -2470,10 +2352,7 @@ function updatePaperBulkActionState() {
     } else if (!selectedChecks.length) {
       selectionCount.textContent = "0 selecionados";
     } else {
-      const duplicateSuffix = automaticDuplicateCount
-        ? ` · ${automaticDuplicateCount} duplicata${automaticDuplicateCount === 1 ? "" : "s"} protegida${automaticDuplicateCount === 1 ? "" : "s"}`
-        : "";
-      selectionCount.textContent = `${selectedChecks.length} selecionado${selectedChecks.length === 1 ? "" : "s"}${duplicateSuffix}`;
+      selectionCount.textContent = `${selectedChecks.length} selecionado${selectedChecks.length === 1 ? "" : "s"}`;
     }
   }
 
@@ -2492,8 +2371,6 @@ function updatePaperBulkActionState() {
       button.title = "A fase ativa está concluída. Crie a próxima fase ou reabra a atual antes de alterar a triagem.";
     } else if (!selectedChecks.length) {
       button.title = "Selecione pelo menos um artigo.";
-    } else if (!classifiableCount) {
-      button.title = "Duplicatas automáticas não podem ser reclassificadas manualmente.";
     } else if (!categories.length) {
       button.title = `A fase ativa não possui uma categoria vinculada ao resultado ${copy.result}.`;
     } else if (categories.length === 1) {
@@ -2622,7 +2499,7 @@ function findPaperIndexForBulk(collection, paper) {
   const normalizedUrl = normalizeUrl(paper?.url || "");
   if (!normalizedUrl) return -1;
   return list.findIndex(item => (
-    !isProtectedAutomaticDuplicate(item)
+    true
     && normalizeUrl(item?.url || "") === normalizedUrl
   ));
 }
@@ -2672,7 +2549,7 @@ function createBulkClassifiedPaper(previousPaper, category, phaseLabel, classifi
           const normalizedTag = String(tag || "").trim().toLowerCase();
           return normalizedTag
             && !categoryReferences.has(normalizedTag)
-            && normalizedTag !== "duplicado-automatico";
+;
         })
       : []),
     category.label,
@@ -2711,13 +2588,9 @@ function createBulkClassifiedPaper(previousPaper, category, phaseLabel, classifi
         inherited: inheritedInCurrentPhase,
         entryType,
         inheritedFromPhaseLabel,
-        duplicateOfId: null,
         automatic: false,
       },
     },
-    duplicateOfId: null,
-    autoDuplicate: false,
-    duplicateSequence: null,
     tags,
     highlightedColor: normalizeHexColor(category.color, category.color || ""),
     inherited: inheritedInCurrentPhase,
@@ -2749,11 +2622,7 @@ async function requestPaperBulkOutcome(outcome) {
     return;
   }
 
-  const classifiablePapers = selectedPapers.filter(paper => !isProtectedAutomaticDuplicate(paper));
-  if (!classifiablePapers.length) {
-    alert("Duplicatas automáticas não podem ser reclassificadas manualmente.");
-    return;
-  }
+  const classifiablePapers = selectedPapers;
 
   const categories = getActivePhaseCategoriesForOutcome(normalizedOutcome);
   const copy = PAPER_BULK_ACTION_COPY[normalizedOutcome] || PAPER_BULK_ACTION_COPY.pending;
@@ -2811,14 +2680,8 @@ async function applyPaperBulkCategory(category, requestedOutcome) {
     const classifiedAt = new Date().toISOString();
     const changedPapers = [];
     const processedIds = new Set();
-    let skippedAutomaticDuplicates = 0;
 
     for (const renderedPaper of selectedPapers) {
-      if (isProtectedAutomaticDuplicate(renderedPaper, activePhase.label)) {
-        skippedAutomaticDuplicates += 1;
-        continue;
-      }
-
       const scopedIndex = findPaperIndexForBulk(scopedPapers, renderedPaper);
       const consolidatedIndex = findPaperIndexForBulk(consolidatedPapers, renderedPaper);
       const scopedPaper = scopedIndex >= 0 ? scopedPapers[scopedIndex] : null;
@@ -2828,11 +2691,6 @@ async function applyPaperBulkCategory(category, requestedOutcome) {
         scopedPaper,
         renderedPaper
       );
-
-      if (isProtectedAutomaticDuplicate(previousPaper, activePhase.label)) {
-        skippedAutomaticDuplicates += 1;
-        continue;
-      }
 
       const nextPaper = createBulkClassifiedPaper(
         previousPaper,
@@ -2901,11 +2759,8 @@ async function applyPaperBulkCategory(category, requestedOutcome) {
     const copy = PAPER_BULK_ACTION_COPY[normalizedOutcome] || PAPER_BULK_ACTION_COPY.pending;
     const quantity = changedPapers.length;
     const resultText = quantity === 1 ? copy.singular : copy.plural;
-    const duplicateText = skippedAutomaticDuplicates
-      ? ` ${skippedAutomaticDuplicates} duplicata${skippedAutomaticDuplicates === 1 ? " automática foi mantida" : "s automáticas foram mantidas"} sem alteração.`
-      : "";
     setPaperBulkStatus(
-      `${quantity} artigo${quantity === 1 ? "" : "s"} ${resultText} com a categoria “${category.title || category.label}”.${duplicateText}`,
+      `${quantity} artigo${quantity === 1 ? "" : "s"} ${resultText} com a categoria “${category.title || category.label}”.`,
       "success"
     );
   } catch (error) {
@@ -3170,6 +3025,9 @@ function bindEvents() {
   const btnAddCategoryCriterion = document.getElementById("btnAddCategoryCriterion");
   const categoryTitleError = document.getElementById("categoryTitleError");
   const categoryRequiredNotice = document.getElementById("categoryRequiredNotice");
+  const defaultCategoriesSuggestion = document.getElementById("defaultCategoriesSuggestion");
+  const btnCreateDefaultCategories = document.getElementById("btnCreateDefaultCategories");
+  const defaultCategoriesError = document.getElementById("defaultCategoriesError");
   const articleTutorialPanel = document.getElementById("articleTutorialPanel");
   const btnCloseArticleTutorial = document.getElementById("btnCloseArticleTutorial");
   const highlightSearch = document.getElementById("highlightSearch");
@@ -3180,6 +3038,33 @@ function bindEvents() {
   const makeLabel = (value) => String(value || "")
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+  const DEFAULT_TUTORIAL_CATEGORIES = Object.freeze([
+    {
+      title: "Incluir",
+      label: "incluir",
+      description: "Artigos que atendem aos critérios da fase e devem seguir para a próxima etapa da pesquisa.",
+      color: "#22C55E",
+      metricType: "included",
+      criteria: [],
+    },
+    {
+      title: "Excluir",
+      label: "excluir",
+      description: "Artigos que não atendem aos critérios da fase e não devem seguir na progressão.",
+      color: "#EF4444",
+      metricType: "excluded",
+      criteria: [],
+    },
+    {
+      title: "Pendente",
+      label: "pendente",
+      description: "Artigos que ainda precisam ser analisados antes de uma decisão de inclusão ou exclusão.",
+      color: "#F59E0B",
+      metricType: "pending",
+      criteria: [],
+    },
+  ]);
 
   function renderCategoryCriteria() {
     if (!categoryCriteriaInput) return;
@@ -3292,6 +3177,11 @@ function bindEvents() {
     document.body.classList.toggle('categoryCreationRequired', categoryCreationRequired);
     categoryPanel?.classList.toggle('categoryCreationRequiredPanel', categoryCreationRequired);
     categoryRequiredNotice?.classList.toggle('hidden', !categoryCreationRequired);
+    defaultCategoriesSuggestion?.classList.toggle('hidden', !categoryCreationRequired);
+    if (defaultCategoriesError) {
+      defaultCategoriesError.textContent = "";
+      defaultCategoriesError.classList.remove("visible");
+    }
 
     if (categoryPanelTitle && !editingCategoryLabel) {
       categoryPanelTitle.textContent = categoryCreationRequired ? 'Crie a primeira categoria' : 'Nova categoria';
@@ -3416,6 +3306,80 @@ function bindEvents() {
     }
   }
 
+  async function createDefaultTutorialCategories() {
+    const project = state?.project;
+    if (!project?.id) return alert("Nenhum projeto ativo.");
+
+    if (defaultCategoriesError) {
+      defaultCategoriesError.textContent = "";
+      defaultCategoriesError.classList.remove("visible");
+    }
+
+    const originalText = btnCreateDefaultCategories?.textContent;
+    if (btnCreateDefaultCategories) {
+      btnCreateDefaultCategories.disabled = true;
+      btnCreateDefaultCategories.textContent = "Criando categorias...";
+    }
+
+    try {
+      const existingMetricTypes = new Set(
+        (project.categories || []).map(category => normalizeCategoryMetricType(
+          category?.metricType,
+          inferMetricTypeFromCategory(category || {})
+        ))
+      );
+
+      for (const categoryData of DEFAULT_TUTORIAL_CATEGORIES) {
+        if (existingMetricTypes.has(categoryData.metricType)) continue;
+        project.addCategory({ ...categoryData, criteria: [...categoryData.criteria] });
+        existingMetricTypes.add(categoryData.metricType);
+      }
+
+      // As categorias essenciais precisam estar disponíveis na fase ativa para
+      // que Incluir, Excluir e Pendente funcionem imediatamente na triagem.
+      const activePhase = project.getActivePhase?.()
+        || project.phases?.find(phase => phase.label === project.activePhaseLabel)
+        || null;
+      if (activePhase) {
+        const essentialLabels = (project.categories || [])
+          .filter(category => DEFAULT_TUTORIAL_CATEGORIES.some(item => (
+            normalizeCategoryMetricType(category?.metricType, inferMetricTypeFromCategory(category || {})) === item.metricType
+          )))
+          .map(category => category.label)
+          .filter(Boolean);
+        activePhase.categories = [...new Set([...(activePhase.categories || []), ...essentialLabels])];
+      }
+
+      await storage.saveProject(project);
+      await reloadCategoryProjectFromWebSocket(project.id);
+      loadCategories();
+      renderPhaseCategories?.([]);
+      renderAll();
+
+      try {
+        await updateScholarCategoryMenu();
+      } catch (menuError) {
+        console.warn('As categorias padrão foram salvas, mas o menu do Google Scholar não pôde ser atualizado imediatamente.', menuError);
+      }
+
+      applyCategoryRequirementUI(false);
+      closeCategoryPanel(true);
+      scheduleArticlesTutorial(TUTORIAL_TRANSITION_DELAY);
+    } catch (error) {
+      console.warn("default category creation failed", error);
+      if (defaultCategoriesError) {
+        defaultCategoriesError.textContent = error?.message || "Não foi possível criar as categorias padrão.";
+        defaultCategoriesError.classList.add("visible");
+      }
+    } finally {
+      if (btnCreateDefaultCategories) {
+        btnCreateDefaultCategories.disabled = false;
+        btnCreateDefaultCategories.textContent = originalText || "Criar categorias padrão";
+      }
+    }
+  }
+
+  btnCreateDefaultCategories?.addEventListener("click", createDefaultTutorialCategories);
   btnShowAddCategory?.addEventListener("click", () => openCategoryPanel());
   btnCloseCategory?.addEventListener("click", () => {
     if (categoryCreationRequired) {
@@ -3757,7 +3721,7 @@ function bindEvents() {
       ),
       removed: Math.max(
         Array.isArray(papers.removed) ? papers.removed.length : 0,
-        dynamic.excluded + dynamic.duplicate
+        dynamic.excluded
       ),
       utilization: phase.completed
         ? 100
