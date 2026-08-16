@@ -262,22 +262,19 @@ function getDynamicPhaseStats(phaseLabel) {
     if (!classification) continue;
 
     stats.total += 1;
-    const entryType = String(classification.entryType || "").toLowerCase();
-    if (
-      classification.inherited === true
-      || entryType === "inherited"
-      || classification.inheritedFromPhaseLabel
-    ) {
-      stats.inherited += 1;
-    }
+    const legacyInherited = isInheritedPhaseClassification(classification);
     const outcome = normalizeMetricType(classification.outcome ?? paper.status, "pending");
-    if (outcome === "included") stats.included += 1;
+
+    // Herdados são artigos aprovados na fase anterior. Eles ficam visíveis
+    // separadamente e nunca retornam para a fila de Pendentes da fase atual.
+    if (legacyInherited) stats.inherited += 1;
+    else if (outcome === "included") stats.included += 1;
     else if (outcome === "excluded") stats.excluded += 1;
     else if (outcome === "duplicate") stats.duplicate += 1;
     else stats.pending += 1;
   }
 
-  stats.processed = stats.included + stats.excluded + stats.duplicate;
+  stats.processed = stats.inherited + stats.included + stats.excluded + stats.duplicate;
   return stats;
 }
 
@@ -343,6 +340,9 @@ function getPhaseArchiveRecords(phase = {}) {
     ) {
       outcome = "duplicate";
     }
+    // Herdados não pertencem à fila de Pendentes. Mantemos outcome incluído
+    // apenas como decisão de origem, mas a apresentação usa o grupo Herdados.
+    if (inherited && outcome === "pending") outcome = "included";
     const classifiedAt = safeClassification.classifiedAt
       || fallback.classifiedAt
       || safePaper.updatedAt
@@ -408,7 +408,7 @@ function getPhaseArchiveRecords(phase = {}) {
   addBucket(phasePapers.selected, { outcome: "included" });
   addBucket(phasePapers.removed, { outcome: "excluded" });
   addBucket(phasePapers.new, { outcome: "pending" });
-  addBucket(phasePapers.inherited, { inherited: true, outcome: "pending" });
+  addBucket(phasePapers.inherited, { inherited: true, outcome: "included" });
 
   return [...records.values()].sort((first, second) => {
     const dateOrder = String(second.classifiedAt || "").localeCompare(String(first.classifiedAt || ""));
@@ -492,19 +492,7 @@ function createPhaseArchiveArticleItem(record) {
   categoryBadge.append(categoryMarker, categoryText);
   badges.appendChild(categoryBadge);
 
-  const originBadge = document.createElement("span");
-  originBadge.className = record?.inherited
-    ? "phaseArchiveOriginBadge phaseArchiveOriginBadge--inherited"
-    : "phaseArchiveOriginBadge";
-  const inheritedFromPhase = record?.inheritedFromPhaseLabel
-    ? (Array.isArray(state?.project?.phases) ? state.project.phases : [])
-        .find(phase => phase?.label === record.inheritedFromPhaseLabel)
-    : null;
-  const inheritedFromName = inheritedFromPhase?.title || record?.inheritedFromPhaseLabel || "";
-  originBadge.textContent = record?.inherited
-    ? `Herdado${inheritedFromName ? ` de ${inheritedFromName}` : ""}`
-    : "Novo na fase";
-  badges.appendChild(originBadge);
+
 
   article.append(heading, meta, badges);
   return article;
@@ -547,10 +535,10 @@ function createCompletedPhaseArchivePanel(phase = {}) {
   const phaseLabel = phase?.label || "";
   const panelId = getPhaseArchiveDomId(phaseLabel);
   const records = getPhaseArchiveRecords(phase);
-  const selected = records.filter(record => record.outcome === "included");
-  const removed = records.filter(record => record.outcome === "excluded" || record.outcome === "duplicate");
-  const inherited = records.filter(record => record.inherited);
-  const pending = records.filter(record => record.outcome === "pending");
+  const inherited = records.filter(record => record.inherited === true);
+  const selected = records.filter(record => !record.inherited && record.outcome === "included");
+  const removed = records.filter(record => !record.inherited && (record.outcome === "excluded" || record.outcome === "duplicate"));
+  const pending = records.filter(record => !record.inherited && record.outcome === "pending");
 
   const panel = document.createElement("section");
   panel.id = panelId;
@@ -563,30 +551,86 @@ function createCompletedPhaseArchivePanel(phase = {}) {
   header.className = "phaseArchiveHeader";
   const headerText = document.createElement("div");
   headerText.className = "phaseArchiveHeaderText";
+  const isActivePhase = state?.project?.activePhaseLabel === phaseLabel && !isPhaseCompleted(phase);
   const eyebrow = document.createElement("span");
   eyebrow.className = "phaseArchiveEyebrow";
-  eyebrow.textContent = "Histórico da fase concluída";
+  eyebrow.textContent = isActivePhase ? "Fase ativa • artigos em andamento" : "Histórico da fase concluída";
   const title = document.createElement("h3");
   title.textContent = phase.title || phaseLabel || "Fase";
   const description = document.createElement("p");
-  description.textContent = inherited.length
-    ? `${records.length} artigo${records.length === 1 ? "" : "s"} trabalhado${records.length === 1 ? "" : "s"}. Artigos herdados também aparecem no grupo do resultado final da triagem.`
+  description.textContent = isActivePhase
+    ? `${records.length} artigo${records.length === 1 ? "" : "s"} atualmente nesta fase. Pendentes são apenas os artigos novos adicionados durante esta fase.`
     : `${records.length} artigo${records.length === 1 ? "" : "s"} trabalhado${records.length === 1 ? "" : "s"} nesta fase.`;
   headerText.append(eyebrow, title, description);
 
   const closeButton = document.createElement("button");
   closeButton.type = "button";
   closeButton.className = "btn phaseArchiveClose";
-  closeButton.textContent = "Fechar lista";
+  closeButton.textContent = "Fechar";
+  closeButton.setAttribute("aria-label", "Fechar informações da fase");
   closeButton.addEventListener("click", () => toggleCompletedPhaseArchive(phaseLabel));
   header.append(headerText, closeButton);
+
+  const phaseInfo = document.createElement("div");
+  phaseInfo.className = "phaseArchivePhaseInfo";
+
+  const phaseDescription = String(phase?.description ?? phase?.desc ?? "").trim();
+  if (phaseDescription) {
+    const info = document.createElement("div");
+    info.className = "phaseArchiveInfoBlock";
+    const infoLabel = document.createElement("span");
+    infoLabel.textContent = "Descrição";
+    const infoValue = document.createElement("p");
+    infoValue.textContent = phaseDescription;
+    info.append(infoLabel, infoValue);
+    phaseInfo.appendChild(info);
+  }
+
+  const phaseCriteria = Array.isArray(phase?.criteria)
+    ? phase.criteria.filter(Boolean).join(" • ")
+    : String(phase?.criteria || "").trim();
+  if (phaseCriteria) {
+    const info = document.createElement("div");
+    info.className = "phaseArchiveInfoBlock";
+    const infoLabel = document.createElement("span");
+    infoLabel.textContent = "Critérios";
+    const infoValue = document.createElement("p");
+    infoValue.textContent = phaseCriteria;
+    info.append(infoLabel, infoValue);
+    phaseInfo.appendChild(info);
+  }
+
+  const phaseCategoryLabels = Array.isArray(phase?.categories) ? phase.categories.filter(Boolean) : [];
+  if (phaseCategoryLabels.length) {
+    const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
+    const info = document.createElement("div");
+    info.className = "phaseArchiveInfoBlock";
+    const infoLabel = document.createElement("span");
+    infoLabel.textContent = "Categorias";
+    const badges = document.createElement("div");
+    badges.className = "phaseArchivePhaseCategories";
+    phaseCategoryLabels.forEach(categoryLabel => {
+      const category = categories.find(item => item?.label === categoryLabel);
+      const badge = document.createElement("span");
+      badge.className = "phaseArchivePhaseCategory";
+      const dot = document.createElement("i");
+      const color = normalizeHexColor(category?.color || "");
+      if (color) dot.style.background = color;
+      const text = document.createElement("span");
+      text.textContent = category?.title || categoryLabel;
+      badge.append(dot, text);
+      badges.appendChild(badge);
+    });
+    info.append(infoLabel, badges);
+    phaseInfo.appendChild(info);
+  }
 
   const summary = document.createElement("div");
   summary.className = "phaseArchiveSummary";
   const summaryItems = [
+    ["Herdados", inherited.length, "inherited"],
     ["Selecionados", selected.length, "selected"],
     ["Removidos", removed.length, "removed"],
-    ["Herdados", inherited.length, "inherited"],
   ];
   if (pending.length) summaryItems.push(["Pendentes", pending.length, "pending"]);
   for (const [label, value, tone] of summaryItems) {
@@ -599,6 +643,12 @@ function createCompletedPhaseArchivePanel(phase = {}) {
   const groups = document.createElement("div");
   groups.className = "phaseArchiveGroups";
   groups.appendChild(createPhaseArchiveGroup({
+    title: "Herdados",
+    description: "Artigos selecionados na fase anterior e carregados para esta fase.",
+    tone: "inherited",
+    records: inherited,
+  }));
+  groups.appendChild(createPhaseArchiveGroup({
     title: "Selecionados",
     description: "Artigos incluídos ao final da triagem desta fase.",
     tone: "selected",
@@ -610,14 +660,6 @@ function createCompletedPhaseArchivePanel(phase = {}) {
     tone: "removed",
     records: removed,
   }));
-  if (inherited.length) {
-    groups.appendChild(createPhaseArchiveGroup({
-      title: "Herdados",
-      description: "Artigos recebidos da fase anterior e submetidos a uma nova triagem.",
-      tone: "inherited",
-      records: inherited,
-    }));
-  }
   if (pending.length) {
     groups.appendChild(createPhaseArchiveGroup({
       title: "Pendentes",
@@ -627,7 +669,10 @@ function createCompletedPhaseArchivePanel(phase = {}) {
     }));
   }
 
-  panel.append(header, summary, groups);
+  panel.setAttribute("tabindex", "-1");
+  panel.append(header);
+  if (phaseInfo.childElementCount) panel.appendChild(phaseInfo);
+  panel.append(summary, groups);
   return panel;
 }
 
@@ -636,10 +681,10 @@ function applyCompletedPhaseArchiveState({ scroll = false } = {}) {
   if (!phasesList) return;
 
   phasesList.querySelectorAll(".phaseCard[data-label]").forEach((card) => {
-    const isCompleted = card.classList.contains("phaseCard--completed");
-    const isOpen = isCompleted && card.dataset.label === expandedCompletedPhaseLabel;
+    const canViewArticles = card.classList.contains("phaseCard--completed") || card.classList.contains("active");
+    const isOpen = canViewArticles && card.dataset.label === expandedCompletedPhaseLabel;
     card.classList.toggle("phaseCard--archive-open", isOpen);
-    if (isCompleted) card.setAttribute("aria-expanded", String(isOpen));
+    if (canViewArticles) card.setAttribute("aria-expanded", String(isOpen));
     const toggleButton = card.querySelector('[data-action="archive"]');
     if (toggleButton) {
       toggleButton.setAttribute("aria-expanded", String(isOpen));
@@ -658,7 +703,7 @@ function applyCompletedPhaseArchiveState({ scroll = false } = {}) {
   if (scroll && expandedCompletedPhaseLabel) {
     const panel = [...phasesList.querySelectorAll(".phaseArchivePanel")]
       .find(item => item.dataset.phaseArchiveLabel === expandedCompletedPhaseLabel);
-    setTimeout(() => panel?.scrollIntoView?.({ behavior: "smooth", block: "nearest" }), 0);
+    setTimeout(() => panel?.focus?.({ preventScroll: true }), 0);
   }
 }
 
@@ -3374,6 +3419,7 @@ function bindEvents() {
   let phaseEditingCard = null; // card em edição
   let phaseEditingLabel = null; // label original da fase em edição
   let phaseLabelStatus = 'pending'; // 'pending' | 'done'
+  let phaseDraggingLabel = null;
 
   function getProjectPhases() {
     return Array.isArray(state?.project?.phases) ? state.project.phases : [];
@@ -3385,6 +3431,24 @@ function bindEvents() {
 
   function isLatestPhaseLabel(label) {
     return Boolean(label && getLatestPhase()?.label === label);
+  }
+
+  function getActivePhaseIndex() {
+    return getProjectPhases().findIndex(phase => phase?.label === state?.project?.activePhaseLabel);
+  }
+
+  function canDeletePhaseLabel(label) {
+    const phases = getProjectPhases();
+    const phaseIndex = phases.findIndex(phase => phase?.label === label);
+    const activeIndex = getActivePhaseIndex();
+    if (phaseIndex < 0 || phases.length <= 1) return false;
+    // O histórico e a fase ativa são protegidos. Apenas o planejamento futuro
+    // pode ser removido livremente.
+    return activeIndex >= 0 && phaseIndex > activeIndex;
+  }
+
+  function isReorderablePlannedPhase(label) {
+    return canDeletePhaseLabel(label);
   }
 
   function canCreateNextPhase() {
@@ -3532,13 +3596,19 @@ function bindEvents() {
   function getPhaseStats(phase = {}){
     const papers = phase.papers || {};
     const dynamic = getDynamicPhaseStats(phase.label);
+    const inheritedRefs = new Set(Array.isArray(papers.inherited) ? papers.inherited.map(String) : []);
+    const legacyNewCount = Array.isArray(papers.new)
+      ? papers.new.filter(reference => !inheritedRefs.has(String(reference))).length
+      : 0;
     return {
-      inherited: Math.max(
-        Array.isArray(papers.inherited) ? papers.inherited.length : 0,
-        dynamic.inherited
+      inherited: Math.max(inheritedRefs.size, dynamic.inherited),
+      pending: Math.max(legacyNewCount, dynamic.pending),
+      selected: Math.max(
+        Array.isArray(papers.selected)
+          ? papers.selected.filter(reference => !inheritedRefs.has(String(reference))).length
+          : 0,
+        dynamic.included
       ),
-      pending: Math.max(Array.isArray(papers.new) ? papers.new.length : 0, dynamic.pending),
-      selected: Math.max(Array.isArray(papers.selected) ? papers.selected.length : 0, dynamic.included),
       removed: Math.max(
         Array.isArray(papers.removed) ? papers.removed.length : 0,
         dynamic.excluded + dynamic.duplicate
@@ -3558,10 +3628,10 @@ function bindEvents() {
     const labelStatus = phaseData.labelStatus || (phaseData.completed ? 'done' : 'pending');
     const isCompleted = isPhaseCompleted({ ...phaseData, labelStatus });
     const stats = phaseData.stats || getPhaseStats(phaseData);
-    const isFirstPhase = phaseIndex === 0;
     const isLatestPhase = phaseIndex === phaseCount - 1;
     const isActivePhase = state?.project?.activePhaseLabel === label;
     const isPlannedPhase = !isCompleted && !isActivePhase;
+    const isDraggablePhase = isReorderablePlannedPhase(label);
     const archivePanelId = getPhaseArchiveDomId(label);
 
     const el = document.createElement('div');
@@ -3570,15 +3640,22 @@ function bindEvents() {
     if (isPlannedPhase) el.classList.add('phaseCard--locked');
     if (isCompleted) {
       el.classList.add('phaseCard--completed');
+      el.title = 'Clique para consultar os artigos trabalhados nesta fase.';
+    }
+    if (isCompleted || isActivePhase) {
       el.setAttribute('aria-controls', archivePanelId);
       el.setAttribute('aria-expanded', String(expandedCompletedPhaseLabel === label));
-      el.title = 'Clique para consultar os artigos trabalhados nesta fase.';
     }
     el.dataset.label = label;
     el.dataset.labelStatus = labelStatus;
     el.dataset.desc = desc;
     el.dataset.criteria = criteria;
     el.dataset.categories = JSON.stringify(categories);
+    el.draggable = isDraggablePhase;
+    if (isDraggablePhase) {
+      el.classList.add('phaseCard--draggable');
+      el.title = 'Arraste para reorganizar esta fase planejada.';
+    }
 
     const safeTitle = escapeHtml(title || '(sem título)');
     const s = stats || { inherited:0, pending:0, selected:0, removed:0, utilization:0 };
@@ -3589,14 +3666,15 @@ function bindEvents() {
         <div class="phaseHeadText">
           <div class="phaseTitle">${safeTitle}</div>
         </div>
+        ${isDraggablePhase ? '<span class="phaseDragHandle" title="Arraste para reposicionar" aria-label="Arraste para reposicionar">⋮⋮</span>' : ''}
       </div>
       <div class="phaseCardBody">
         <div class="papersSection">
           <div class="papersTitle">📊 Triagem de artigos</div>
           <div class="papersGrid">
-            ${isFirstPhase ? '' : `<div title="Artigos incluídos na fase anterior"><span class="muted">Herdados:</span> <strong>${s.inherited}</strong></div>`}
-            <div title="Artigos ainda classificados como pendentes"><span class="muted">Pendentes:</span> <strong>${s.pending}</strong></div>
-            <div title="Artigos classificados por categorias de inclusão"><span class="muted">Selecionados:</span> <strong>${s.selected}</strong></div>
+            <div title="Artigos selecionados na fase anterior e recebidos nesta fase"><span class="muted">Herdados:</span> <strong>${s.inherited}</strong></div>
+            <div title="Artigos novos desta fase ainda sem decisão"><span class="muted">Pendentes:</span> <strong>${s.pending}</strong></div>
+            <div title="Artigos selecionados durante esta fase"><span class="muted">Selecionados:</span> <strong>${s.selected}</strong></div>
             <div title="Artigos excluídos ou identificados como duplicados"><span class="muted">Removidos:</span> <strong>${s.removed}</strong></div>
           </div>
           <div class="papersUtil">Rótulo: <strong class="phaseLabelStatus ${isCompleted ? 'done' : 'pending'}">${isCompleted ? 'Concluído' : (isActivePhase ? 'Em análise' : 'Planejada')}</strong></div>
@@ -3605,11 +3683,67 @@ function bindEvents() {
       <div class="phaseCardFooter">
         <span class="activeLabel pill" aria-hidden="true">Ativo</span>
         <div class="phaseCardActions">
-          ${isCompleted ? `<button class="btn small phaseArchiveToggle" type="button" data-action="archive" aria-controls="${archivePanelId}" aria-expanded="${expandedCompletedPhaseLabel === label ? 'true' : 'false'}"><span>${expandedCompletedPhaseLabel === label ? 'Ocultar artigos' : 'Ver artigos'}</span><span class="phaseArchiveChevron" aria-hidden="true">⌄</span></button>` : ''}
+          ${(isCompleted || isActivePhase) ? `<button class="btn small phaseArchiveToggle" type="button" data-action="archive" aria-controls="${archivePanelId}" aria-expanded="${expandedCompletedPhaseLabel === label ? 'true' : 'false'}"><span>${expandedCompletedPhaseLabel === label ? 'Ocultar artigos' : 'Ver artigos'}</span><span class="phaseArchiveChevron" aria-hidden="true">⌄</span></button>` : ''}
           <button class="btn small" data-action="edit">Editar</button>
         </div>
       </div>
     `;
+
+    if (isDraggablePhase) {
+      el.addEventListener('dragstart', (ev) => {
+        ev.stopPropagation();
+        ev.dataTransfer.effectAllowed = 'move';
+        phaseDraggingLabel = label;
+        ev.dataTransfer.setData('text/plain', label);
+        el.classList.add('phaseCard--dragging');
+      });
+      el.addEventListener('dragend', () => {
+        phaseDraggingLabel = null;
+        el.classList.remove('phaseCard--dragging');
+        phasesList?.querySelectorAll('.phaseCard--drag-over').forEach(card => card.classList.remove('phaseCard--drag-over'));
+      });
+      el.addEventListener('dragover', (ev) => {
+        const draggedLabel = phaseDraggingLabel;
+        if (!draggedLabel || draggedLabel === label || !isReorderablePlannedPhase(draggedLabel)) return;
+        ev.preventDefault();
+        ev.dataTransfer.dropEffect = 'move';
+        el.classList.add('phaseCard--drag-over');
+      });
+      el.addEventListener('dragleave', () => el.classList.remove('phaseCard--drag-over'));
+      el.addEventListener('drop', async (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        el.classList.remove('phaseCard--drag-over');
+        const draggedLabel = phaseDraggingLabel || ev.dataTransfer?.getData('text/plain');
+        phaseDraggingLabel = null;
+        if (!draggedLabel || draggedLabel === label) return;
+
+        const phases = getProjectPhases();
+        const sourceIndex = phases.findIndex(phase => phase?.label === draggedLabel);
+        const targetIndex = phases.findIndex(phase => phase?.label === label);
+        const activeIndex = getActivePhaseIndex();
+        if (sourceIndex <= activeIndex || targetIndex <= activeIndex) {
+          alert('Somente fases planejadas depois da fase ativa podem ser reposicionadas.');
+          return;
+        }
+
+        const reordered = phases.slice();
+        const [moved] = reordered.splice(sourceIndex, 1);
+        reordered.splice(targetIndex, 0, moved);
+        const orderedLabels = reordered.map(phase => phase?.label).filter(Boolean);
+
+        try {
+          await storage.reorderPhases(state.project.id, orderedLabels);
+          await reloadActiveProjectAfterPhaseChange();
+          renderPhasesFromProject();
+          renderHeader();
+          await renderOverview();
+        } catch (error) {
+          console.warn('reorderPhases failed', error);
+          alert(error?.message || 'Não foi possível reorganizar as fases.');
+        }
+      });
+    }
 
     const btnArchive = el.querySelector('button[data-action="archive"]');
     if (btnArchive) btnArchive.addEventListener('click', (ev) => {
@@ -3655,7 +3789,7 @@ function bindEvents() {
 
       if (!isActivePhase) {
         const active = getProjectPhases().find(phase => phase?.label === state?.project?.activePhaseLabel);
-        alert(`Conclua a fase ativa "${active?.title || active?.label || 'atual'}" para liberar esta fase.`);
+        alert('Conclua a fase ativa para ativar a próxima.');
         return;
       }
 
@@ -3686,15 +3820,18 @@ function bindEvents() {
     if(!phasesList) return;
     phasesList.innerHTML = '';
     const phases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
-    const completedLabels = new Set(
-      phases.filter(phase => isPhaseCompleted(phase)).map(phase => phase?.label).filter(Boolean)
+    const viewablePhaseLabels = new Set(
+      phases
+        .filter(phase => isPhaseCompleted(phase) || phase?.label === state?.project?.activePhaseLabel)
+        .map(phase => phase?.label)
+        .filter(Boolean)
     );
-    if (expandedCompletedPhaseLabel && !completedLabels.has(expandedCompletedPhaseLabel)) {
+    if (expandedCompletedPhaseLabel && !viewablePhaseLabels.has(expandedCompletedPhaseLabel)) {
       expandedCompletedPhaseLabel = null;
     }
     phases.forEach((phase, index) => {
       phasesList.appendChild(createPhaseCard(phase, index, phases.length));
-      if (isPhaseCompleted(phase)) {
+      if (isPhaseCompleted(phase) || phase?.label === state?.project?.activePhaseLabel) {
         phasesList.appendChild(createCompletedPhaseArchivePanel(phase));
       }
     });
@@ -3764,14 +3901,12 @@ function bindEvents() {
         : (phaseCreationRequired ? 'Crie a primeira fase' : 'Nova fase');
     }
     if(btnDeletePhase){
-      const canDelete = isEditing
-        && getProjectPhases().length > 1
-        && isLatestPhaseLabel(phaseEditingLabel);
+      const canDelete = isEditing && canDeletePhaseLabel(phaseEditingLabel);
       btnDeletePhase.style.display = isEditing ? '' : 'none';
       btnDeletePhase.disabled = !canDelete;
       btnDeletePhase.title = canDelete
-        ? 'Excluir a fase atual e retornar à anterior'
-        : 'O projeto deve manter a primeira fase; fases anteriores só podem ser acessadas removendo a atual.';
+        ? 'Excluir esta fase planejada'
+        : 'A fase ativa e todas as fases anteriores fazem parte do histórico e não podem ser excluídas.';
     }
     setTimeout(() => phaseTitleInput?.focus(), 60);
   }
@@ -4067,11 +4202,11 @@ function bindEvents() {
       alert('O projeto deve manter pelo menos uma fase. A primeira fase não pode ser excluída.');
       return;
     }
-    if (!isLatestPhaseLabel(phaseEditingLabel)) {
-      alert('Somente a fase atual mais recente pode ser removida. Remova as fases posteriores primeiro.');
+    if (!canDeletePhaseLabel(phaseEditingLabel)) {
+      alert('Somente fases planejadas depois da fase ativa podem ser excluídas. A fase ativa e o histórico anterior ficam protegidos.');
       return;
     }
-    if(!confirm('Excluir a fase atual e retornar à fase anterior? Os artigos marcados exclusivamente nesta fase serão removidos do seu escopo.')) return;
+    if(!confirm('Excluir esta fase planejada? Esta ação remove a fase do planejamento, sem alterar a fase ativa nem as fases já concluídas.')) return;
     if(!state?.project?.id){
       alert('Abra um projeto antes de excluir fases.');
       return;

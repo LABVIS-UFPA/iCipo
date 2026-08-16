@@ -264,6 +264,84 @@ class NodeFsStrategy {
       || null;
   }
 
+  getPhaseIncludedCategory(project, phase, preferredLabel = null) {
+    if (!phase) return null;
+    const categoryMap = this.getCategoryMap(project);
+    const phaseCategoryLabels = Array.isArray(phase.categories) ? phase.categories : [];
+    const preferred = categoryMap.get(preferredLabel);
+    if (
+      preferred
+      && phaseCategoryLabels.includes(preferred.label)
+      && normalizeCategoryMetricType(preferred.metricType, 'pending') === 'included'
+    ) {
+      return preferred;
+    }
+
+    return phaseCategoryLabels
+      .map(label => categoryMap.get(label))
+      .find(category => normalizeCategoryMetricType(category?.metricType, 'pending') === 'included')
+      || null;
+  }
+
+  normalizeLegacyCarriedPaper(project, phase, sourcePaper = {}) {
+    if (!phase || !sourcePaper || typeof sourcePaper !== 'object') {
+      return { paper: sourcePaper, changed: false };
+    }
+    const classification = this.getPaperClassificationForPhase(sourcePaper, phase.label);
+    if (!classification) return { paper: sourcePaper, changed: false };
+
+    const entryType = String(classification.entryType || '').toLowerCase();
+    const legacyInherited = classification.inherited === true
+      || entryType === 'inherited'
+      || Boolean(classification.inheritedFromPhaseLabel);
+    const outcome = normalizeMetricType(classification.outcome ?? sourcePaper.status, 'pending');
+    if (!legacyInherited || outcome !== 'pending') return { paper: sourcePaper, changed: false };
+
+    const targetCategory = this.getPhaseIncludedCategory(project, phase);
+    const categoryLabels = new Set(
+      (Array.isArray(project.categories) ? project.categories : [])
+        .map(category => category?.label)
+        .filter(Boolean)
+    );
+    const nextClassification = {
+      ...classification,
+      phaseLabel: phase.label,
+      categoryLabel: targetCategory?.label || null,
+      outcome: 'included',
+      inherited: true,
+      entryType: 'inherited',
+      inheritedFromPhaseLabel: classification.inheritedFromPhaseLabel || phase.parentLabel || phase.parent || null,
+    };
+    const classifications = sourcePaper.classifications
+      && typeof sourcePaper.classifications === 'object'
+      && !Array.isArray(sourcePaper.classifications)
+      ? { ...sourcePaper.classifications, [phase.label]: nextClassification }
+      : { [phase.label]: nextClassification };
+    const currentPhaseLabel = sourcePaper.phaseLabel || sourcePaper.phaseId || sourcePaper.iterationId || null;
+    const baseTags = (Array.isArray(sourcePaper.tags) ? sourcePaper.tags : [])
+      .filter(tag => !categoryLabels.has(tag) && tag !== 'duplicado-automatico');
+    const nextTags = targetCategory?.label
+      ? [...new Set([...baseTags, targetCategory.label])]
+      : baseTags;
+
+    return {
+      changed: true,
+      paper: {
+        ...sourcePaper,
+        classifications,
+        ...(currentPhaseLabel === phase.label ? {
+          status: 'included',
+          categoryLabel: targetCategory?.label || null,
+          inherited: true,
+          entryType: 'inherited',
+          inheritedFromPhaseLabel: nextClassification.inheritedFromPhaseLabel,
+          tags: nextTags,
+          highlightedColor: targetCategory?.color || sourcePaper.highlightedColor || '',
+        } : {}),
+      },
+    };
+  }
+
   syncPhasePaperBuckets(projectID, project, { persist = false } = {}) {
     if (!project || !Array.isArray(project.phases)) return project;
 
@@ -280,8 +358,15 @@ class NodeFsStrategy {
       const removed = new Set();
       let classifiedRecords = 0;
 
-      for (const { paper } of paperEntries) {
+      for (const entry of paperEntries) {
+        let paper = entry.paper;
         if (paper?.visited === false) continue;
+        const migrated = this.normalizeLegacyCarriedPaper(project, phase, paper);
+        if (migrated.changed) {
+          paper = migrated.paper;
+          entry.paper = paper;
+          this.writeJson(entry.relPath, paper);
+        }
         const classification = this.getPaperClassificationForPhase(paper, phase.label);
         if (!classification) continue;
 
@@ -290,16 +375,16 @@ class NodeFsStrategy {
         if (!reference) continue;
 
         const entryType = String(classification.entryType || '').toLowerCase();
-        if (
-          classification.inherited === true
+        const legacyInherited = classification.inherited === true
           || entryType === 'inherited'
-          || classification.inheritedFromPhaseLabel
-        ) {
-          inherited.add(reference);
-        }
+          || Boolean(classification.inheritedFromPhaseLabel);
 
         const outcome = normalizeMetricType(classification.outcome ?? paper.status, 'pending');
-        if (outcome === 'included') selected.add(reference);
+        // Artigos que chegaram selecionados da fase anterior pertencem ao grupo
+        // Herdados. Eles nunca voltam para Pendentes e também não contam como
+        // Selecionados da fase atual até uma nova decisão nesta fase.
+        if (legacyInherited) inherited.add(reference);
+        else if (outcome === 'included') selected.add(reference);
         else if (outcome === 'excluded' || outcome === 'duplicate') removed.add(reference);
         else pending.add(reference);
       }
@@ -308,17 +393,24 @@ class NodeFsStrategy {
       // somente em Phase.papers. Assim que houver classificações persistidas,
       // os quatro grupos passam a ser integralmente derivados dos artigos.
       if (classifiedRecords === 0) {
+        const legacyInheritedRefs = new Set();
         for (const value of Array.isArray(existingPapers.inherited) ? existingPapers.inherited : []) {
           const reference = this.normalizePaperReference(value);
-          if (reference) inherited.add(reference);
+          if (reference) {
+            legacyInheritedRefs.add(reference);
+            inherited.add(reference);
+          }
         }
         for (const value of Array.isArray(existingPapers.new) ? existingPapers.new : []) {
           const reference = this.normalizePaperReference(value);
-          if (reference) pending.add(reference);
+          if (reference && !legacyInheritedRefs.has(reference)) pending.add(reference);
         }
         for (const value of Array.isArray(existingPapers.selected) ? existingPapers.selected : []) {
           const reference = this.normalizePaperReference(value);
-          if (reference) selected.add(reference);
+          // Em dados legados o mesmo artigo pode ter sido salvo como Herdado e
+          // Selecionado. Herdado sempre prevalece: Selecionados representa
+          // exclusivamente decisões realizadas nesta fase.
+          if (reference && !legacyInheritedRefs.has(reference)) selected.add(reference);
         }
         for (const value of Array.isArray(existingPapers.removed) ? existingPapers.removed : []) {
           const reference = this.normalizePaperReference(value);
@@ -337,11 +429,36 @@ class NodeFsStrategy {
         ...inherited,
       ]);
 
+      const scopedPath = this.getPhaseScopedStoragePath(projectID, phase.label);
+      const scopedStorage = scopedPath ? (this.readJson(scopedPath) || {}) : {};
+      if (Array.isArray(scopedStorage.svat_papers)) {
+        let scopedChanged = false;
+        scopedStorage.svat_papers = scopedStorage.svat_papers.map(scopedPaper => {
+          const migrated = this.normalizeLegacyCarriedPaper(project, phase, scopedPaper);
+          if (migrated.changed) scopedChanged = true;
+          return migrated.paper;
+        });
+        if (scopedChanged) {
+          const nextHighlights = { ...(scopedStorage.highlightedLinks || {}) };
+          for (const scopedPaper of scopedStorage.svat_papers) {
+            if (scopedPaper?.url && scopedPaper?.highlightedColor) {
+              nextHighlights[scopedPaper.url] = scopedPaper.highlightedColor;
+            }
+          }
+          scopedStorage.highlightedLinks = nextHighlights;
+          this.writeJson(scopedPath, scopedStorage);
+        }
+      }
+
+      // Garantia final: um artigo herdado nunca pode ser contabilizado também
+      // como selecionado na mesma fase.
+      for (const reference of inherited) selected.delete(reference);
+
       phase.papers = {
         inheritedAccumulated: [...accumulatedInherited],
+        // Artigos selecionados na fase anterior e carregados para esta fase.
         inherited: [...inherited],
-        // "new" é a fila da triagem atual: artigos novos ou herdados que ainda
-        // estão classificados por uma categoria de impacto Pendente.
+        // "new" contém somente entradas realmente novas e ainda sem decisão.
         new: [...pending],
         selected: [...selected],
         // Excluídos e duplicatas automáticas deixam a fila e são removidos da
@@ -401,16 +518,9 @@ class NodeFsStrategy {
     const inheritedPapers = previousPhase
       ? this.collectIncludedPapersForPhase(projectID, previousPhase.label)
       : [];
-    const pendingCategory = this.getPhasePendingCategory(project, nextPhase);
-
-    if (inheritedPapers.length && !pendingCategory) {
-      return {
-        status: 'error',
-        message: 'Selecione nesta fase pelo menos uma categoria com impacto "Pendente" para receber os artigos herdados.',
-      };
-    }
-
-    nextPhase.inheritanceCategoryLabel = pendingCategory?.label || null;
+    // Artigos selecionados que avançam não voltam para Pendente.
+    // Uma categoria de inclusão da próxima fase é usada quando disponível.
+    nextPhase.inheritanceCategoryLabel = null;
     const inheritedAt = new Date().toISOString();
     const categoryLabels = new Set(
       (Array.isArray(project.categories) ? project.categories : [])
@@ -432,10 +542,16 @@ class NodeFsStrategy {
         && !Array.isArray(sourcePaper.classifications)
         ? { ...sourcePaper.classifications }
         : {};
+      const sourceClassification = this.getPaperClassificationForPhase(sourcePaper, previousPhase?.label);
+      const targetCategory = this.getPhaseIncludedCategory(
+        project,
+        nextPhase,
+        sourceClassification?.categoryLabel || sourcePaper.categoryLabel || null
+      );
       classifications[nextPhase.label] = {
         phaseLabel: nextPhase.label,
-        categoryLabel: pendingCategory?.label || null,
-        outcome: 'pending',
+        categoryLabel: targetCategory?.label || null,
+        outcome: 'included',
         classifiedAt: inheritedAt,
         inherited: true,
         entryType: 'inherited',
@@ -444,26 +560,26 @@ class NodeFsStrategy {
 
       const baseTags = (Array.isArray(sourcePaper.tags) ? sourcePaper.tags : [])
         .filter(tag => !categoryLabels.has(tag) && tag !== 'duplicado-automatico');
-      const tags = pendingCategory?.label
-        ? [...new Set([...baseTags, pendingCategory.label])]
+      const tags = targetCategory?.label
+        ? [...new Set([...baseTags, targetCategory.label])]
         : baseTags;
       const history = Array.isArray(sourcePaper.history) ? [...sourcePaper.history] : [];
       history.push({
         ts: inheritedAt,
-        action: 'inherit',
+        action: 'carry_forward',
         details: {
           fromPhaseLabel: previousPhase?.label || null,
           toPhaseLabel: nextPhase.label,
-          category: pendingCategory?.label || null,
-          metricType: 'pending',
+          category: targetCategory?.label || null,
+          metricType: 'included',
         },
       });
 
       const inheritedPaper = {
         ...sourcePaper,
         id: paperId,
-        status: 'pending',
-        categoryLabel: pendingCategory?.label || null,
+        status: 'included',
+        categoryLabel: targetCategory?.label || null,
         phaseLabel: nextPhase.label,
         iterationId: nextPhase.label,
         classifications,
@@ -483,8 +599,8 @@ class NodeFsStrategy {
       this.writeJson(relPath, inheritedPaper);
       scopedPapers.push(inheritedPaper);
       inheritedReferences.push(String(paperId));
-      if (inheritedPaper.url && pendingCategory?.color) {
-        highlightedLinks[inheritedPaper.url] = pendingCategory.color;
+      if (inheritedPaper.url && targetCategory?.color) {
+        highlightedLinks[inheritedPaper.url] = targetCategory.color;
       }
     }
 
@@ -522,7 +638,7 @@ class NodeFsStrategy {
         ].filter(Boolean)),
       ],
       inherited: inheritedReferences,
-      new: inheritedReferences,
+      new: [],
       removed: [],
       selected: [],
     };
@@ -530,7 +646,7 @@ class NodeFsStrategy {
     return {
       status: 'ok',
       inheritedCount: inheritedReferences.length,
-      pendingCategoryLabel: pendingCategory?.label || null,
+      pendingCategoryLabel: null,
     };
   }
 
@@ -1267,7 +1383,7 @@ class NodeFsStrategy {
       status: 'ok',
       message: isCompletingNow
         ? (nextPhase
-          ? `Fase concluída. A próxima fase foi ativada com ${inheritanceResult?.inheritedCount || 0} artigo(s) herdado(s).`
+          ? `Fase concluída. A próxima fase foi ativada com ${inheritanceResult?.inheritedCount || 0} artigo(s) selecionado(s) transferido(s).`
           : 'Fase concluída. O plano de pesquisa não possui outra fase para ativar.')
         : 'Fase atualizada com sucesso.',
       data: {
@@ -1294,22 +1410,17 @@ class NodeFsStrategy {
 
     const phaseIndex = project.phases.findIndex((p) => p.label === phaseLabel);
     if (phaseIndex === -1) return { status: 'error', message: 'Fase não encontrada.' };
-    if (phaseIndex !== project.phases.length - 1) {
+
+    const activePhaseIndex = project.phases.findIndex((p) => p.label === project.activePhaseLabel);
+    if (activePhaseIndex === -1 || phaseIndex <= activePhaseIndex) {
       return {
         status: 'error',
-        message: 'Somente a fase atual mais recente pode ser removida. Remova as fases posteriores primeiro.'
+        message: 'Somente fases planejadas depois da fase ativa podem ser excluídas. A fase ativa e o histórico anterior estão protegidos.'
       };
     }
 
-    const deletingActivePhase = project.activePhaseLabel === phaseLabel;
-    project.phases.pop();
+    project.phases.splice(phaseIndex, 1);
     const previousPhase = project.phases.at(-1) || null;
-    if (deletingActivePhase && previousPhase) {
-      // Mantém o comportamento de rollback somente quando a própria fase ativa
-      // é removida. Excluir uma fase futura planejada não altera a progressão.
-      previousPhase.completed = false;
-      project.activePhaseLabel = previousPhase.label;
-    }
 
     const phaseDir = this.path.join(this.baseDir, projectID, 'phases', phaseLabel);
     if (this.fs.existsSync(phaseDir)) {
@@ -1324,6 +1435,42 @@ class NodeFsStrategy {
 
     console.log('✅ Fase removida do project.json:', phaseLabel);
     return { status: 'ok', message: 'Fase removida com sucesso.', data: { activePhaseLabel: project.activePhaseLabel || null } };
+  }
+
+  async reorderPhases(projectID, orderedLabels = []) {
+    const relPath = this.path.join(projectID, 'project.json');
+    const rawProject = this.readJson(relPath);
+    if (!rawProject) return { status: 'error', message: 'Projeto não encontrado.' };
+
+    const project = this.normalizeProjectPhaseCategoryModel(rawProject);
+    const phases = Array.isArray(project.phases) ? project.phases : [];
+    const activeIndex = phases.findIndex((phase) => phase?.label === project.activePhaseLabel);
+    if (activeIndex < 0) return { status: 'error', message: 'Fase ativa não encontrada.' };
+
+    const currentLabels = phases.map((phase) => phase?.label).filter(Boolean);
+    if (!Array.isArray(orderedLabels) || orderedLabels.length !== currentLabels.length) {
+      return { status: 'error', message: 'Ordem de fases inválida.' };
+    }
+    const unique = new Set(orderedLabels);
+    if (unique.size !== currentLabels.length || currentLabels.some((label) => !unique.has(label))) {
+      return { status: 'error', message: 'A nova ordem deve conter exatamente as fases existentes.' };
+    }
+
+    // A fase ativa e todo o histórico anterior são imutáveis. Apenas o trecho
+    // planejado após a fase ativa pode mudar de posição.
+    const protectedPrefix = currentLabels.slice(0, activeIndex + 1);
+    const requestedPrefix = orderedLabels.slice(0, activeIndex + 1);
+    if (protectedPrefix.some((label, index) => requestedPrefix[index] !== label)) {
+      return { status: 'error', message: 'Fases concluídas e a fase ativa não podem ser reposicionadas.' };
+    }
+
+    const byLabel = new Map(phases.map((phase) => [phase.label, phase]));
+    project.phases = orderedLabels.map((label) => byLabel.get(label));
+    project.updatedAt = new Date().toISOString();
+    this.writeJson(relPath, project);
+    if (this.activeProjectID === projectID) this.activeProjectData = project;
+
+    return { status: 'ok', message: 'Ordem das fases atualizada.', data: { phases: project.phases } };
   }
 
   async setActivePhase(projectID, phaseLabel) {
@@ -1605,6 +1752,14 @@ class WebSocketStrategy {
     await this.notifyContextMenuRefresh();
     await this.notifyScholarRefresh();
     await this.notifyDataRefresh('phase_deleted', { projectID, phaseLabel });
+    return result;
+  }
+
+  async reorderPhases(projectID, orderedLabels) {
+    const result = await this.send('reorder_phases', { projectID, orderedLabels });
+    await this.notifyContextMenuRefresh();
+    await this.notifyScholarRefresh();
+    await this.notifyDataRefresh('phases_reordered', { projectID });
     return result;
   }
 
@@ -1959,6 +2114,11 @@ class StorageService {
   async deletePhase(projectID, phaseLabel) {
     if (!this.initialized) await this.init();
     return this.strategy.deletePhase(projectID, phaseLabel);
+  }
+
+  async reorderPhases(projectID, orderedLabels) {
+    if (!this.initialized) await this.init();
+    return this.strategy.reorderPhases(projectID, orderedLabels);
   }
 
   async setActivePhase(projectID, phaseLabel) {
