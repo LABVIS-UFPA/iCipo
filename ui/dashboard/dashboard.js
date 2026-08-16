@@ -2517,6 +2517,56 @@ function getActivePhaseForPaperBulkActions() {
     || null;
 }
 
+function getActivePhaseCategoriesForOutcome(outcome) {
+  const activePhase = getActivePhaseForPaperBulkActions();
+  if (!activePhase) return [];
+
+  const normalizedOutcome = normalizeCategoryMetricType(outcome, "pending");
+  const allowedLabels = new Set(
+    (Array.isArray(activePhase.categories) ? activePhase.categories : []).filter(Boolean)
+  );
+
+  return (Array.isArray(state?.project?.categories) ? state.project.categories : [])
+    .filter(category => allowedLabels.has(category?.label))
+    .filter(category => (
+      normalizeCategoryMetricType(
+        category?.metricType,
+        inferMetricTypeFromCategory(category)
+      ) === normalizedOutcome
+    ));
+}
+
+function getSelectedRenderedPapers() {
+  return selectedPaperIds()
+    .map(id => renderedPapersById.get(String(id)))
+    .filter(Boolean);
+}
+
+function setPaperBulkStatus(message = "", tone = "", autoClear = true) {
+  clearTimeout(paperBulkStatusTimer);
+  paperBulkStatusTimer = null;
+
+  const status = document.getElementById("paperBulkStatus");
+  if (!status) return;
+
+  status.textContent = message;
+  status.classList.toggle("paperBulkStatus--success", tone === "success");
+  status.classList.toggle("paperBulkStatus--error", tone === "error");
+  status.classList.toggle("paperBulkStatus--loading", tone === "loading");
+
+  if (message && autoClear && tone !== "loading") {
+    paperBulkStatusTimer = setTimeout(() => {
+      status.textContent = "";
+      status.classList.remove(
+        "paperBulkStatus--success",
+        "paperBulkStatus--error",
+        "paperBulkStatus--loading"
+      );
+      paperBulkStatusTimer = null;
+    }, tone === "error" ? 8000 : 6000);
+  }
+}
+
 function updatePaperBulkActionState() {
   const rowChecks = $$("#papersTable .rowCheck");
   const selectedChecks = rowChecks.filter(check => check.checked);
