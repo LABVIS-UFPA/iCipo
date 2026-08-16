@@ -19,6 +19,7 @@ let tutorialTransitionTimer = null;
 let overviewResizeTimer = null;
 let paperMetricFilter = "all";
 let paperCategoryFilter = "all";
+let paperPhaseFilter = "active";
 let renderedPapersById = new Map();
 let paperBulkBusy = false;
 let paperBulkPendingOutcome = null;
@@ -1785,6 +1786,83 @@ function formatOverviewDate(value, includeTime = false) {
     : date.toLocaleDateString("pt-BR");
 }
 
+
+
+function getPaperCategoryForPhase(paper, phaseLabel, highlightedLinks = {}) {
+  if (!phaseLabel || phaseLabel === "all") return getPaperCategory(paper, highlightedLinks);
+  const classification = getPaperClassificationForPhase(paper, phaseLabel);
+  if (!classification) return null;
+  const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
+  const wanted = String(classification.categoryLabel || "").trim().toLowerCase();
+  if (wanted) {
+    const matched = categories.find(category => {
+      const label = String(category?.label || "").trim().toLowerCase();
+      const title = String(category?.title || "").trim().toLowerCase();
+      return wanted === label || wanted === title;
+    });
+    if (matched) return matched;
+  }
+  return getPaperCategory(paper, highlightedLinks);
+}
+
+function getPaperMetricTypeForPhase(paper, phaseLabel, highlightedLinks = {}) {
+  if (!phaseLabel || phaseLabel === "all") return getPaperMetricType(paper, highlightedLinks);
+  const classification = getPaperClassificationForPhase(paper, phaseLabel);
+  if (!classification) return "pending";
+  const category = getPaperCategoryForPhase(paper, phaseLabel, highlightedLinks);
+  if (category) return normalizeMetricType(category.metricType, inferMetricTypeFromCategory(category));
+  return normalizeMetricType(classification.outcome ?? paper?.status, "pending");
+}
+
+function getPaperPhaseLabels(paper) {
+  const labels = new Set();
+  const classifications = paper?.classifications;
+  if (classifications && typeof classifications === "object" && !Array.isArray(classifications)) {
+    Object.keys(classifications).filter(Boolean).forEach(label => labels.add(label));
+  }
+  [paper?.phaseLabel, paper?.phaseId, paper?.iterationId].filter(Boolean).forEach(label => labels.add(label));
+  return [...labels];
+}
+
+function paperBelongsToPhase(paper, phaseLabel) {
+  if (!phaseLabel || phaseLabel === "all") return true;
+  return Boolean(getPaperClassificationForPhase(paper, phaseLabel));
+}
+
+function getPhaseTitleByLabel(label) {
+  const phases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
+  const phase = phases.find(item => item?.label === label || item?.id === label || item?.title === label);
+  return phase?.title || phase?.label || label || "—";
+}
+
+function getPaperPhaseDisplay(paper) {
+  const labels = getPaperPhaseLabels(paper);
+  if (!labels.length) return getPaperPhaseTitle(paper);
+  return labels.map(getPhaseTitleByLabel).join(" · ");
+}
+
+function populatePaperFilterOptions() {
+  const phaseSelect = $("#filterPaperPhase");
+  const categorySelect = $("#filterPaperCategory");
+  if (phaseSelect) {
+    const currentValue = phaseSelect.value || "all";
+    const phases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
+    phaseSelect.innerHTML = '<option value="all">Todas as fases</option>' + phases.map(phase =>
+      `<option value="${escapeHtml(phase.label || phase.id || phase.title)}">${escapeHtml(phase.title || phase.label || "Fase")}</option>`
+    ).join("");
+    phaseSelect.value = [...phaseSelect.options].some(option => option.value === currentValue) ? currentValue : "all";
+  }
+  if (categorySelect) {
+    const currentValue = categorySelect.value || paperCategoryFilter || "all";
+    const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
+    categorySelect.innerHTML = '<option value="all">Todas as categorias</option><option value="uncategorized">Sem categoria</option>' + categories.map(category => {
+      const key = getPaperCategoryKey(category);
+      return `<option value="${escapeHtml(key)}">${escapeHtml(category.title || category.label || key)}</option>`;
+    }).join("");
+    categorySelect.value = [...categorySelect.options].some(option => option.value === currentValue) ? currentValue : "all";
+  }
+}
+
 function getCategoryFilterLabel(categoryKey) {
   if (!categoryKey || categoryKey === "all") return "";
   if (categoryKey === "uncategorized") return "Sem categoria";
@@ -1798,6 +1876,12 @@ function updatePaperFilterBar() {
   if (!bar || !text) return;
 
   const descriptions = [];
+  if (paperPhaseFilter === "active") {
+    const activeLabel = state?.project?.activePhaseLabel;
+    descriptions.push(`fase: ${getPhaseTitleByLabel(activeLabel)} (atual)`);
+  } else if (paperPhaseFilter && paperPhaseFilter !== "all") {
+    descriptions.push(`fase: ${getPhaseTitleByLabel(paperPhaseFilter)}`);
+  }
   if (paperMetricFilter !== "all") descriptions.push(`situação: ${getPaperMetricLabel(paperMetricFilter).toLowerCase()}`);
   const categoryLabel = getCategoryFilterLabel(paperCategoryFilter);
   if (categoryLabel) descriptions.push(`categoria: ${categoryLabel}`);
@@ -1814,6 +1898,10 @@ function clearPaperFilters({ clearSearch = false, render = true } = {}) {
     const searchInput = $("#search");
     if (searchInput) searchInput.value = "";
   }
+  const metricSelect = $("#filterPaperMetric");
+  const categorySelect = $("#filterPaperCategory");
+  if (metricSelect) metricSelect.value = "all";
+  if (categorySelect) categorySelect.value = "all";
   updatePaperFilterBar();
   if (render) renderPapersTable();
 }
@@ -1824,6 +1912,10 @@ function openPapersFromOverview(categoryKey = "all", year = "", metricType = "al
   setActiveView("papers");
   const searchInput = $("#search");
   if (searchInput) searchInput.value = year === "Sem ano" ? "" : String(year || "");
+  const metricSelect = $("#filterPaperMetric");
+  const categorySelect = $("#filterPaperCategory");
+  if (metricSelect) metricSelect.value = paperMetricFilter;
+  if (categorySelect) categorySelect.value = paperCategoryFilter;
   updatePaperFilterBar();
   renderPapersTable();
 }
@@ -2059,19 +2151,23 @@ function showHistory(paperId) {
 }
 
 function getFilters() {
+  const activePhaseLabel = state?.project?.activePhaseLabel || "";
   return {
-    q: normalizeStr($("#search").value),
+    q: normalizeStr($("#search")?.value || ""),
     metric: paperMetricFilter,
     category: paperCategoryFilter,
+    phase: paperPhaseFilter === "active" ? activePhaseLabel : paperPhaseFilter,
   };
 }
 
 function paperMatchesFilters(paper, filters, highlightedLinks = {}) {
-  const category = getPaperCategory(paper, highlightedLinks);
+  const category = getPaperCategoryForPhase(paper, filters.phase, highlightedLinks);
 
   if (filters.metric && filters.metric !== "all") {
-    if (getPaperMetricType(paper, highlightedLinks) !== filters.metric) return false;
+    if (getPaperMetricTypeForPhase(paper, filters.phase, highlightedLinks) !== filters.metric) return false;
   }
+
+  if (filters.phase && filters.phase !== "all" && !paperBelongsToPhase(paper, filters.phase)) return false;
 
   if (filters.category && filters.category !== "all") {
     const categoryKey = getPaperCategoryKey(category) || "uncategorized";
@@ -2080,8 +2176,9 @@ function paperMatchesFilters(paper, filters, highlightedLinks = {}) {
 
   if (!filters.q) return true;
   const categoryText = category ? `${category.title || ""} ${category.label || ""}` : "sem categoria";
-  const metricText = getPaperMetricLabel(getPaperMetricType(paper, highlightedLinks));
-  const hay = normalizeStr(`${paper.title || ""} ${paper.authorsRaw || ""} ${(paper.tags || []).join(" ")} ${paper.year || ""} ${paper.url || ""} ${categoryText} ${metricText}`);
+  const metricText = getPaperMetricLabel(getPaperMetricTypeForPhase(paper, filters.phase, highlightedLinks));
+  const phaseText = getPaperPhaseDisplay(paper);
+  const hay = normalizeStr(`${paper.title || ""} ${paper.authorsRaw || ""} ${(paper.tags || []).join(" ")} ${paper.year || ""} ${paper.url || ""} ${categoryText} ${metricText} ${phaseText}`);
   return hay.includes(filters.q);
 }
 
@@ -2089,6 +2186,7 @@ async function renderPapersTable() {
   // token for this render; only the latest token may write to the DOM
   const myToken = ++renderToken;
 
+  populatePaperFilterOptions();
   const f = getFilters();
 
   // fetch highlighted links and svat_papers
@@ -2105,9 +2203,8 @@ async function renderPapersTable() {
   // Early cancellation: if a newer render started, bail out
   if (myToken !== renderToken) return;
 
-  // A aba Artigos é estritamente vinculada à fase ativa. Os registros
-  // consolidados servem apenas para completar metadados dos itens que já estão
-  // presentes no storage da fase; nunca introduzem artigos de outras fases.
+  // A aba Artigos parte do conjunto consolidado do projeto. A fase atual é
+  // apenas o filtro inicial e pode ser desmarcada para consultar todo o acervo.
   const globalPapers = Array.isArray(state?.papers) ? state.papers : [];
   const globalById = new Map(
     globalPapers
@@ -2120,6 +2217,11 @@ async function renderPapersTable() {
       .map(paper => [normalizeUrl(paper.url), paper])
   );
   const byKey = new Map();
+  globalPapers.forEach((paper, index) => {
+    if (!paper || typeof paper !== "object") return;
+    const key = getOverviewPaperKey(paper, index);
+    byKey.set(key, mergeOverviewPaper(byKey.get(key), paper));
+  });
   svat.forEach((scopedPaper, index) => {
     if (!scopedPaper || typeof scopedPaper !== "object") return;
     const consolidated = globalById.get(String(scopedPaper.id))
@@ -2162,8 +2264,8 @@ async function renderPapersTable() {
   for (const p of rows) {
     const tags = Array.isArray(p.tags) ? p.tags.join(";") : "";
     // Use a light tint from the selected category so the title stays readable.
-    const category = getPaperCategory(p, hl);
-    const metricType = getPaperMetricType(p, hl);
+    const category = getPaperCategoryForPhase(p, f.phase, hl);
+    const metricType = getPaperMetricTypeForPhase(p, f.phase, hl);
     const categoryDisplayLabel = p?.autoDuplicate
       ? "Duplicado automático"
       : (category?.title || category?.label || "Sem categoria");
@@ -2176,9 +2278,14 @@ async function renderPapersTable() {
       ? `<span class="paperCategoryMarker" style="background:${escapeHtml(categoryColor)}" aria-hidden="true"></span>`
       : "";
 
+    const activePhaseLabel = state?.project?.activePhaseLabel || "";
+    const belongsToActivePhase = !activePhaseLabel || paperBelongsToPhase(p, activePhaseLabel);
+    const rowCheckDisabled = belongsToActivePhase ? "" : 'disabled title="Artigo de outra fase: disponível apenas para consulta"';
+    const phaseDisplay = getPaperPhaseDisplay(p);
+
     rowsHtml += `
       <tr class="${rowClass}" ${rowStyle}>
-        <td><input type="checkbox" class="rowCheck" data-id="${escapeHtml(p.id)}" /></td>
+        <td><input type="checkbox" class="rowCheck" data-id="${escapeHtml(p.id)}" ${rowCheckDisabled} /></td>
         <td>
           <div class="paperTitleWrap">
             <button class="linkBtn" data-show-history="${escapeHtml(p.id)}" title="Ver histórico">${escapeHtml(p.title || "(sem título)")}</button>
@@ -2186,6 +2293,7 @@ async function renderPapersTable() {
           <div style="color:#666;font-size:11px;margin-top:4px">${escapeHtml(p.authorsRaw || "")} • ${escapeHtml(fmtDate(p.createdAt))}</div>
         </td>
         <td><input class="cellInput" data-field="year" data-id="${escapeHtml(p.id)}" value="${escapeHtml(p.year ?? "")}" placeholder="—" style="width:64px" /></td>
+        <td><span class="paperPhaseBadge" title="${escapeHtml(phaseDisplay)}">${escapeHtml(phaseDisplay)}</span></td>
         <td>
           <span class="paperCategoryCell">
             <span class="categoryBadge">
@@ -2983,11 +3091,49 @@ function bindEvents() {
     if (e.target === modal) modal.classList.add("hidden");
   });
 
-  // Pesquisa de artigos
+  // Pesquisa e filtros de artigos
   $("#search")?.addEventListener("input", renderPapersTable);
+  $("#filterCurrentPhase")?.addEventListener("change", (event) => {
+    const checked = Boolean(event.target.checked);
+    paperPhaseFilter = checked ? "active" : ($("#filterPaperPhase")?.value || "all");
+    const phaseSelect = $("#filterPaperPhase");
+    if (phaseSelect) phaseSelect.disabled = checked;
+    updatePaperFilterBar();
+    renderPapersTable();
+  });
+  $("#filterPaperPhase")?.addEventListener("change", (event) => {
+    if (!$("#filterCurrentPhase")?.checked) paperPhaseFilter = event.target.value || "all";
+    updatePaperFilterBar();
+    renderPapersTable();
+  });
+  $("#filterPaperMetric")?.addEventListener("change", (event) => {
+    paperMetricFilter = event.target.value || "all";
+    updatePaperFilterBar();
+    renderPapersTable();
+  });
+  $("#filterPaperCategory")?.addEventListener("change", (event) => {
+    paperCategoryFilter = event.target.value || "all";
+    updatePaperFilterBar();
+    renderPapersTable();
+  });
+  $("#btnResetPaperViewFilters")?.addEventListener("click", () => {
+    paperPhaseFilter = "all";
+    paperMetricFilter = "all";
+    paperCategoryFilter = "all";
+    const currentToggle = $("#filterCurrentPhase");
+    const phaseSelect = $("#filterPaperPhase");
+    const metricSelect = $("#filterPaperMetric");
+    const categorySelect = $("#filterPaperCategory");
+    if (currentToggle) currentToggle.checked = false;
+    if (phaseSelect) { phaseSelect.disabled = false; phaseSelect.value = "all"; }
+    if (metricSelect) metricSelect.value = "all";
+    if (categorySelect) categorySelect.value = "all";
+    updatePaperFilterBar();
+    renderPapersTable();
+  });
   $("#checkAll")?.addEventListener("change", (e) => {
     const checked = e.target.checked;
-    $$("#papersTable .rowCheck").forEach(ch => { ch.checked = checked; });
+    $$("#papersTable .rowCheck").forEach(ch => { if (!ch.disabled) ch.checked = checked; });
     updatePaperBulkActionState();
   });
 
