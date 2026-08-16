@@ -1452,7 +1452,35 @@ function setActiveView(view) {
   if (allowedView === 'overview' && state) renderOverview();
 }
 
-function computeOverviewMetrics(papers = [], highlightedLinks = {}) {
+function getLatestPaperClassification(paper) {
+  const classifications = paper?.classifications;
+  if (!classifications || typeof classifications !== "object" || Array.isArray(classifications)) return null;
+  return Object.values(classifications)
+    .filter(item => item && typeof item === "object")
+    .sort((a, b) => String(b.classifiedAt || "").localeCompare(String(a.classifiedAt || "")))[0]
+    || null;
+}
+
+function getOverviewMetricType(paper, phaseLabel = "all", highlightedLinks = {}) {
+  let metricType;
+  if (phaseLabel && phaseLabel !== "all") {
+    const classification = getPaperClassificationForPhase(paper, phaseLabel);
+    if (!classification) return null;
+    metricType = normalizeMetricType(classification.outcome ?? paper?.status, "pending");
+  } else {
+    const latestClassification = getLatestPaperClassification(paper);
+    metricType = latestClassification
+      ? normalizeMetricType(latestClassification.outcome ?? paper?.status, "pending")
+      : getPaperMetricType(paper, highlightedLinks);
+  }
+
+  // A métrica de duplicados foi removida da Visão Geral. Registros legados
+  // eventualmente marcados como duplicate entram em Excluídos para manter o
+  // total consolidado coerente sem reintroduzir a métrica removida.
+  return metricType === "duplicate" ? "excluded" : metricType;
+}
+
+function computeOverviewMetrics(papers = [], highlightedLinks = {}, phaseLabel = "all") {
   const metrics = {
     total: 0,
     included: 0,
@@ -1461,8 +1489,9 @@ function computeOverviewMetrics(papers = [], highlightedLinks = {}) {
   };
 
   for (const paper of papers) {
+    const metricType = getOverviewMetricType(paper, phaseLabel, highlightedLinks);
+    if (!metricType) continue;
     metrics.total += 1;
-    const metricType = getPaperMetricType(paper, highlightedLinks);
     if (metricType === "included") metrics.included += 1;
     else if (metricType === "excluded") metrics.excluded += 1;
     else metrics.pending += 1;
@@ -1476,8 +1505,45 @@ function formatMetricPercentage(value, total) {
   return `${percentage.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% do total`;
 }
 
-function renderPaperMetrics(papers, highlightedLinks = {}) {
-  const metrics = computeOverviewMetrics(papers, highlightedLinks);
+function renderOverviewMetricScope() {
+  const select = $("#overviewMetricScopeSelect");
+  const hint = $("#overviewMetricScopeHint");
+  if (!select) return;
+
+  const phases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
+  const availableLabels = new Set(phases.map(phase => phase?.label).filter(Boolean));
+  if (overviewMetricScope !== "all" && !availableLabels.has(overviewMetricScope)) {
+    overviewMetricScope = "all";
+  }
+
+  const previousValue = overviewMetricScope;
+  select.replaceChildren();
+  const generalOption = document.createElement("option");
+  generalOption.value = "all";
+  generalOption.textContent = "Projeto geral";
+  select.appendChild(generalOption);
+
+  phases.forEach((phase, index) => {
+    if (!phase?.label) return;
+    const option = document.createElement("option");
+    option.value = phase.label;
+    option.textContent = phase.title || phase.label || `Fase ${index + 1}`;
+    select.appendChild(option);
+  });
+  select.value = previousValue;
+
+  if (hint) {
+    if (overviewMetricScope === "all") {
+      hint.textContent = "Resumo consolidado de todas as fases do projeto.";
+    } else {
+      const phase = phases.find(item => item?.label === overviewMetricScope);
+      hint.textContent = `Exibindo somente os artigos classificados em ${phase?.title || phase?.label || "fase selecionada"}.`;
+    }
+  }
+}
+
+function renderPaperMetrics(papers, highlightedLinks = {}, phaseLabel = overviewMetricScope) {
+  const metrics = computeOverviewMetrics(papers, highlightedLinks, phaseLabel);
   const total = $("#paperMetricTotal");
   const included = $("#paperMetricIncluded");
   const excluded = $("#paperMetricExcluded");
@@ -1494,7 +1560,7 @@ function renderPaperMetrics(papers, highlightedLinks = {}) {
 
   if (totalDetail) {
     totalDetail.textContent = !metrics.total
-      ? "Nenhum artigo registrado"
+      ? (phaseLabel === "all" ? "Nenhum artigo registrado" : "Nenhum artigo nesta fase")
       : metrics.pending
         ? `${metrics.pending} pendente${metrics.pending === 1 ? "" : "s"} de classificação`
         : "Todos os artigos estão classificados";
@@ -1886,7 +1952,10 @@ async function renderOverview() {
       : "Última atualização: agora";
   }
 
-  renderPaperMetrics(papers, highlightedLinks);
+  renderOverviewMetricScope();
+  const consolidatedPapers = (Array.isArray(state?.papers) ? state.papers : [])
+    .filter(paper => paper?.visited !== false);
+  renderPaperMetrics(consolidatedPapers, highlightedLinks, overviewMetricScope);
   renderCategoryDistribution(papers, highlightedLinks);
   renderPhaseProgress(papers);
   renderOverviewRecentArticles(papers, highlightedLinks);
@@ -2907,6 +2976,11 @@ function bindEvents() {
     button.addEventListener('click', () => {
       openPapersFromOverview('all', '', button.dataset.paperMetric || 'all');
     });
+  });
+
+  $('#overviewMetricScopeSelect')?.addEventListener('change', (event) => {
+    overviewMetricScope = event.target?.value || 'all';
+    renderOverview();
   });
 
   $('#btnClearPaperFilters')?.addEventListener('click', () => {
