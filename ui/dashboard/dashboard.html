@@ -192,8 +192,28 @@
 
         <!-- PAPERS -->
         <section class="view hidden u-flex-fill-col" id="view_papers">
+          <div class="paperFiltersPanel" aria-label="Filtros dos artigos">
+            <label class="paperCurrentPhaseToggle">
+              <input id="filterCurrentPhase" type="checkbox" checked />
+              <span>Artigos da fase atual</span>
+            </label>
+            <select id="filterPaperPhase" class="input paperFilterSelect" aria-label="Filtrar por fase" disabled>
+              <option value="all">Todas as fases</option>
+            </select>
+            <select id="filterPaperMetric" class="input paperFilterSelect" aria-label="Filtrar por situação">
+              <option value="all">Todas as situações</option>
+              <option value="included">Incluídos</option>
+              <option value="excluded">Excluídos</option>
+              <option value="pending">Pendentes</option>
+            </select>
+            <select id="filterPaperCategory" class="input paperFilterSelect" aria-label="Filtrar por categoria">
+              <option value="all">Todas as categorias</option>
+            </select>
+            <button id="btnResetPaperViewFilters" type="button" class="btn">Limpar filtros</button>
+          </div>
+
           <div class="toolbar papersToolbar">
-            <input id="search" class="input" placeholder="Buscar por título, autor, tag…" />
+            <input id="search" class="input" placeholder="Buscar por título, autor, ano, tag ou fase…" />
             <div class="paperBulkActions" aria-label="Ações para os artigos selecionados">
               <span id="paperSelectionCount" class="paperSelectionCount" aria-live="polite">0 selecionados</span>
               <button id="btnBulkDeleteMarked" class="btn paperBulkUnmarkBtn" type="button" disabled title="Retirar os artigos selecionados da fase ativa">Remover marcados</button>
@@ -217,8 +237,9 @@
                   <th style="width:36px"><input type="checkbox" id="checkAll" /></th>
                   <th>Título</th>
                   <th style="width:72px">Ano</th>
-                  <th style="width:260px">Categoria</th>
-                  <th style="width:160px">Tags</th>
+                  <th style="width:190px">Fases</th>
+                  <th style="width:230px">Categoria</th>
+                  <th style="width:150px">Tags</th>
                   <th style="width:90px">Link</th>
                 </tr>
               </thead>
@@ -262,7 +283,7 @@
           <div class="toolbar">
             <div style="display:flex;gap:8px;align-items:center">
               <button id="btnShowAddPhase" class="btn">Adicionar nova fase</button>
-              <div class="muted">As fases são organizadas em ordem. Clique em uma fase concluída para consultar os artigos selecionados, removidos e herdados.</div>
+              <div class="muted">As fases são organizadas em ordem. Use “Ver artigos” na fase ativa ou em uma fase concluída para consultar a triagem sem sair da árvore.</div>
             </div>
           </div>
 
@@ -444,10 +465,6 @@
             <label class="visually-hidden" for="phaseDesc">Descrição</label>
             <textarea id="phaseDesc" class="input" style="min-height:120px" placeholder="Descrição da fase"></textarea>
             <div id="phaseDescError" class="fieldError" aria-live="polite"></div>
-
-            <label class="visually-hidden" for="phaseCriteria">Critérios</label>
-            <textarea id="phaseCriteria" class="input" style="min-height:120px" placeholder="Critérios (texto livre)"></textarea>
-            <div id="phaseCriteriaError" class="fieldError" aria-live="polite"></div>
 
             <label for="phaseCategories" class="phaseFieldLabel">Categorias usadas nesta fase</label>
             <div class="categoryMetricHelp phaseTriageHelp">

@@ -678,6 +678,34 @@ svg .axis line, svg .axis path{stroke: rgba(234,240,255,0.18)}
   background:rgba(102,112,133,.28);
   border-color:rgba(102,112,133,.36);
 }
+
+.phaseCard--draggable{
+  cursor:grab;
+  transition:border-color .16s ease, box-shadow .16s ease, transform .16s ease, opacity .16s ease;
+}
+.phaseCard--draggable:active{cursor:grabbing}
+.phaseCard--dragging{opacity:.5;transform:scale(.985)}
+.phaseCard--drag-over{
+  border-color:#75a7e8 !important;
+  box-shadow:0 0 0 3px rgba(80,140,220,.15),0 12px 28px rgba(16,24,40,.10) !important;
+}
+.phaseDragHandle{
+  flex:0 0 auto;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:28px;
+  height:28px;
+  border-radius:8px;
+  color:#667085;
+  background:#f2f4f7;
+  border:1px solid #e4e7ec;
+  font-weight:900;
+  letter-spacing:-2px;
+  cursor:grab;
+  user-select:none;
+}
+.phaseDragHandle:active{cursor:grabbing}
 .phaseCard--completed{
   cursor:pointer;
   transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease;
@@ -2114,23 +2142,33 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
   .paperBulkCategoryOptionOutcome{grid-column:2;justify-self:start}
 }
 
-/* Lista expansível de artigos das fases concluídas. */
+/* Painel lateral de consulta das fases concluídas. */
 .phaseArchivePanel{
-  grid-column:1 / -1;
+  position:fixed;
+  top:0;
+  right:0;
+  bottom:0;
+  z-index:1200;
+  width:min(520px, calc(100vw - 32px));
   min-width:0;
-  padding:18px;
-  border:1px solid #dce4ee;
-  border-radius:14px;
+  padding:22px;
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  border:0;
+  border-left:1px solid #dce4ee;
+  border-radius:0;
   background:#f8fafc;
-  box-shadow:0 12px 30px rgba(16,24,40,.07);
+  box-shadow:-18px 0 44px rgba(16,24,40,.2);
+  scrollbar-gutter:stable;
 }
 .phaseArchivePanel[hidden]{display:none!important}
 .phaseArchivePanel.is-open{
   animation:phaseArchiveReveal .18s ease-out both;
 }
 @keyframes phaseArchiveReveal{
-  from{opacity:0;transform:translateY(-6px)}
-  to{opacity:1;transform:translateY(0)}
+  from{opacity:0;transform:translateX(28px)}
+  to{opacity:1;transform:translateX(0)}
 }
 .phaseArchiveHeader{
   display:flex;
@@ -2166,6 +2204,55 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
   padding:0 11px;
   font-size:10.5px;
 }
+
+.phaseArchivePhaseInfo{
+  display:grid;
+  gap:9px;
+  margin-top:16px;
+  padding:12px;
+  border:1px solid #e0e6ed;
+  border-radius:11px;
+  background:#fff;
+}
+.phaseArchiveInfoBlock{min-width:0}
+.phaseArchiveInfoBlock > span{
+  display:block;
+  margin-bottom:4px;
+  color:#667085;
+  font-size:9px;
+  font-weight:850;
+  letter-spacing:.045em;
+  text-transform:uppercase;
+}
+.phaseArchiveInfoBlock p{
+  margin:0;
+  color:#344054;
+  font-size:10.5px;
+  line-height:1.5;
+  overflow-wrap:anywhere;
+}
+.phaseArchivePhaseCategories{display:flex;flex-wrap:wrap;gap:6px}
+.phaseArchivePhaseCategory{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  max-width:100%;
+  padding:5px 8px;
+  border:1px solid #e0e6ed;
+  border-radius:999px;
+  background:#f8fafc;
+  color:#475467;
+  font-size:9px;
+  font-weight:750;
+}
+.phaseArchivePhaseCategory i{
+  width:7px;
+  height:7px;
+  flex:0 0 7px;
+  border-radius:50%;
+  background:#98a2b3;
+}
+.phaseArchivePhaseCategory span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .phaseArchiveSummary{
   display:flex;
   flex-wrap:wrap;
@@ -2195,7 +2282,7 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
 .phaseArchiveSummaryItem--pending{border-color:#e1d5b4;background:#fff9e9;color:#8b6a17}
 .phaseArchiveGroups{
   display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(270px,1fr));
+  grid-template-columns:1fr;
   gap:12px;
   margin-top:14px;
   align-items:start;
@@ -2248,7 +2335,7 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
 }
 .phaseArchiveArticleList{
   display:flex;
-  max-height:410px;
+  max-height:none;
   flex-direction:column;
   gap:0;
   overflow-y:auto;
@@ -2355,15 +2442,115 @@ a.phaseArchiveArticleTitle:hover{color:#146fd1;text-decoration:underline}
   text-align:center;
 }
 
-@media (max-width:900px){
-  .phaseArchiveGroups{grid-template-columns:1fr 1fr}
-}
 @media (max-width:640px){
-  .phaseArchivePanel{padding:14px}
-  .phaseArchiveHeader{align-items:stretch;flex-direction:column}
+  .phaseArchivePanel{width:100vw;padding:16px}
+  .phaseArchiveHeader{align-items:flex-start}
   .main .phaseArchiveClose{align-self:flex-start}
-  .phaseArchiveGroups{grid-template-columns:1fr}
-  .phaseArchiveArticleList{max-height:360px}
+}
+
+
+/* Painel de criar/editar fases: tema claro. */
+.main #phasePanel{
+  --text:#202938;
+  --muted:#667085;
+  --border:#dfe5ec;
+  --accent:#2563eb;
+  --accent2:#5b63d3;
+  --good:#208952;
+  --warn:#b76e00;
+  --bad:#b42318;
+  color:var(--text);
+  background:#ffffff;
+  border-left-color:#dfe5ec;
+  box-shadow:-18px 0 48px rgba(16,24,40,.16);
+}
+.main #phasePanel .input,
+.main #phasePanel .select,
+.main #phasePanel textarea{
+  background:#ffffff;
+  color:#202938;
+  border-color:#d7dee8;
+  box-shadow:0 1px 2px rgba(16,24,40,.03);
+}
+.main #phasePanel .input::placeholder,
+.main #phasePanel textarea::placeholder{color:#98a2b3}
+.main #phasePanel .btn{
+  background:#f5f7fa;
+  color:#273142;
+  border-color:#dfe5ec;
+  box-shadow:none;
+}
+.main #phasePanel .btn:hover{background:#edf1f5}
+.main #phasePanel .phaseCategoryItem,
+.main #phasePanel .categoryCriterionItem{
+  background:#f8fafc;
+  border-color:#e1e7ef;
+  color:#273142;
+}
+.main #phasePanel .phaseCategoryItem:hover{
+  background:#f3f6fa;
+  box-shadow:0 8px 18px rgba(16,24,40,.08);
+}
+.main #phasePanel .phaseCategoryMetric--included{background:#ecf9f1;color:#208952}
+.main #phasePanel .phaseCategoryMetric--excluded{background:#fff1f2;color:#b42318}
+.main #phasePanel .phaseCategoryMetric--pending{background:#fff7e8;color:#b76e00}
+.main #phasePanel .textarea-resizer{
+  background:#eef2f6;
+  box-shadow:0 4px 10px rgba(16,24,40,.08);
+}
+.main #phasePanel .textarea-resizer::before{
+  background:repeating-linear-gradient(135deg, #98a2b3 0 2px, transparent 2px 6px);
+}
+
+/* Filtros da aba Artigos: visão do projeto com fase atual como padrão. */
+.paperFiltersPanel{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-bottom:10px;
+  padding:10px 12px;
+  border:1px solid #e4e9f0;
+  border-radius:10px;
+  background:#f8fafc;
+}
+.paperCurrentPhaseToggle{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  min-height:36px;
+  padding:0 11px;
+  border:1px solid #cfd8e3;
+  border-radius:8px;
+  background:#fff;
+  color:#344054;
+  font-size:12px;
+  font-weight:750;
+  cursor:pointer;
+}
+.paperCurrentPhaseToggle input{margin:0}
+.paperFilterSelect{
+  width:auto;
+  min-width:150px;
+  max-width:230px;
+}
+.paperFilterSelect:disabled{opacity:.55;cursor:not-allowed}
+.paperPhaseBadge{
+  display:inline-block;
+  max-width:180px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  padding:4px 7px;
+  border-radius:999px;
+  background:#eef2f6;
+  color:#475467;
+  font-size:10.5px;
+  font-weight:700;
+}
+@media (max-width:900px){
+  .paperFiltersPanel{align-items:stretch}
+  .paperCurrentPhaseToggle,.paperFilterSelect{flex:1 1 180px;max-width:none}
 }
 
 /* Tutorial: criação rápida das categorias essenciais */
