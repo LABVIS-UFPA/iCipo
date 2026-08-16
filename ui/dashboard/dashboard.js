@@ -1898,7 +1898,11 @@ function getPaperMetricTypeForPhase(paper, phaseLabel, highlightedLinks = {}) {
   if (!phaseLabel || phaseLabel === "all") return getPaperMetricType(paper, highlightedLinks);
   const classification = getPaperClassificationForPhase(paper, phaseLabel);
   if (!classification) return "pending";
-  const category = getOverviewPaperCategory(paper, scope, highlightedLinks);
+
+  // Use a categoria da própria fase que está sendo filtrada. Antes este bloco
+  // referenciava `scope`, uma variável inexistente, interrompendo a renderização
+  // reativa da tabela sempre que um filtro por fase/situação era recalculado.
+  const category = getPaperCategoryForPhase(paper, phaseLabel, highlightedLinks);
   if (category) return normalizeMetricType(category.metricType, inferMetricTypeFromCategory(category));
   return normalizeMetricType(classification.outcome ?? paper?.status, "pending");
 }
@@ -1934,7 +1938,11 @@ function populatePaperFilterOptions() {
   const phaseSelect = $("#filterPaperPhase");
   const categorySelect = $("#filterPaperCategory");
   if (phaseSelect) {
-    const currentValue = phaseSelect.value || "all";
+    // O estado JS é a fonte de verdade. Isso evita o select voltar para um valor
+    // antigo ao ser reconstruído durante uma atualização reativa da tabela.
+    const currentValue = paperPhaseFilter === "active"
+      ? (phaseSelect.value || "all")
+      : (paperPhaseFilter || phaseSelect.value || "all");
     const phases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
     phaseSelect.innerHTML = '<option value="all">Todas as fases</option>' + phases.map(phase =>
       `<option value="${escapeHtml(phase.label || phase.id || phase.title)}">${escapeHtml(phase.title || phase.label || "Fase")}</option>`
@@ -1942,7 +1950,7 @@ function populatePaperFilterOptions() {
     phaseSelect.value = [...phaseSelect.options].some(option => option.value === currentValue) ? currentValue : "all";
   }
   if (categorySelect) {
-    const currentValue = categorySelect.value || paperCategoryFilter || "all";
+    const currentValue = paperCategoryFilter || categorySelect.value || "all";
     const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
     categorySelect.innerHTML = '<option value="all">Todas as categorias</option><option value="uncategorized">Sem categoria</option>' + categories.map(category => {
       const key = getPaperCategoryKey(category);
