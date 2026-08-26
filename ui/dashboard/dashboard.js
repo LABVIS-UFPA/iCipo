@@ -1891,7 +1891,7 @@ function getPaperCategoryForPhase(paper, phaseLabel, highlightedLinks = {}) {
     });
     if (matched) return matched;
   }
-  return getPaperCategory(paper, highlightedLinks);
+  return null;
 }
 
 function getPaperMetricTypeForPhase(paper, phaseLabel, highlightedLinks = {}) {
@@ -1899,11 +1899,6 @@ function getPaperMetricTypeForPhase(paper, phaseLabel, highlightedLinks = {}) {
   const classification = getPaperClassificationForPhase(paper, phaseLabel);
   if (!classification) return "pending";
 
-  // Use a categoria da própria fase que está sendo filtrada. Antes este bloco
-  // referenciava `scope`, uma variável inexistente, interrompendo a renderização
-  // reativa da tabela sempre que um filtro por fase/situação era recalculado.
-  const category = getPaperCategoryForPhase(paper, phaseLabel, highlightedLinks);
-  if (category) return normalizeMetricType(category.metricType, inferMetricTypeFromCategory(category));
   return normalizeMetricType(classification.outcome ?? paper?.status, "pending");
 }
 
@@ -2843,6 +2838,15 @@ function createBulkClassifiedPaper(previousPaper, category, phaseLabel, classifi
   };
 }
 
+function isPaperLockedInActivePhase(paper, activePhaseLabel) {
+  if (!paper || !activePhaseLabel) return false;
+  const classification = getPaperClassificationForPhase(paper, activePhaseLabel);
+  if (!classification) return false;
+  return classification.inherited === true
+    || String(classification.entryType || "").toLowerCase() === "inherited"
+    || Boolean(classification.inheritedFromPhaseLabel);
+}
+
 async function requestPaperBulkOutcome(outcome) {
   const normalizedOutcome = normalizeCategoryMetricType(outcome, "pending");
   const selectedPapers = getSelectedRenderedPapers();
@@ -2903,6 +2907,11 @@ async function applyPaperBulkCategory(category, requestedOutcome) {
   const selectedPapers = getSelectedRenderedPapers();
   if (!selectedPapers.length) {
     alert("Selecione pelo menos 1 artigo.");
+    return;
+  }
+
+  if (selectedPapers.some(paper => isPaperLockedInActivePhase(paper, activePhase.label))) {
+    alert("Artigos herdados da fase anterior ficam travados nesta fase e não podem mudar de categoria.");
     return;
   }
 
