@@ -488,7 +488,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       return;
     }
 
-    const data = await storage.get(["highlightedLinks", "svat_project", "svat_papers"]);
+    const data = await storage.get(["highlightedLinks", "svat_project", "svat_papers", "svat_current_snowball_parent"]);
     const color = selectedCategory.color || "yellow";
     const rawUrl = String(info.linkUrl || "").replace(/([?&])casa_token=[^&#]*/gi, "$1").replace(/[?&]+$/g, "");
     const canonicalUrl = normalizeArticleUrl(rawUrl);
@@ -644,6 +644,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       createdAt: previousPaper.createdAt || classifiedAt,
       updatedAt: classifiedAt,
       history,
+      parentPaperId: data.svat_current_snowball_parent || null,
     };
 
     if (originalIndex >= 0) papers[originalIndex] = nextPaper;

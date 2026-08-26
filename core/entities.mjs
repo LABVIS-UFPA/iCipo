@@ -496,6 +496,7 @@ class Paper {
     this.createdAt = data.createdAt || new Date().toISOString();
     this.updatedAt = data.updatedAt || new Date().toISOString();
     this.history = checkArray(data.history);
+    this.parentPaperId = data.parentPaperId || null;
   }
 
 
@@ -590,6 +591,7 @@ class Paper {
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
       history: this.history,
+      parentPaperId: this.parentPaperId,
     };
   }
 
