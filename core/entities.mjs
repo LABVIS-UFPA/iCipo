@@ -362,10 +362,6 @@ class Project {
     if (isCompletingNow && this.activePhaseLabel !== previousPhase.label) {
       throw new Error("Somente a fase ativa pode ser concluída.");
     }
-    if (previousPhase.completed && !nextPhase.completed) {
-      throw new Error("Uma fase concluída não pode ser reaberta depois que a progressão avançou.");
-    }
-
     this.phases[phaseIndex] = nextPhase;
     if (this.activePhaseLabel === previousPhase.label) {
       this.activePhaseLabel = isCompletingNow

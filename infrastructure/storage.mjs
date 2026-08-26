@@ -1251,12 +1251,6 @@ class NodeFsStrategy {
         message: 'Somente a fase ativa pode ser concluída. As fases futuras permanecem planejadas até chegar a vez delas.',
       };
     }
-    if (isReopening) {
-      return {
-        status: 'error',
-        message: 'Uma fase já concluída não pode ser reaberta depois que a progressão avançou.',
-      };
-    }
     if (isCompletingNow && pendingCount > 0) {
       return {
         status: 'error',
@@ -1419,21 +1413,40 @@ class NodeFsStrategy {
     if (phaseIndex === -1) return { status: 'error', message: 'Fase não encontrada.' };
 
     const activePhaseIndex = project.phases.findIndex((p) => p.label === project.activePhaseLabel);
-    if (activePhaseIndex === -1 || phaseIndex <= activePhaseIndex) {
+    if (activePhaseIndex === -1) {
       return {
         status: 'error',
-        message: 'Somente fases planejadas depois da fase ativa podem ser excluídas. A fase ativa e o histórico anterior estão protegidos.'
+        message: 'Não foi possível localizar a fase ativa do projeto.',
+      };
+    }
+    if (phaseIndex < activePhaseIndex) {
+      return {
+        status: 'error',
+        message: 'Somente a fase ativa ou fases planejadas depois dela podem ser excluídas. O histórico anterior está protegido.'
       };
     }
 
     project.phases.splice(phaseIndex, 1);
-    const previousPhase = project.phases.at(-1) || null;
+    const previousPhase = phaseIndex > 0 ? project.phases[phaseIndex - 1] : null;
+    if (previousPhase) {
+      previousPhase.completed = false;
+      project.activePhaseLabel = previousPhase.label;
+    }
+    const nextActivePhase = previousPhase
+      || project.phases[phaseIndex]
+      || project.phases.find((p) => !p.completed)
+      || project.phases.at(-1)
+      || null;
 
     const phaseDir = this.path.join(this.baseDir, projectID, 'phases', phaseLabel);
     if (this.fs.existsSync(phaseDir)) {
       this.fs.rmSync(phaseDir, { recursive: true, force: true });
     }
-    this.cleanupDeletedPhasePaperReferences(projectID, phaseLabel, project.activePhaseLabel || previousPhase?.label || null);
+    this.cleanupDeletedPhasePaperReferences(projectID, phaseLabel, nextActivePhase?.label || previousPhase?.label || null);
+
+    if (project.activePhaseLabel === phaseLabel) {
+      project.activePhaseLabel = nextActivePhase?.label || null;
+    }
 
     project.updatedAt = new Date().toISOString();
     this.syncPhasePaperBuckets(projectID, project);
