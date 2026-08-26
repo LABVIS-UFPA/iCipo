@@ -513,7 +513,7 @@ class NodeFsStrategy {
     });
   }
 
-  inheritIncludedPapers(projectID, project, previousPhase, nextPhase) {
+  inheritIncludedPapers(projectID, project, previousPhase, nextPhase, { activateNextPhase = true } = {}) {
     const inheritedPapers = previousPhase
       ? this.collectIncludedPapersForPhase(projectID, previousPhase.label)
       : [];
@@ -612,8 +612,12 @@ class NodeFsStrategy {
       ...previousScopedProject,
       id: project.id || projectID,
       title: project.name || project.title || previousScopedProject.title || 'Projeto',
-      activePhaseLabel: nextPhase.label,
-      currentIterationId: nextPhase.label,
+      activePhaseLabel: activateNextPhase
+        ? nextPhase.label
+        : (project.activePhaseLabel || previousScopedProject.activePhaseLabel || nextPhase.label),
+      currentIterationId: activateNextPhase
+        ? nextPhase.label
+        : (project.currentIterationId || previousScopedProject.currentIterationId || nextPhase.label),
       updatedAt: inheritedAt,
     };
 
@@ -644,6 +648,12 @@ class NodeFsStrategy {
       inheritedCount: inheritedReferences.length,
       pendingCategoryLabel: null,
     };
+  }
+
+  inheritIncludedPapersForNewPhase(projectID, project, previousPhase, nextPhase) {
+    return this.inheritIncludedPapers(projectID, project, previousPhase, nextPhase, {
+      activateNextPhase: false,
+    });
   }
 
   cleanupDeletedPhasePaperReferences(projectID, deletedPhaseLabel, fallbackPhaseLabel = null) {
@@ -1170,6 +1180,15 @@ class NodeFsStrategy {
     // Somente a primeira fase é ativada no momento da criação. As seguintes
     // permanecem planejadas até a fase ativa ser concluída.
     if (!project.activePhaseLabel) project.activePhaseLabel = phase.label;
+
+    const previousPhase = project.phases.length > 1
+      ? project.phases[project.phases.length - 2]
+      : null;
+    if (previousPhase) {
+      const inheritanceResult = this.inheritIncludedPapersForNewPhase(projectID, project, previousPhase, phase);
+      if (inheritanceResult?.status === 'error') return inheritanceResult;
+    }
+
     project.updatedAt = new Date().toISOString();
     this.syncPhasePaperBuckets(projectID, project);
 
