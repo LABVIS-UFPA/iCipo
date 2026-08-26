@@ -38,9 +38,13 @@ export function removeArrayItem(values, targetValue) {
 export const PAPER_METRIC_TYPES = Object.freeze([
     "included",
     "excluded",
+    "duplicate",
     "pending",
 ]);
 
+// Categorias representam decisões humanas. A duplicidade deixou de ser uma
+// decisão manual e passou a ser identificada automaticamente pelo endereço do
+// artigo, por isso não é um tipo válido para novas categorias.
 export const CATEGORY_METRIC_TYPES = Object.freeze([
     "included",
     "excluded",
@@ -59,7 +63,7 @@ function normalizeMetricToken(value) {
 
 /**
  * Normaliza o resultado consolidado usado nas métricas dos artigos.
- * O formato persistido é sempre um dos três valores canônicos abaixo.
+ * O formato persistido é sempre um dos quatro valores canônicos abaixo.
  */
 export function normalizeMetricType(value, fallback = "pending") {
     const token = normalizeMetricToken(value);
@@ -87,13 +91,13 @@ export function normalizeMetricType(value, fallback = "pending") {
         descartado: "excluded",
         descartada: "excluded",
 
-        duplicate: "excluded",
-        duplicated: "excluded",
-        duplicado: "excluded",
-        duplicada: "excluded",
-        duplicidade: "excluded",
-        repetido: "excluded",
-        repetida: "excluded",
+        duplicate: "duplicate",
+        duplicated: "duplicate",
+        duplicado: "duplicate",
+        duplicada: "duplicate",
+        duplicidade: "duplicate",
+        repetido: "duplicate",
+        repetida: "duplicate",
 
         pending: "pending",
         pendente: "pending",
@@ -111,7 +115,9 @@ export function normalizeMetricType(value, fallback = "pending") {
 }
 
 /**
- * Normaliza o impacto permitido para categorias.
+ * Normaliza o impacto permitido para categorias. Projetos antigos que ainda
+ * possuem uma categoria manual de duplicidade são migrados para "pending";
+ * registros de artigos duplicados continuam usando normalizeMetricType().
  */
 export function normalizeCategoryMetricType(value, fallback = "pending") {
     const normalized = normalizeMetricType(value, fallback);
@@ -202,7 +208,7 @@ export function inferMetricTypeFromCategory(category) {
 
     if (/(^|_)(nao_(incl|aprov|aceit|selecion)|ineleg|fora_dos_criterios)/.test(token)) return "excluded";
     if (/(^|_)(excl|rejeit|descart|ineleg)/.test(token)) return "excluded";
-    if (/(^|_)(duplic|repet)/.test(token)) return "excluded";
+    if (/(^|_)(duplic|repet)/.test(token)) return "duplicate";
     if (/(^|_)(incl|aprov|aceit|selecion|elegivel|atende)/.test(token)) return "included";
     return "pending";
 }

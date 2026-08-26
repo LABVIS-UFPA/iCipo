@@ -79,15 +79,11 @@ class Project {
       return;
     }
 
-    // A fase ativa representa a etapa atual da progressão, e não a última fase
-    // criada. Fases posteriores podem existir apenas como planejamento.
-    const persistedActive = this.phases.find(
-      phase => phase.label === this.activePhaseLabel && !phase.completed
-    );
-    if (persistedActive) return;
-
-    const firstPending = this.phases.find(phase => !phase.completed) || null;
-    this.activePhaseLabel = firstPending?.label || null;
+    const latestPhase = this.phases.at(-1);
+    const activeExists = this.phases.some(phase => phase.label === this.activePhaseLabel);
+    if (!activeExists || this.activePhaseLabel !== latestPhase.label) {
+      this.activePhaseLabel = latestPhase.label;
+    }
   }
 
   // --- Category management ---
@@ -312,6 +308,11 @@ class Project {
     this._assertCriteriaExist(phase.criteria);
     this._assertCategoriesExist(phase.categories);
 
+    const latestPhase = this.phases.at(-1) || null;
+    if (latestPhase && !latestPhase.completed) {
+      throw new Error(`Conclua a fase "${latestPhase.title || latestPhase.label}" antes de criar uma nova fase.`);
+    }
+
     if (this.categories.length && !phase.categories.length) {
       throw new Error("Selecione pelo menos uma categoria para a nova fase.");
     }
@@ -322,9 +323,7 @@ class Project {
     phase.inheritanceCategoryLabel = pendingCategory?.label || null;
 
     this.phases.push(phase);
-    // Somente a primeira fase é ativada automaticamente. As demais ficam
-    // planejadas até a fase ativa ser concluída.
-    if (!this.getActivePhase()) this.activePhaseLabel = phase.label;
+    this.activePhaseLabel = phase.label;
     this._touch();
     return phase;
   }
@@ -358,19 +357,14 @@ class Project {
       throw new Error(`Classifique os ${pendingCount} artigo(s) pendente(s) antes de concluir esta fase.`);
     }
 
-    const isCompletingNow = !previousPhase.completed && nextPhase.completed;
-    if (isCompletingNow && this.activePhaseLabel !== previousPhase.label) {
-      throw new Error("Somente a fase ativa pode ser concluída.");
-    }
-    if (previousPhase.completed && !nextPhase.completed) {
-      throw new Error("Uma fase concluída não pode ser reaberta depois que a progressão avançou.");
+    const isLatestPhase = phaseIndex === this.phases.length - 1;
+    if (!isLatestPhase && !nextPhase.completed) {
+      throw new Error("Fases anteriores permanecem concluídas enquanto existir uma fase posterior.");
     }
 
     this.phases[phaseIndex] = nextPhase;
-    if (this.activePhaseLabel === previousPhase.label) {
-      this.activePhaseLabel = isCompletingNow
-        ? (this.phases[phaseIndex + 1]?.label || null)
-        : nextPhase.label;
+    if (this.activePhaseLabel === previousPhase.label || isLatestPhase) {
+      this.activePhaseLabel = nextPhase.label;
     }
     this._touch();
     return nextPhase;
@@ -394,17 +388,18 @@ class Project {
     }
 
     const removedPhase = this.phases.splice(phaseIndex, 1)[0];
-    if (this.activePhaseLabel === removedPhase.label) {
-      const nextPending = this.phases.find(phase => !phase.completed) || null;
-      this.activePhaseLabel = nextPending?.label || null;
+    const previousPhase = this.phases.at(-1) || null;
+    if (previousPhase) {
+      previousPhase.completed = false;
+      this.activePhaseLabel = previousPhase.label;
     }
     this._touch();
     return removedPhase;
   }
 
   getActivePhase() {
-    return this.phases.find(phase => phase.label === this.activePhaseLabel && !phase.completed)
-      || this.phases.find(phase => !phase.completed)
+    return this.phases.find(phase => phase.label === this.activePhaseLabel)
+      || this.phases.at(-1)
       || null;
   }
 
@@ -414,7 +409,8 @@ class Project {
     return !!phase
       && !phase.completed
       && !!activePhase
-      && activePhase.label === label;
+      && activePhase.label === label
+      && this.phases.at(-1)?.label === label;
   }
 
   finalizePhase(label) {
@@ -437,13 +433,12 @@ class Project {
     }
 
     phase.completed = true;
-    const nextPhase = this.phases[phaseIndex + 1] || null;
-    this.activePhaseLabel = nextPhase?.label || null;
+    this.activePhaseLabel = phase.label;
     this._touch();
 
     return {
       completedPhase: phase,
-      nextActivePhase: nextPhase,
+      nextActivePhase: this.getActivePhase(),
     };
   }
 
@@ -490,6 +485,11 @@ class Paper {
     this.classifications = data.classifications && typeof data.classifications === "object" && !Array.isArray(data.classifications)
       ? { ...data.classifications }
       : {};
+    this.duplicateOfId = data.duplicateOfId || null;
+    this.autoDuplicate = !!data.autoDuplicate;
+    this.duplicateSequence = Number.isFinite(Number(data.duplicateSequence))
+      ? Number(data.duplicateSequence)
+      : null;
     this.iterationId = data.iterationId || null;
     this.criteriaId = data.criteriaId || null;
     this.tags = checkArray(data.tags);
@@ -584,6 +584,9 @@ class Paper {
       categoryLabel: this.categoryLabel,
       phaseLabel: this.phaseLabel,
       classifications: this.classifications,
+      duplicateOfId: this.duplicateOfId,
+      autoDuplicate: this.autoDuplicate,
+      duplicateSequence: this.duplicateSequence,
       iterationId: this.iterationId,
       criteriaId: this.criteriaId,
       tags: this.tags,

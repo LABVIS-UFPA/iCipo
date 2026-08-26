@@ -140,15 +140,13 @@ class NodeFsStrategy {
       return normalized;
     }
 
-    // Criação e progressão são independentes: várias fases podem existir como
-    // planejamento, mas somente uma fase não concluída participa da triagem.
-    // Mantém a fase ativa persistida quando ela ainda é válida; caso contrário,
-    // recupera a primeira fase não concluída na ordem do plano.
-    const persistedActive = normalized.phases.find(
-      phase => phase?.label === normalized.activePhaseLabel && !phase?.completed
-    );
-    const firstPendingPhase = normalized.phases.find(phase => !phase?.completed) || null;
-    normalized.activePhaseLabel = (persistedActive || firstPendingPhase)?.label || null;
+    // O fluxo é sequencial: a fase mais recente é sempre a fase ativa e todas
+    // as anteriores permanecem concluídas enquanto houver uma posterior.
+    const latestIndex = normalized.phases.length - 1;
+    normalized.phases.forEach((phase, index) => {
+      if (index < latestIndex) phase.completed = true;
+    });
+    normalized.activePhaseLabel = normalized.phases[latestIndex].label;
 
     // Projetos antigos podem chegar sem categorias vinculadas. Quando já há
     // categorias no projeto, garante ao menos uma opção ativa em cada fase.
@@ -264,84 +262,6 @@ class NodeFsStrategy {
       || null;
   }
 
-  getPhaseIncludedCategory(project, phase, preferredLabel = null) {
-    if (!phase) return null;
-    const categoryMap = this.getCategoryMap(project);
-    const phaseCategoryLabels = Array.isArray(phase.categories) ? phase.categories : [];
-    const preferred = categoryMap.get(preferredLabel);
-    if (
-      preferred
-      && phaseCategoryLabels.includes(preferred.label)
-      && normalizeCategoryMetricType(preferred.metricType, 'pending') === 'included'
-    ) {
-      return preferred;
-    }
-
-    return phaseCategoryLabels
-      .map(label => categoryMap.get(label))
-      .find(category => normalizeCategoryMetricType(category?.metricType, 'pending') === 'included')
-      || null;
-  }
-
-  normalizeLegacyCarriedPaper(project, phase, sourcePaper = {}) {
-    if (!phase || !sourcePaper || typeof sourcePaper !== 'object') {
-      return { paper: sourcePaper, changed: false };
-    }
-    const classification = this.getPaperClassificationForPhase(sourcePaper, phase.label);
-    if (!classification) return { paper: sourcePaper, changed: false };
-
-    const entryType = String(classification.entryType || '').toLowerCase();
-    const legacyInherited = classification.inherited === true
-      || entryType === 'inherited'
-      || Boolean(classification.inheritedFromPhaseLabel);
-    const outcome = normalizeMetricType(classification.outcome ?? sourcePaper.status, 'pending');
-    if (!legacyInherited || outcome !== 'pending') return { paper: sourcePaper, changed: false };
-
-    const targetCategory = this.getPhaseIncludedCategory(project, phase);
-    const categoryLabels = new Set(
-      (Array.isArray(project.categories) ? project.categories : [])
-        .map(category => category?.label)
-        .filter(Boolean)
-    );
-    const nextClassification = {
-      ...classification,
-      phaseLabel: phase.label,
-      categoryLabel: targetCategory?.label || null,
-      outcome: 'included',
-      inherited: true,
-      entryType: 'inherited',
-      inheritedFromPhaseLabel: classification.inheritedFromPhaseLabel || phase.parentLabel || phase.parent || null,
-    };
-    const classifications = sourcePaper.classifications
-      && typeof sourcePaper.classifications === 'object'
-      && !Array.isArray(sourcePaper.classifications)
-      ? { ...sourcePaper.classifications, [phase.label]: nextClassification }
-      : { [phase.label]: nextClassification };
-    const currentPhaseLabel = sourcePaper.phaseLabel || sourcePaper.phaseId || sourcePaper.iterationId || null;
-    const baseTags = (Array.isArray(sourcePaper.tags) ? sourcePaper.tags : [])
-      .filter(tag => !categoryLabels.has(tag) && tag !== 'duplicado-automatico');
-    const nextTags = targetCategory?.label
-      ? [...new Set([...baseTags, targetCategory.label])]
-      : baseTags;
-
-    return {
-      changed: true,
-      paper: {
-        ...sourcePaper,
-        classifications,
-        ...(currentPhaseLabel === phase.label ? {
-          status: 'included',
-          categoryLabel: targetCategory?.label || null,
-          inherited: true,
-          entryType: 'inherited',
-          inheritedFromPhaseLabel: nextClassification.inheritedFromPhaseLabel,
-          tags: nextTags,
-          highlightedColor: targetCategory?.color || sourcePaper.highlightedColor || '',
-        } : {}),
-      },
-    };
-  }
-
   syncPhasePaperBuckets(projectID, project, { persist = false } = {}) {
     if (!project || !Array.isArray(project.phases)) return project;
 
@@ -358,15 +278,8 @@ class NodeFsStrategy {
       const removed = new Set();
       let classifiedRecords = 0;
 
-      for (const entry of paperEntries) {
-        let paper = entry.paper;
+      for (const { paper } of paperEntries) {
         if (paper?.visited === false) continue;
-        const migrated = this.normalizeLegacyCarriedPaper(project, phase, paper);
-        if (migrated.changed) {
-          paper = migrated.paper;
-          entry.paper = paper;
-          this.writeJson(entry.relPath, paper);
-        }
         const classification = this.getPaperClassificationForPhase(paper, phase.label);
         if (!classification) continue;
 
@@ -375,16 +288,16 @@ class NodeFsStrategy {
         if (!reference) continue;
 
         const entryType = String(classification.entryType || '').toLowerCase();
-        const legacyInherited = classification.inherited === true
+        if (
+          classification.inherited === true
           || entryType === 'inherited'
-          || Boolean(classification.inheritedFromPhaseLabel);
+          || classification.inheritedFromPhaseLabel
+        ) {
+          inherited.add(reference);
+        }
 
         const outcome = normalizeMetricType(classification.outcome ?? paper.status, 'pending');
-        // Artigos que chegaram selecionados da fase anterior pertencem ao grupo
-        // Herdados. Eles nunca voltam para Pendentes e também não contam como
-        // Selecionados da fase atual até uma nova decisão nesta fase.
-        if (legacyInherited) inherited.add(reference);
-        else if (outcome === 'included') selected.add(reference);
+        if (outcome === 'included') selected.add(reference);
         else if (outcome === 'excluded' || outcome === 'duplicate') removed.add(reference);
         else pending.add(reference);
       }
@@ -393,24 +306,17 @@ class NodeFsStrategy {
       // somente em Phase.papers. Assim que houver classificações persistidas,
       // os quatro grupos passam a ser integralmente derivados dos artigos.
       if (classifiedRecords === 0) {
-        const legacyInheritedRefs = new Set();
         for (const value of Array.isArray(existingPapers.inherited) ? existingPapers.inherited : []) {
           const reference = this.normalizePaperReference(value);
-          if (reference) {
-            legacyInheritedRefs.add(reference);
-            inherited.add(reference);
-          }
+          if (reference) inherited.add(reference);
         }
         for (const value of Array.isArray(existingPapers.new) ? existingPapers.new : []) {
           const reference = this.normalizePaperReference(value);
-          if (reference && !legacyInheritedRefs.has(reference)) pending.add(reference);
+          if (reference) pending.add(reference);
         }
         for (const value of Array.isArray(existingPapers.selected) ? existingPapers.selected : []) {
           const reference = this.normalizePaperReference(value);
-          // Em dados legados o mesmo artigo pode ter sido salvo como Herdado e
-          // Selecionado. Herdado sempre prevalece: Selecionados representa
-          // exclusivamente decisões realizadas nesta fase.
-          if (reference && !legacyInheritedRefs.has(reference)) selected.add(reference);
+          if (reference) selected.add(reference);
         }
         for (const value of Array.isArray(existingPapers.removed) ? existingPapers.removed : []) {
           const reference = this.normalizePaperReference(value);
@@ -429,39 +335,15 @@ class NodeFsStrategy {
         ...inherited,
       ]);
 
-      const scopedPath = this.getPhaseScopedStoragePath(projectID, phase.label);
-      const scopedStorage = scopedPath ? (this.readJson(scopedPath) || {}) : {};
-      if (Array.isArray(scopedStorage.svat_papers)) {
-        let scopedChanged = false;
-        scopedStorage.svat_papers = scopedStorage.svat_papers.map(scopedPaper => {
-          const migrated = this.normalizeLegacyCarriedPaper(project, phase, scopedPaper);
-          if (migrated.changed) scopedChanged = true;
-          return migrated.paper;
-        });
-        if (scopedChanged) {
-          const nextHighlights = { ...(scopedStorage.highlightedLinks || {}) };
-          for (const scopedPaper of scopedStorage.svat_papers) {
-            if (scopedPaper?.url && scopedPaper?.highlightedColor) {
-              nextHighlights[scopedPaper.url] = scopedPaper.highlightedColor;
-            }
-          }
-          scopedStorage.highlightedLinks = nextHighlights;
-          this.writeJson(scopedPath, scopedStorage);
-        }
-      }
-
-      // Garantia final: um artigo herdado nunca pode ser contabilizado também
-      // como selecionado na mesma fase.
-      for (const reference of inherited) selected.delete(reference);
-
       phase.papers = {
         inheritedAccumulated: [...accumulatedInherited],
-        // Artigos selecionados na fase anterior e carregados para esta fase.
         inherited: [...inherited],
-        // "new" contém somente entradas realmente novas e ainda sem decisão.
+        // "new" é a fila da triagem atual: artigos novos ou herdados que ainda
+        // estão classificados por uma categoria de impacto Pendente.
         new: [...pending],
         selected: [...selected],
-        // Artigos excluídos deixam a fila e são removidos da progressão para a fase seguinte.
+        // Excluídos e duplicatas automáticas deixam a fila e são removidos da
+        // progressão para a fase seguinte.
         removed: [...removed],
       };
     }
@@ -480,7 +362,7 @@ class NodeFsStrategy {
 
     const byIdentity = new Map();
     const mergePaper = (paper) => {
-      if (!paper || typeof paper !== 'object' || paper.visited === false) return;
+      if (!paper || typeof paper !== 'object' || paper.visited === false || paper.autoDuplicate) return;
       const identity = (paper.id || paper.id === 0)
         ? `id:${String(paper.id)}`
         : `url:${normalizeArticleUrl(paper.url || '')}`;
@@ -517,9 +399,16 @@ class NodeFsStrategy {
     const inheritedPapers = previousPhase
       ? this.collectIncludedPapersForPhase(projectID, previousPhase.label)
       : [];
-    // Artigos selecionados que avançam não voltam para Pendente.
-    // Uma categoria de inclusão da próxima fase é usada quando disponível.
-    nextPhase.inheritanceCategoryLabel = null;
+    const pendingCategory = this.getPhasePendingCategory(project, nextPhase);
+
+    if (inheritedPapers.length && !pendingCategory) {
+      return {
+        status: 'error',
+        message: 'Selecione nesta fase pelo menos uma categoria com impacto "Pendente" para receber os artigos herdados.',
+      };
+    }
+
+    nextPhase.inheritanceCategoryLabel = pendingCategory?.label || null;
     const inheritedAt = new Date().toISOString();
     const categoryLabels = new Set(
       (Array.isArray(project.categories) ? project.categories : [])
@@ -541,16 +430,10 @@ class NodeFsStrategy {
         && !Array.isArray(sourcePaper.classifications)
         ? { ...sourcePaper.classifications }
         : {};
-      const sourceClassification = this.getPaperClassificationForPhase(sourcePaper, previousPhase?.label);
-      const targetCategory = this.getPhaseIncludedCategory(
-        project,
-        nextPhase,
-        sourceClassification?.categoryLabel || sourcePaper.categoryLabel || null
-      );
       classifications[nextPhase.label] = {
         phaseLabel: nextPhase.label,
-        categoryLabel: targetCategory?.label || null,
-        outcome: 'included',
+        categoryLabel: pendingCategory?.label || null,
+        outcome: 'pending',
         classifiedAt: inheritedAt,
         inherited: true,
         entryType: 'inherited',
@@ -559,29 +442,32 @@ class NodeFsStrategy {
 
       const baseTags = (Array.isArray(sourcePaper.tags) ? sourcePaper.tags : [])
         .filter(tag => !categoryLabels.has(tag) && tag !== 'duplicado-automatico');
-      const tags = targetCategory?.label
-        ? [...new Set([...baseTags, targetCategory.label])]
+      const tags = pendingCategory?.label
+        ? [...new Set([...baseTags, pendingCategory.label])]
         : baseTags;
       const history = Array.isArray(sourcePaper.history) ? [...sourcePaper.history] : [];
       history.push({
         ts: inheritedAt,
-        action: 'carry_forward',
+        action: 'inherit',
         details: {
           fromPhaseLabel: previousPhase?.label || null,
           toPhaseLabel: nextPhase.label,
-          category: targetCategory?.label || null,
-          metricType: 'included',
+          category: pendingCategory?.label || null,
+          metricType: 'pending',
         },
       });
 
       const inheritedPaper = {
         ...sourcePaper,
         id: paperId,
-        status: 'included',
-        categoryLabel: targetCategory?.label || null,
+        status: 'pending',
+        categoryLabel: pendingCategory?.label || null,
         phaseLabel: nextPhase.label,
         iterationId: nextPhase.label,
         classifications,
+        duplicateOfId: null,
+        autoDuplicate: false,
+        duplicateSequence: null,
         tags,
         visited: true,
         inherited: true,
@@ -595,8 +481,8 @@ class NodeFsStrategy {
       this.writeJson(relPath, inheritedPaper);
       scopedPapers.push(inheritedPaper);
       inheritedReferences.push(String(paperId));
-      if (inheritedPaper.url && targetCategory?.color) {
-        highlightedLinks[inheritedPaper.url] = targetCategory.color;
+      if (inheritedPaper.url && pendingCategory?.color) {
+        highlightedLinks[inheritedPaper.url] = pendingCategory.color;
       }
     }
 
@@ -634,7 +520,7 @@ class NodeFsStrategy {
         ].filter(Boolean)),
       ],
       inherited: inheritedReferences,
-      new: [],
+      new: inheritedReferences,
       removed: [],
       selected: [],
     };
@@ -642,7 +528,7 @@ class NodeFsStrategy {
     return {
       status: 'ok',
       inheritedCount: inheritedReferences.length,
-      pendingCategoryLabel: null,
+      pendingCategoryLabel: pendingCategory?.label || null,
     };
   }
 
@@ -688,6 +574,13 @@ class NodeFsStrategy {
         paper.inheritedFromPhaseLabel = latestClassification?.inheritedFromPhaseLabel || null;
         paper.updatedAt = new Date().toISOString();
         changed = true;
+      }
+
+      if (!Object.keys(classifications).length && paper.autoDuplicate) {
+        try {
+          this.fs.unlinkSync(this.path.join(papersDir, filename));
+        } catch (_) { /* arquivo já removido */ }
+        continue;
       }
 
       if (!Object.keys(classifications).length) {
@@ -1011,8 +904,8 @@ class NodeFsStrategy {
       || {};
     const project = this.normalizeProjectPhaseCategoryModel(rawProject);
     const phases = Array.isArray(project.phases) ? project.phases : [];
-    const activePhase = phases.find(phase => phase?.label === project.activePhaseLabel && !phase?.completed)
-      || phases.find(phase => !phase?.completed)
+    const activePhase = phases.find(phase => phase?.label === project.activePhaseLabel)
+      || phases.at(-1)
       || null;
     if (!activePhase) {
       return {
@@ -1044,7 +937,7 @@ class NodeFsStrategy {
       if (!paper || typeof paper !== 'object' || paper.visited === false) continue;
       const normalizedUrl = normalizeArticleUrl(paper.url || '');
       if (normalizedUrl) paperUrls.add(normalizedUrl);
-      if (!normalizedUrl) continue;
+      if (!normalizedUrl || paper.autoDuplicate) continue;
 
       const classification = this.getPaperClassificationForPhase(paper, activePhase.label);
       const categoryLabel = classification?.categoryLabel
@@ -1054,6 +947,7 @@ class NodeFsStrategy {
       const category = categoryMap.get(categoryLabel);
       if (!category) continue;
       const outcome = normalizeMetricType(classification?.outcome ?? paper.status, 'pending');
+      if (outcome === 'duplicate') continue;
 
       const rawUrl = String(paper.url || '').trim();
       if (!rawUrl) continue;
@@ -1148,10 +1042,26 @@ class NodeFsStrategy {
     if (!Array.isArray(project.categories)) project.categories = [];
     this.syncPhasePaperBuckets(projectID, project);
 
+    const latestPhase = project.phases.at(-1) || null;
+    if (latestPhase && !latestPhase.completed) {
+      return {
+        status: 'error',
+        message: `Conclua a fase "${latestPhase.title || latestPhase.label}" antes de criar uma nova fase.`,
+      };
+    }
+    const latestPendingCount = Array.isArray(latestPhase?.papers?.new)
+      ? latestPhase.papers.new.length
+      : 0;
+    if (latestPhase && latestPendingCount > 0) {
+      return {
+        status: 'error',
+        message: `A fase "${latestPhase.title || latestPhase.label}" ainda possui ${latestPendingCount} artigo(s) pendente(s). Conclua a triagem antes de criar a próxima fase.`,
+      };
+    }
+
     const phase = this.normalizePhase(phaseData);
-    // A criação serve apenas para montar o plano de pesquisa. Toda nova fase
-    // nasce pendente/planejada e não recebe artigos até chegar a sua vez na
-    // progressão sequencial.
+    // Toda nova fase inicia em análise. Os artigos incluídos na etapa anterior
+    // são copiados para esta fase como pendentes e precisam ser triados de novo.
     phase.completed = false;
     if (project.phases.some((item) => item.label === phase.label)) {
       return { status: 'error', message: `Já existe uma fase com o rótulo "${phase.label}".` };
@@ -1166,10 +1076,11 @@ class NodeFsStrategy {
       return { status: 'error', message: 'Selecione pelo menos uma categoria para a nova fase.' };
     }
 
+    const inheritanceResult = this.inheritIncludedPapers(projectID, project, latestPhase, phase);
+    if (inheritanceResult?.status === 'error') return inheritanceResult;
+
     project.phases.push(phase);
-    // Somente a primeira fase é ativada no momento da criação. As seguintes
-    // permanecem planejadas até a fase ativa ser concluída.
-    if (!project.activePhaseLabel) project.activePhaseLabel = phase.label;
+    project.activePhaseLabel = phase.label;
     project.updatedAt = new Date().toISOString();
     this.syncPhasePaperBuckets(projectID, project);
 
@@ -1179,13 +1090,12 @@ class NodeFsStrategy {
     console.log('✅ Fase salva no project.json:', phase);
     return {
       status: 'ok',
-      message: project.activePhaseLabel === phase.label && project.phases.length === 1
-        ? 'Primeira fase salva e ativada com sucesso.'
-        : 'Fase adicionada ao plano de pesquisa. Ela será ativada quando chegar sua vez.',
+      message: inheritanceResult?.inheritedCount
+        ? `Fase salva com ${inheritanceResult.inheritedCount} artigo(s) herdado(s) para nova triagem.`
+        : 'Fase salva com sucesso.',
       data: {
         ...phase,
-        inheritedCount: 0,
-        activePhaseLabel: project.activePhaseLabel,
+        inheritedCount: inheritanceResult?.inheritedCount || 0,
       },
     };
   }
@@ -1222,42 +1132,23 @@ class NodeFsStrategy {
 
     phase.inheritanceCategoryLabel = this.getPhasePendingCategory(project, phase)?.label || null;
     const pendingCount = Array.isArray(phase?.papers?.new) ? phase.papers.new.length : 0;
-    const isActivePhase = project.activePhaseLabel === phaseLabel;
-    const isCompletingNow = !current.completed && phase.completed;
-    const isReopening = current.completed && !phase.completed;
-
-    if (isCompletingNow && !isActivePhase) {
-      return {
-        status: 'error',
-        message: 'Somente a fase ativa pode ser concluída. As fases futuras permanecem planejadas até chegar a vez delas.',
-      };
-    }
-    if (isReopening) {
-      return {
-        status: 'error',
-        message: 'Uma fase já concluída não pode ser reaberta depois que a progressão avançou.',
-      };
-    }
-    if (isCompletingNow && pendingCount > 0) {
+    if (phase.completed && pendingCount > 0) {
       return {
         status: 'error',
         message: `Classifique os ${pendingCount} artigo(s) pendente(s) como incluídos ou excluídos antes de concluir esta fase.`,
       };
     }
 
-    let nextPhase = idx < project.phases.length - 1 ? project.phases[idx + 1] : null;
-    let inheritanceResult = null;
-    if (isCompletingNow && nextPhase) {
-      inheritanceResult = this.inheritIncludedPapers(projectID, project, current, nextPhase);
-      if (inheritanceResult?.status === 'error') return inheritanceResult;
+    const isLatestPhase = idx === project.phases.length - 1;
+    if (!isLatestPhase && !phase.completed) {
+      return {
+        status: 'error',
+        message: 'Fases anteriores permanecem concluídas enquanto existir uma fase posterior. Remova a fase atual para retornar.'
+      };
     }
 
     project.phases[idx] = phase;
-    if (isActivePhase) {
-      project.activePhaseLabel = isCompletingNow
-        ? (nextPhase?.label || null)
-        : phase.label;
-    }
+    if (isLatestPhase || project.activePhaseLabel === phaseLabel) project.activePhaseLabel = phase.label;
     project.updatedAt = new Date().toISOString();
 
     if (phase.label !== phaseLabel) {
@@ -1367,29 +1258,16 @@ class NodeFsStrategy {
     if (this.activeProjectID === projectID) this.activeProjectData = project;
 
     console.log('✅ Fase atualizada no project.json:', phase);
-    return {
-      status: 'ok',
-      message: isCompletingNow
-        ? (nextPhase
-          ? `Fase concluída. A próxima fase foi ativada com ${inheritanceResult?.inheritedCount || 0} artigo(s) selecionado(s) transferido(s).`
-          : 'Fase concluída. O plano de pesquisa não possui outra fase para ativar.')
-        : 'Fase atualizada com sucesso.',
-      data: {
-        ...phase,
-        activePhaseLabel: project.activePhaseLabel,
-        inheritedCount: inheritanceResult?.inheritedCount || 0,
-      },
-    };
+    return { status: 'ok', message: 'Fase atualizada com sucesso.', data: phase };
   }
 
   async deletePhase(projectID, phaseLabel) {
     const relPath = this.path.join(projectID, 'project.json');
-    const rawProject = this.readJson(relPath);
+    const project = this.readJson(relPath);
 
     console.log('🧭 NodeFsStrategy.deletePhase', { projectID, phaseLabel, relPath });
 
-    if (!rawProject) return { status: 'error', message: 'Projeto não encontrado.' };
-    const project = this.normalizeProjectPhaseCategoryModel(rawProject);
+    if (!project) return { status: 'error', message: 'Projeto não encontrado.' };
     if (!Array.isArray(project.phases)) project.phases = [];
 
     if (project.phases.length <= 1) {
@@ -1398,23 +1276,23 @@ class NodeFsStrategy {
 
     const phaseIndex = project.phases.findIndex((p) => p.label === phaseLabel);
     if (phaseIndex === -1) return { status: 'error', message: 'Fase não encontrada.' };
-
-    const activePhaseIndex = project.phases.findIndex((p) => p.label === project.activePhaseLabel);
-    if (activePhaseIndex === -1 || phaseIndex <= activePhaseIndex) {
+    if (phaseIndex !== project.phases.length - 1) {
       return {
         status: 'error',
-        message: 'Somente fases planejadas depois da fase ativa podem ser excluídas. A fase ativa e o histórico anterior estão protegidos.'
+        message: 'Somente a fase atual mais recente pode ser removida. Remova as fases posteriores primeiro.'
       };
     }
 
-    project.phases.splice(phaseIndex, 1);
-    const previousPhase = project.phases.at(-1) || null;
+    project.phases.pop();
+    const previousPhase = project.phases.at(-1);
+    previousPhase.completed = false;
+    project.activePhaseLabel = previousPhase.label;
 
     const phaseDir = this.path.join(this.baseDir, projectID, 'phases', phaseLabel);
     if (this.fs.existsSync(phaseDir)) {
       this.fs.rmSync(phaseDir, { recursive: true, force: true });
     }
-    this.cleanupDeletedPhasePaperReferences(projectID, phaseLabel, project.activePhaseLabel || previousPhase?.label || null);
+    this.cleanupDeletedPhasePaperReferences(projectID, phaseLabel, previousPhase.label);
 
     project.updatedAt = new Date().toISOString();
     this.syncPhasePaperBuckets(projectID, project);
@@ -1425,63 +1303,27 @@ class NodeFsStrategy {
     return { status: 'ok', message: 'Fase removida com sucesso.', data: { activePhaseLabel: project.activePhaseLabel || null } };
   }
 
-  async reorderPhases(projectID, orderedLabels = []) {
-    const relPath = this.path.join(projectID, 'project.json');
-    const rawProject = this.readJson(relPath);
-    if (!rawProject) return { status: 'error', message: 'Projeto não encontrado.' };
-
-    const project = this.normalizeProjectPhaseCategoryModel(rawProject);
-    const phases = Array.isArray(project.phases) ? project.phases : [];
-    const activeIndex = phases.findIndex((phase) => phase?.label === project.activePhaseLabel);
-    if (activeIndex < 0) return { status: 'error', message: 'Fase ativa não encontrada.' };
-
-    const currentLabels = phases.map((phase) => phase?.label).filter(Boolean);
-    if (!Array.isArray(orderedLabels) || orderedLabels.length !== currentLabels.length) {
-      return { status: 'error', message: 'Ordem de fases inválida.' };
-    }
-    const unique = new Set(orderedLabels);
-    if (unique.size !== currentLabels.length || currentLabels.some((label) => !unique.has(label))) {
-      return { status: 'error', message: 'A nova ordem deve conter exatamente as fases existentes.' };
-    }
-
-    // A fase ativa e todo o histórico anterior são imutáveis. Apenas o trecho
-    // planejado após a fase ativa pode mudar de posição.
-    const protectedPrefix = currentLabels.slice(0, activeIndex + 1);
-    const requestedPrefix = orderedLabels.slice(0, activeIndex + 1);
-    if (protectedPrefix.some((label, index) => requestedPrefix[index] !== label)) {
-      return { status: 'error', message: 'Fases concluídas e a fase ativa não podem ser reposicionadas.' };
-    }
-
-    const byLabel = new Map(phases.map((phase) => [phase.label, phase]));
-    project.phases = orderedLabels.map((label) => byLabel.get(label));
-    project.updatedAt = new Date().toISOString();
-    this.writeJson(relPath, project);
-    if (this.activeProjectID === projectID) this.activeProjectData = project;
-
-    return { status: 'ok', message: 'Ordem das fases atualizada.', data: { phases: project.phases } };
-  }
-
   async setActivePhase(projectID, phaseLabel) {
     const relPath = this.path.join(projectID, 'project.json');
-    const rawProject = this.readJson(relPath);
+    const project = this.readJson(relPath);
 
     console.log('🟢 NodeFsStrategy.setActivePhase', { projectID, phaseLabel, relPath });
 
-    if (!rawProject) return { status: 'error', message: 'Projeto não encontrado.' };
-    const project = this.normalizeProjectPhaseCategoryModel(rawProject);
+    if (!project) return { status: 'error', message: 'Projeto não encontrado.' };
     if (!Array.isArray(project.phases)) project.phases = [];
 
-    const phase = project.phases.find((p) => p.label === phaseLabel);
-    if (!phase) return { status: 'error', message: 'Fase não encontrada.' };
+    const phaseExists = project.phases.some((p) => p.label === phaseLabel);
+    if (!phaseExists) return { status: 'error', message: 'Fase não encontrada.' };
 
-    if (project.activePhaseLabel !== phaseLabel) {
+    const latestPhase = project.phases.at(-1);
+    if (latestPhase?.label !== phaseLabel) {
       return {
         status: 'error',
-        message: 'A progressão é sequencial. Conclua a fase ativa para liberar a próxima fase planejada.'
+        message: 'A fase mais recente é a única que pode ficar ativa. Para retornar à anterior, remova a fase atual.'
       };
     }
 
-    if (Array.isArray(project.categories) && project.categories.length && !phase.categories?.length) {
+    if (Array.isArray(project.categories) && project.categories.length && !latestPhase.categories?.length) {
       return { status: 'error', message: 'A fase ativa deve possuir pelo menos uma categoria.' };
     }
 
@@ -1740,14 +1582,6 @@ class WebSocketStrategy {
     await this.notifyContextMenuRefresh();
     await this.notifyScholarRefresh();
     await this.notifyDataRefresh('phase_deleted', { projectID, phaseLabel });
-    return result;
-  }
-
-  async reorderPhases(projectID, orderedLabels) {
-    const result = await this.send('reorder_phases', { projectID, orderedLabels });
-    await this.notifyContextMenuRefresh();
-    await this.notifyScholarRefresh();
-    await this.notifyDataRefresh('phases_reordered', { projectID });
     return result;
   }
 
@@ -2102,11 +1936,6 @@ class StorageService {
   async deletePhase(projectID, phaseLabel) {
     if (!this.initialized) await this.init();
     return this.strategy.deletePhase(projectID, phaseLabel);
-  }
-
-  async reorderPhases(projectID, orderedLabels) {
-    if (!this.initialized) await this.init();
-    return this.strategy.reorderPhases(projectID, orderedLabels);
   }
 
   async setActivePhase(projectID, phaseLabel) {
