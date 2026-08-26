@@ -1021,76 +1021,48 @@ class NodeFsStrategy {
       || {};
     const project = this.normalizeProjectPhaseCategoryModel(rawProject);
     const phases = Array.isArray(project.phases) ? project.phases : [];
-    const activePhase = phases.find(phase => phase?.label === project.activePhaseLabel && !phase?.completed)
-      || phases.find(phase => !phase?.completed)
-      || null;
-    if (!activePhase) {
-      return {
-        status: 'ok',
-        data: { highlightedLinks: {}, svat_papers: [], svat_project: null },
-      };
-    }
-
-    const scopedPath = this.getPhaseScopedStoragePath(this.activeProjectID, activePhase.label);
-    const activeScoped = scopedPath ? (this.readJson(scopedPath) || {}) : {};
-    const scopedPapers = Array.isArray(activeScoped.svat_papers) ? activeScoped.svat_papers : [];
-    const rawLinks = activeScoped.highlightedLinks
-      && typeof activeScoped.highlightedLinks === 'object'
-      && !Array.isArray(activeScoped.highlightedLinks)
-      ? activeScoped.highlightedLinks
-      : {};
-
-    const selectedCategoryLabels = new Set(
-      (Array.isArray(activePhase.categories) ? activePhase.categories : []).filter(Boolean)
-    );
     const categoryMap = this.getCategoryMap(project);
     const highlightedLinks = {};
-    const paperUrls = new Set();
+    const allProjectPapers = this.readProjectPaperEntries(this.activeProjectID)
+      .map(entry => entry.paper)
+      .filter(paper => paper && typeof paper === 'object' && paper.visited !== false);
 
-    // A categoria escolhida no painel da fase é a fonte única da visibilidade no
-    // Scholar. O artigo continua persistido na fase, mas só é pintado quando sua
-    // classificação atual pertence a uma das categorias marcadas na fase ativa.
-    for (const paper of scopedPapers) {
-      if (!paper || typeof paper !== 'object' || paper.visited === false) continue;
+    for (const paper of allProjectPapers) {
       const normalizedUrl = normalizeArticleUrl(paper.url || '');
-      if (normalizedUrl) paperUrls.add(normalizedUrl);
       if (!normalizedUrl) continue;
 
-      const classification = this.getPaperClassificationForPhase(paper, activePhase.label);
-      const categoryLabel = classification?.categoryLabel
-        || ((paper.phaseLabel || paper.iterationId) === activePhase.label ? paper.categoryLabel : null);
-      if (!categoryLabel || !selectedCategoryLabels.has(categoryLabel)) continue;
+      const classifications = paper.classifications
+        && typeof paper.classifications === 'object'
+        && !Array.isArray(paper.classifications)
+        ? paper.classifications
+        : {};
 
-      const category = categoryMap.get(categoryLabel);
+      const classifiedEntries = Object.entries(classifications)
+        .map(([phaseLabel, classification]) => ({
+          phaseLabel,
+          classification,
+        }))
+        .filter(item => item.classification && item.classification.categoryLabel)
+        .sort((first, second) => String(second.classification?.classifiedAt || '').localeCompare(String(first.classification?.classifiedAt || '')));
+
+      const latestClassification = classifiedEntries[0];
+      if (!latestClassification) continue;
+
+      const category = categoryMap.get(latestClassification.classification.categoryLabel)
+        || null;
       if (!category) continue;
-      const outcome = normalizeMetricType(classification?.outcome ?? paper.status, 'pending');
 
       const rawUrl = String(paper.url || '').trim();
       if (!rawUrl) continue;
-      highlightedLinks[rawUrl] = category.color || rawLinks[rawUrl] || 'yellow';
-    }
-
-    // Compatibilidade com marcações antigas que ainda não possuem um registro
-    // de artigo. Nelas, a cor é usada apenas para localizar uma categoria ativa;
-    // registros atuais nunca dependem da cor para determinar sua categoria.
-    const selectedColors = new Set(
-      [...selectedCategoryLabels]
-        .map(label => String(categoryMap.get(label)?.color || '').trim().toLowerCase())
-        .filter(Boolean)
-    );
-    for (const [url, color] of Object.entries(rawLinks)) {
-      const normalizedUrl = normalizeArticleUrl(url);
-      if (!normalizedUrl || paperUrls.has(normalizedUrl)) continue;
-      if (!selectedColors.has(String(color || '').trim().toLowerCase())) continue;
-      highlightedLinks[url] = color;
+      highlightedLinks[rawUrl] = category.color || 'yellow';
     }
 
     return {
       status: 'ok',
       data: {
         highlightedLinks,
-        svat_papers: scopedPapers,
-        svat_project: activeScoped.svat_project || null,
+        svat_papers: allProjectPapers,
+        svat_project: project,
       },
     };
   }
