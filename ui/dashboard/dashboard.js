@@ -2301,7 +2301,12 @@ function showHistory(paperId) {
   }
   
   if (btnChild) {
-    const children = state?.papers?.filter(p => p.parentPaperId === String(paper.id)) || [];
+    const activePhase = state?.project?.activePhaseLabel || "";
+    const children = state?.papers?.filter(p => {
+      if (p.parentPaperId !== String(paper.id)) return false;
+      if (!paperBelongsToPhase(p, activePhase)) return false;
+      return true;
+    }) || [];
     if (children.length > 0) {
       btnChild.style.display = "";
       btnChild.textContent = `Ver artigos filhos (${children.length})`;
@@ -2332,13 +2337,27 @@ function getFilters() {
 }
 
 function paperMatchesFilters(paper, filters, highlightedLinks = {}) {
+  // 1. Verifica a fase (se não pertence à fase, não deve aparecer de jeito nenhum)
+  if (filters.phase && filters.phase !== "all" && !paperBelongsToPhase(paper, filters.phase)) return false;
+
+  // 2. Buscas exatas (id e parent) ignoram os demais filtros para garantir que sejam encontrados
+  if (filters.q) {
+    if (filters.q.startsWith("id:")) {
+      const targetId = filters.q.replace("id:", "").trim();
+      return String(paper.id) === targetId;
+    }
+    if (filters.q.startsWith("parent:")) {
+      const targetId = filters.q.replace("parent:", "").trim();
+      return String(paper.parentPaperId) === targetId;
+    }
+  }
+
+  // 3. Filtros normais (métrica e categoria)
   const category = getPaperCategoryForPhase(paper, filters.phase, highlightedLinks);
 
   if (filters.metric && filters.metric !== "all") {
     if (getPaperMetricTypeForPhase(paper, filters.phase, highlightedLinks) !== filters.metric) return false;
   }
-
-  if (filters.phase && filters.phase !== "all" && !paperBelongsToPhase(paper, filters.phase)) return false;
 
   if (filters.category && filters.category !== "all") {
     const categoryKey = getPaperCategoryKey(category) || "uncategorized";
@@ -2346,15 +2365,6 @@ function paperMatchesFilters(paper, filters, highlightedLinks = {}) {
   }
 
   if (!filters.q) return true;
-  
-  if (filters.q.startsWith("id:")) {
-    const targetId = filters.q.replace("id:", "").trim();
-    return String(paper.id) === targetId;
-  }
-  if (filters.q.startsWith("parent:")) {
-    const targetId = filters.q.replace("parent:", "").trim();
-    return String(paper.parentPaperId) === targetId;
-  }
 
   const categoryText = category ? `${category.title || ""} ${category.label || ""}` : "sem categoria";
   const metricText = getPaperMetricLabel(getPaperMetricTypeForPhase(paper, filters.phase, highlightedLinks));
