@@ -108,6 +108,16 @@
             <div class="overviewUpdated"><span aria-hidden="true">◷</span><span id="overviewUpdatedAt">Última atualização: —</span></div>
           </div>
 
+          <div class="overviewMetricScope" aria-label="Escopo das métricas da visão geral">
+            <label for="overviewMetricScopeSelect">
+              <span>Visualizar métricas</span>
+              <select id="overviewMetricScopeSelect" aria-label="Selecionar escopo das métricas">
+                <option value="all">Projeto geral</option>
+              </select>
+            </label>
+            <small id="overviewMetricScopeHint">Resumo consolidado de todas as fases do projeto.</small>
+          </div>
+
           <div class="paperMetricsGrid" aria-label="Resumo da seleção de artigos">
             <button class="paperMetricCard paperMetricCard--total" type="button" data-paper-metric="all" aria-label="Ver todos os artigos">
               <span class="paperMetricIcon" aria-hidden="true">▤</span>
@@ -149,15 +159,6 @@
               <span class="paperMetricArrow" aria-hidden="true">→</span>
             </button>
 
-            <button class="paperMetricCard paperMetricCard--duplicate" type="button" data-paper-metric="duplicate" aria-label="Ver artigos duplicados">
-              <span class="paperMetricIcon" aria-hidden="true">⧉</span>
-              <span class="paperMetricContent">
-                <span class="paperMetricLabel">Duplicados</span>
-                <strong id="paperMetricDuplicate">0</strong>
-                <small id="paperMetricDuplicateDetail">0% do total</small>
-              </span>
-              <span class="paperMetricArrow" aria-hidden="true">→</span>
-            </button>
           </div>
 
           <div class="overviewLayout overviewLayoutTop overviewLayoutPrimary">
@@ -201,8 +202,28 @@
 
         <!-- PAPERS -->
         <section class="view hidden u-flex-fill-col" id="view_papers">
+          <div class="paperFiltersPanel" aria-label="Filtros dos artigos">
+            <label class="paperCurrentPhaseToggle">
+              <input id="filterCurrentPhase" type="checkbox" checked />
+              <span>Artigos da fase atual</span>
+            </label>
+            <select id="filterPaperPhase" class="input paperFilterSelect" aria-label="Filtrar por fase" disabled>
+              <option value="all">Todas as fases</option>
+            </select>
+            <select id="filterPaperMetric" class="input paperFilterSelect" aria-label="Filtrar por situação">
+              <option value="all">Todas as situações</option>
+              <option value="included">Incluídos</option>
+              <option value="excluded">Excluídos</option>
+              <option value="pending">Pendentes</option>
+            </select>
+            <select id="filterPaperCategory" class="input paperFilterSelect" aria-label="Filtrar por categoria">
+              <option value="all">Todas as categorias</option>
+            </select>
+            <button id="btnResetPaperViewFilters" type="button" class="btn">Limpar filtros</button>
+          </div>
+
           <div class="toolbar papersToolbar">
-            <input id="search" class="input" placeholder="Buscar por título, autor, tag…" />
+            <input id="search" class="input" placeholder="Buscar por título, autor, ano, tag ou fase…" />
             <div class="paperBulkActions" aria-label="Ações para os artigos selecionados">
               <span id="paperSelectionCount" class="paperSelectionCount" aria-live="polite">0 selecionados</span>
               <button id="btnBulkDeleteMarked" class="btn paperBulkUnmarkBtn" type="button" disabled title="Retirar os artigos selecionados da fase ativa">Remover marcados</button>
@@ -226,8 +247,9 @@
                   <th style="width:36px"><input type="checkbox" id="checkAll" /></th>
                   <th>Título</th>
                   <th style="width:72px">Ano</th>
-                  <th style="width:260px">Categoria</th>
-                  <th style="width:160px">Tags</th>
+                  <th style="width:190px">Fases</th>
+                  <th style="width:230px">Categoria</th>
+                  <th style="width:150px">Tags</th>
                   <th style="width:90px">Link</th>
                 </tr>
               </thead>
@@ -271,7 +293,7 @@
           <div class="toolbar">
             <div style="display:flex;gap:8px;align-items:center">
               <button id="btnShowAddPhase" class="btn">Adicionar nova fase</button>
-              <div class="muted">As fases são organizadas em ordem. Clique em uma fase concluída para consultar os artigos selecionados, removidos e herdados.</div>
+              <div class="muted">As fases são organizadas em ordem. Use “Ver artigos” na fase ativa ou em uma fase concluída para consultar a triagem sem sair da árvore.</div>
             </div>
           </div>
 
@@ -328,9 +350,29 @@
           <div class="sidePanelBody u-scroll-y">
             <div id="categoryRequiredNotice" class="phaseRequiredNotice hidden" role="alert" aria-live="assertive">
               <span class="requiredStepLabel">Tutorial · Etapa 3 de 4</span>
-              <strong>Crie a primeira categoria para continuar</strong>
-              <span>As categorias organizam e identificam os artigos durante cada fase. Preencha o título e salve pelo menos uma categoria para avançar no tutorial.</span>
+              <strong>Crie as categorias da sua triagem</strong>
+              <span>As categorias organizam e identificam os artigos durante cada fase. Você pode criá-las manualmente ou usar a sugestão padrão do iCipó com um clique.</span>
             </div>
+
+            <div id="defaultCategoriesSuggestion" class="defaultCategoriesSuggestion hidden">
+              <div class="defaultCategoriesSuggestionHeader">
+                <div>
+                  <span class="tutorialEyebrow">Sugestão do iCipó</span>
+                  <strong>Categorias essenciais para começar</strong>
+                </div>
+                <span class="defaultCategoriesSuggestionBadge">1 clique</span>
+              </div>
+              <p>Crie automaticamente as três categorias necessárias para o fluxo de triagem. Você poderá editar nome, descrição, cor e critérios depois.</p>
+              <div class="defaultCategoriesPreview" aria-label="Categorias padrão sugeridas">
+                <span><i class="defaultCategoryDot defaultCategoryDotIncluded"></i>Incluir</span>
+                <span><i class="defaultCategoryDot defaultCategoryDotExcluded"></i>Excluir</span>
+                <span><i class="defaultCategoryDot defaultCategoryDotPending"></i>Pendente</span>
+              </div>
+              <button id="btnCreateDefaultCategories" type="button" class="btn defaultCategoriesButton">Criar categorias padrão</button>
+              <div id="defaultCategoriesError" class="fieldError" aria-live="polite"></div>
+            </div>
+
+            <div class="categoryManualDivider"><span>ou crie manualmente</span></div>
 
             <label for="categoryTitle">Título da categoria</label>
             <input id="categoryTitle" class="input" placeholder="Ex.: Incluído" />
@@ -433,10 +475,6 @@
             <label class="visually-hidden" for="phaseDesc">Descrição</label>
             <textarea id="phaseDesc" class="input" style="min-height:120px" placeholder="Descrição da fase"></textarea>
             <div id="phaseDescError" class="fieldError" aria-live="polite"></div>
-
-            <label class="visually-hidden" for="phaseCriteria">Critérios</label>
-            <textarea id="phaseCriteria" class="input" style="min-height:120px" placeholder="Critérios (texto livre)"></textarea>
-            <div id="phaseCriteriaError" class="fieldError" aria-live="polite"></div>
 
             <label for="phaseCategories" class="phaseFieldLabel">Categorias usadas nesta fase</label>
             <div class="categoryMetricHelp phaseTriageHelp">

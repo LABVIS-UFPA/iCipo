@@ -19,6 +19,8 @@ let tutorialTransitionTimer = null;
 let overviewResizeTimer = null;
 let paperMetricFilter = "all";
 let paperCategoryFilter = "all";
+let paperPhaseFilter = "active";
+let overviewMetricScope = "all"; // all | active | <phaseLabel>
 let renderedPapersById = new Map();
 let paperBulkBusy = false;
 let paperBulkPendingOutcome = null;
@@ -37,7 +39,6 @@ const LIVE_REFRESH_DEBOUNCE_MS = 220;
 const PAPER_METRIC_LABELS = Object.freeze({
   included: "Incluídos",
   excluded: "Excluídos",
-  duplicate: "Duplicados",
   pending: "Pendentes",
 });
 
@@ -251,7 +252,6 @@ function getDynamicPhaseStats(phaseLabel) {
     inherited: 0,
     included: 0,
     excluded: 0,
-    duplicate: 0,
     pending: 0,
     processed: 0,
   };
@@ -262,22 +262,18 @@ function getDynamicPhaseStats(phaseLabel) {
     if (!classification) continue;
 
     stats.total += 1;
-    const entryType = String(classification.entryType || "").toLowerCase();
-    if (
-      classification.inherited === true
-      || entryType === "inherited"
-      || classification.inheritedFromPhaseLabel
-    ) {
-      stats.inherited += 1;
-    }
+    const legacyInherited = isInheritedPhaseClassification(classification);
     const outcome = normalizeMetricType(classification.outcome ?? paper.status, "pending");
-    if (outcome === "included") stats.included += 1;
+
+    // Herdados são artigos aprovados na fase anterior. Eles ficam visíveis
+    // separadamente e nunca retornam para a fila de Pendentes da fase atual.
+    if (legacyInherited) stats.inherited += 1;
+    else if (outcome === "included") stats.included += 1;
     else if (outcome === "excluded") stats.excluded += 1;
-    else if (outcome === "duplicate") stats.duplicate += 1;
     else stats.pending += 1;
   }
 
-  stats.processed = stats.included + stats.excluded + stats.duplicate;
+  stats.processed = stats.inherited + stats.included + stats.excluded + stats.duplicate;
   return stats;
 }
 
@@ -343,6 +339,9 @@ function getPhaseArchiveRecords(phase = {}) {
     ) {
       outcome = "duplicate";
     }
+    // Herdados não pertencem à fila de Pendentes. Mantemos outcome incluído
+    // apenas como decisão de origem, mas a apresentação usa o grupo Herdados.
+    if (inherited && outcome === "pending") outcome = "included";
     const classifiedAt = safeClassification.classifiedAt
       || fallback.classifiedAt
       || safePaper.updatedAt
@@ -408,7 +407,7 @@ function getPhaseArchiveRecords(phase = {}) {
   addBucket(phasePapers.selected, { outcome: "included" });
   addBucket(phasePapers.removed, { outcome: "excluded" });
   addBucket(phasePapers.new, { outcome: "pending" });
-  addBucket(phasePapers.inherited, { inherited: true, outcome: "pending" });
+  addBucket(phasePapers.inherited, { inherited: true, outcome: "included" });
 
   return [...records.values()].sort((first, second) => {
     const dateOrder = String(second.classifiedAt || "").localeCompare(String(first.classifiedAt || ""));
@@ -423,12 +422,11 @@ function getPhaseArchiveOutcomeLabel(outcome) {
   const normalizedOutcome = normalizeMetricType(outcome, "pending");
   if (normalizedOutcome === "included") return "Selecionado";
   if (normalizedOutcome === "excluded") return "Removido";
-  if (normalizedOutcome === "duplicate") return "Duplicado";
   return "Pendente";
 }
 
 function getPhaseArchiveCategory(record) {
-  if (!record || record.outcome === "duplicate") return null;
+  if (!record) return null;
   const categoryLabel = String(record.categoryLabel || "").trim().toLowerCase();
   if (!categoryLabel) return null;
   return (Array.isArray(state?.project?.categories) ? state.project.categories : []).find((category) => {
@@ -443,9 +441,7 @@ function createPhaseArchiveArticleItem(record) {
   const outcome = normalizeMetricType(record?.outcome, "pending");
   const category = getPhaseArchiveCategory(record);
   const categoryColor = normalizeHexColor(category?.color, "#A5ADBA");
-  const categoryName = outcome === "duplicate"
-    ? "Duplicado automático"
-    : (category?.title || category?.label || record?.categoryLabel || "Sem categoria");
+  const categoryName = category?.title || category?.label || record?.categoryLabel || "Sem categoria";
   const title = String(paper.title || paper.url || paper.id || "Artigo sem título").trim();
   const article = document.createElement("article");
   article.className = `phaseArchiveArticle phaseArchiveArticle--${outcome}`;
@@ -492,19 +488,7 @@ function createPhaseArchiveArticleItem(record) {
   categoryBadge.append(categoryMarker, categoryText);
   badges.appendChild(categoryBadge);
 
-  const originBadge = document.createElement("span");
-  originBadge.className = record?.inherited
-    ? "phaseArchiveOriginBadge phaseArchiveOriginBadge--inherited"
-    : "phaseArchiveOriginBadge";
-  const inheritedFromPhase = record?.inheritedFromPhaseLabel
-    ? (Array.isArray(state?.project?.phases) ? state.project.phases : [])
-        .find(phase => phase?.label === record.inheritedFromPhaseLabel)
-    : null;
-  const inheritedFromName = inheritedFromPhase?.title || record?.inheritedFromPhaseLabel || "";
-  originBadge.textContent = record?.inherited
-    ? `Herdado${inheritedFromName ? ` de ${inheritedFromName}` : ""}`
-    : "Novo na fase";
-  badges.appendChild(originBadge);
+
 
   article.append(heading, meta, badges);
   return article;
@@ -547,10 +531,10 @@ function createCompletedPhaseArchivePanel(phase = {}) {
   const phaseLabel = phase?.label || "";
   const panelId = getPhaseArchiveDomId(phaseLabel);
   const records = getPhaseArchiveRecords(phase);
-  const selected = records.filter(record => record.outcome === "included");
-  const removed = records.filter(record => record.outcome === "excluded" || record.outcome === "duplicate");
-  const inherited = records.filter(record => record.inherited);
-  const pending = records.filter(record => record.outcome === "pending");
+  const inherited = records.filter(record => record.inherited === true);
+  const selected = records.filter(record => !record.inherited && record.outcome === "included");
+  const removed = records.filter(record => !record.inherited && (record.outcome === "excluded" || record.outcome === "duplicate"));
+  const pending = records.filter(record => !record.inherited && record.outcome === "pending");
 
   const panel = document.createElement("section");
   panel.id = panelId;
@@ -563,30 +547,86 @@ function createCompletedPhaseArchivePanel(phase = {}) {
   header.className = "phaseArchiveHeader";
   const headerText = document.createElement("div");
   headerText.className = "phaseArchiveHeaderText";
+  const isActivePhase = state?.project?.activePhaseLabel === phaseLabel && !isPhaseCompleted(phase);
   const eyebrow = document.createElement("span");
   eyebrow.className = "phaseArchiveEyebrow";
-  eyebrow.textContent = "Histórico da fase concluída";
+  eyebrow.textContent = isActivePhase ? "Fase ativa • artigos em andamento" : "Histórico da fase concluída";
   const title = document.createElement("h3");
   title.textContent = phase.title || phaseLabel || "Fase";
   const description = document.createElement("p");
-  description.textContent = inherited.length
-    ? `${records.length} artigo${records.length === 1 ? "" : "s"} trabalhado${records.length === 1 ? "" : "s"}. Artigos herdados também aparecem no grupo do resultado final da triagem.`
+  description.textContent = isActivePhase
+    ? `${records.length} artigo${records.length === 1 ? "" : "s"} atualmente nesta fase. Pendentes são apenas os artigos novos adicionados durante esta fase.`
     : `${records.length} artigo${records.length === 1 ? "" : "s"} trabalhado${records.length === 1 ? "" : "s"} nesta fase.`;
   headerText.append(eyebrow, title, description);
 
   const closeButton = document.createElement("button");
   closeButton.type = "button";
   closeButton.className = "btn phaseArchiveClose";
-  closeButton.textContent = "Fechar lista";
+  closeButton.textContent = "Fechar";
+  closeButton.setAttribute("aria-label", "Fechar informações da fase");
   closeButton.addEventListener("click", () => toggleCompletedPhaseArchive(phaseLabel));
   header.append(headerText, closeButton);
+
+  const phaseInfo = document.createElement("div");
+  phaseInfo.className = "phaseArchivePhaseInfo";
+
+  const phaseDescription = String(phase?.description ?? phase?.desc ?? "").trim();
+  if (phaseDescription) {
+    const info = document.createElement("div");
+    info.className = "phaseArchiveInfoBlock";
+    const infoLabel = document.createElement("span");
+    infoLabel.textContent = "Descrição";
+    const infoValue = document.createElement("p");
+    infoValue.textContent = phaseDescription;
+    info.append(infoLabel, infoValue);
+    phaseInfo.appendChild(info);
+  }
+
+  const phaseCriteria = Array.isArray(phase?.criteria)
+    ? phase.criteria.filter(Boolean).join(" • ")
+    : String(phase?.criteria || "").trim();
+  if (phaseCriteria) {
+    const info = document.createElement("div");
+    info.className = "phaseArchiveInfoBlock";
+    const infoLabel = document.createElement("span");
+    infoLabel.textContent = "Critérios";
+    const infoValue = document.createElement("p");
+    infoValue.textContent = phaseCriteria;
+    info.append(infoLabel, infoValue);
+    phaseInfo.appendChild(info);
+  }
+
+  const phaseCategoryLabels = Array.isArray(phase?.categories) ? phase.categories.filter(Boolean) : [];
+  if (phaseCategoryLabels.length) {
+    const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
+    const info = document.createElement("div");
+    info.className = "phaseArchiveInfoBlock";
+    const infoLabel = document.createElement("span");
+    infoLabel.textContent = "Categorias";
+    const badges = document.createElement("div");
+    badges.className = "phaseArchivePhaseCategories";
+    phaseCategoryLabels.forEach(categoryLabel => {
+      const category = categories.find(item => item?.label === categoryLabel);
+      const badge = document.createElement("span");
+      badge.className = "phaseArchivePhaseCategory";
+      const dot = document.createElement("i");
+      const color = normalizeHexColor(category?.color || "");
+      if (color) dot.style.background = color;
+      const text = document.createElement("span");
+      text.textContent = category?.title || categoryLabel;
+      badge.append(dot, text);
+      badges.appendChild(badge);
+    });
+    info.append(infoLabel, badges);
+    phaseInfo.appendChild(info);
+  }
 
   const summary = document.createElement("div");
   summary.className = "phaseArchiveSummary";
   const summaryItems = [
+    ["Herdados", inherited.length, "inherited"],
     ["Selecionados", selected.length, "selected"],
     ["Removidos", removed.length, "removed"],
-    ["Herdados", inherited.length, "inherited"],
   ];
   if (pending.length) summaryItems.push(["Pendentes", pending.length, "pending"]);
   for (const [label, value, tone] of summaryItems) {
@@ -599,6 +639,12 @@ function createCompletedPhaseArchivePanel(phase = {}) {
   const groups = document.createElement("div");
   groups.className = "phaseArchiveGroups";
   groups.appendChild(createPhaseArchiveGroup({
+    title: "Herdados",
+    description: "Artigos selecionados na fase anterior e carregados para esta fase.",
+    tone: "inherited",
+    records: inherited,
+  }));
+  groups.appendChild(createPhaseArchiveGroup({
     title: "Selecionados",
     description: "Artigos incluídos ao final da triagem desta fase.",
     tone: "selected",
@@ -606,18 +652,10 @@ function createCompletedPhaseArchivePanel(phase = {}) {
   }));
   groups.appendChild(createPhaseArchiveGroup({
     title: "Removidos",
-    description: "Artigos excluídos ou identificados automaticamente como duplicados.",
+    description: "Artigos excluídos ao final da triagem desta fase.",
     tone: "removed",
     records: removed,
   }));
-  if (inherited.length) {
-    groups.appendChild(createPhaseArchiveGroup({
-      title: "Herdados",
-      description: "Artigos recebidos da fase anterior e submetidos a uma nova triagem.",
-      tone: "inherited",
-      records: inherited,
-    }));
-  }
   if (pending.length) {
     groups.appendChild(createPhaseArchiveGroup({
       title: "Pendentes",
@@ -627,7 +665,10 @@ function createCompletedPhaseArchivePanel(phase = {}) {
     }));
   }
 
-  panel.append(header, summary, groups);
+  panel.setAttribute("tabindex", "-1");
+  panel.append(header);
+  if (phaseInfo.childElementCount) panel.appendChild(phaseInfo);
+  panel.append(summary, groups);
   return panel;
 }
 
@@ -636,10 +677,10 @@ function applyCompletedPhaseArchiveState({ scroll = false } = {}) {
   if (!phasesList) return;
 
   phasesList.querySelectorAll(".phaseCard[data-label]").forEach((card) => {
-    const isCompleted = card.classList.contains("phaseCard--completed");
-    const isOpen = isCompleted && card.dataset.label === expandedCompletedPhaseLabel;
+    const canViewArticles = card.classList.contains("phaseCard--completed") || card.classList.contains("active");
+    const isOpen = canViewArticles && card.dataset.label === expandedCompletedPhaseLabel;
     card.classList.toggle("phaseCard--archive-open", isOpen);
-    if (isCompleted) card.setAttribute("aria-expanded", String(isOpen));
+    if (canViewArticles) card.setAttribute("aria-expanded", String(isOpen));
     const toggleButton = card.querySelector('[data-action="archive"]');
     if (toggleButton) {
       toggleButton.setAttribute("aria-expanded", String(isOpen));
@@ -658,7 +699,7 @@ function applyCompletedPhaseArchiveState({ scroll = false } = {}) {
   if (scroll && expandedCompletedPhaseLabel) {
     const panel = [...phasesList.querySelectorAll(".phaseArchivePanel")]
       .find(item => item.dataset.phaseArchiveLabel === expandedCompletedPhaseLabel);
-    setTimeout(() => panel?.scrollIntoView?.({ behavior: "smooth", block: "nearest" }), 0);
+    setTimeout(() => panel?.focus?.({ preventScroll: true }), 0);
   }
 }
 
@@ -668,7 +709,6 @@ function toggleCompletedPhaseArchive(phaseLabel) {
 }
 
 function getPaperCategory(paper, highlightedLinks = {}) {
-  if (paper?.autoDuplicate) return null;
   const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
   const classification = getPaperClassification(paper);
   const explicitCategoryCandidates = [
@@ -715,10 +755,6 @@ function getPaperCategory(paper, highlightedLinks = {}) {
 }
 
 function getPaperMetricType(paper, highlightedLinks = {}) {
-  if (paper?.autoDuplicate || (paper?.duplicateOfId && normalizeMetricType(paper?.status, "pending") === "duplicate")) {
-    return "duplicate";
-  }
-
   const category = getPaperCategory(paper, highlightedLinks);
   if (category) {
     return normalizeMetricType(category.metricType, inferMetricTypeFromCategory(category));
@@ -738,32 +774,8 @@ function getPaperMetricLabel(metricType) {
   return PAPER_METRIC_LABELS[normalizeMetricType(metricType, "pending")] || "Pendentes";
 }
 
-function getDuplicateCandidateLabel(paper) {
-  const title = String(paper?.title || paper?.url || paper?.id || "Artigo sem título").trim();
-  const compactTitle = title.length > 72 ? `${title.slice(0, 69)}…` : title;
-  const year = extractPaperYear(paper);
-  return year ? `${compactTitle} (${year})` : compactTitle;
-}
-
-function renderDuplicateOriginalSelect(paper, candidates = []) {
-  const selectedId = String(paper?.duplicateOfId ?? "");
-  const original = candidates.find(candidate => String(candidate?.id ?? "") === selectedId) || null;
-  const originalLabel = original
-    ? getDuplicateCandidateLabel(original)
-    : (selectedId ? `Registro ${selectedId}` : "Original não localizado");
-
-  return `
-    <span class="duplicateRelation">
-      <span class="duplicateOriginalAutomatic" title="Vínculo identificado automaticamente pelo endereço do artigo">
-        Original: ${escapeHtml(originalLabel)}
-      </span>
-      <small>Vínculo automático pelo mesmo link</small>
-    </span>
-  `;
-}
-
 function applyCategoryMetricToPaper(paper, category, previousLabel = category?.label) {
-  if (!paper || paper.autoDuplicate || !category?.label) return false;
+  if (!paper || !category?.label) return false;
   const labels = new Set([previousLabel, category.label].filter(Boolean));
   const tags = Array.isArray(paper.tags) ? paper.tags : [];
   const classifications = paper.classifications
@@ -782,7 +794,6 @@ function applyCategoryMetricToPaper(paper, category, previousLabel = category?.l
   const metricType = normalizeCategoryMetricType(category.metricType, inferMetricTypeFromCategory(category));
   paper.categoryLabel = category.label;
   paper.status = metricType;
-  if (metricType !== "duplicate") paper.duplicateOfId = null;
   paper.tags = [...new Set(tags.map(tag => labels.has(tag) ? category.label : tag))];
 
   for (const classification of matchingClassifications) {
@@ -1025,8 +1036,7 @@ function removePaperClassificationFromActivePhase(paper) {
       phaseLabel: null,
       iterationId: null,
       categoryLabel: null,
-      status: paper.autoDuplicate ? "duplicate" : "pending",
-      duplicateOfId: paper.autoDuplicate ? (paper.duplicateOfId || null) : null,
+      status: "pending",
       visited: false,
       updatedAt,
       history,
@@ -1039,14 +1049,10 @@ function removePaperClassificationFromActivePhase(paper) {
       .map(category => category?.label)
       .filter(Boolean)
   );
-  const categoryLabel = paper.autoDuplicate
-    ? null
-    : (latestClassification?.categoryLabel || null);
+  const categoryLabel = latestClassification?.categoryLabel || null;
   const baseTags = (Array.isArray(paper.tags) ? paper.tags : [])
-    .filter(tag => !categoryLabels.has(tag) && tag !== "duplicado-automatico");
-  const tags = paper.autoDuplicate
-    ? [...new Set([...baseTags, "duplicado-automatico"])]
-    : [...new Set([...baseTags, ...(categoryLabel ? [categoryLabel] : [])])];
+    .filter(tag => !categoryLabels.has(tag));
+  const tags = [...new Set([...baseTags, ...(categoryLabel ? [categoryLabel] : [])])];
 
   return {
     ...paper,
@@ -1054,10 +1060,7 @@ function removePaperClassificationFromActivePhase(paper) {
     phaseLabel: latestClassification?.phaseLabel || latestPhaseLabel,
     iterationId: latestClassification?.phaseLabel || latestPhaseLabel,
     categoryLabel,
-    status: paper.autoDuplicate
-      ? "duplicate"
-      : normalizeMetricType(latestClassification?.outcome, "pending"),
-    duplicateOfId: paper.autoDuplicate ? (paper.duplicateOfId || null) : null,
+    status: normalizeMetricType(latestClassification?.outcome, "pending"),
     tags,
     visited: true,
     updatedAt,
@@ -1450,21 +1453,110 @@ function setActiveView(view) {
   if (allowedView === 'overview' && state) renderOverview();
 }
 
-function computeOverviewMetrics(papers = [], highlightedLinks = {}) {
+function getLatestPaperClassification(paper) {
+  const classifications = paper?.classifications;
+  if (!classifications || typeof classifications !== "object" || Array.isArray(classifications)) return null;
+  return Object.values(classifications)
+    .filter(item => item && typeof item === "object")
+    .sort((a, b) => String(b.classifiedAt || "").localeCompare(String(a.classifiedAt || "")))[0]
+    || null;
+}
+
+function getActivePhaseLabel() {
+  return state?.project?.activePhaseLabel
+    || state?.project?.phases?.find?.(phase => !isPhaseCompleted(phase))?.label
+    || null;
+}
+
+function resolveOverviewPhaseLabel(scope = overviewMetricScope) {
+  if (!scope || scope === "all") return "all";
+  if (scope === "active") return getActivePhaseLabel() || "all";
+  return scope;
+}
+
+function getOverviewMetricType(paper, scope = "all", highlightedLinks = {}) {
+  let metricType;
+  const phaseLabel = resolveOverviewPhaseLabel(scope);
+  if (phaseLabel && phaseLabel !== "all") {
+    const classification = getPaperClassificationForPhase(paper, phaseLabel);
+    if (!classification || isInheritedPhaseClassification(classification)) return null;
+    metricType = normalizeMetricType(classification.outcome ?? paper?.status, "pending");
+  } else {
+    const latestClassification = getLatestPaperClassification(paper);
+    metricType = latestClassification
+      ? normalizeMetricType(latestClassification.outcome ?? paper?.status, "pending")
+      : getPaperMetricType(paper, highlightedLinks);
+  }
+
+  // A métrica de duplicados foi removida da Visão Geral. Registros legados
+  // eventualmente marcados como duplicate entram em Excluídos para manter o
+  // total consolidado coerente sem reintroduzir a métrica removida.
+  return metricType === "duplicate" ? "excluded" : metricType;
+}
+
+function getOverviewScopedPapers(papers = [], scope = overviewMetricScope) {
+  const phaseLabel = resolveOverviewPhaseLabel(scope);
+  if (!phaseLabel || phaseLabel === "all") return [...papers];
+
+  return papers.filter((paper) => {
+    const classification = getPaperClassificationForPhase(paper, phaseLabel);
+    return Boolean(classification) && !isInheritedPhaseClassification(classification);
+  });
+}
+
+function getOverviewPaperCategory(paper, scope = overviewMetricScope, highlightedLinks = {}) {
+  const phaseLabel = resolveOverviewPhaseLabel(scope);
+  if (!phaseLabel || phaseLabel === "all") return getPaperCategory(paper, highlightedLinks);
+
+  const classification = getPaperClassificationForPhase(paper, phaseLabel);
+  if (!classification || isInheritedPhaseClassification(classification)) return null;
+
+  const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
+  const candidates = [
+    classification.categoryLabel,
+    classification.categoryId,
+  ].map(value => String(value || "").trim().toLowerCase()).filter(Boolean);
+
+  const matched = categories.find((category) => {
+    const refs = [category?.label, category?.title, category?.id]
+      .map(value => String(value || "").trim().toLowerCase())
+      .filter(Boolean);
+    return refs.some(ref => candidates.includes(ref));
+  });
+  if (matched) return matched;
+
+  // Compatibilidade com registros legados: usa a categoria gravada diretamente
+  // no artigo somente quando o próprio artigo pertence à fase selecionada.
+  const paperPhase = paper?.phaseLabel || paper?.phaseId || paper?.iterationId;
+  if (paperPhase === phaseLabel) {
+    const fallbackCandidates = [paper?.categoryLabel, paper?.categoryId]
+      .map(value => String(value || "").trim().toLowerCase())
+      .filter(Boolean);
+    return categories.find((category) => {
+      const refs = [category?.label, category?.title, category?.id]
+        .map(value => String(value || "").trim().toLowerCase())
+        .filter(Boolean);
+      return refs.some(ref => fallbackCandidates.includes(ref));
+    }) || null;
+  }
+
+  return null;
+}
+
+function computeOverviewMetrics(papers = [], highlightedLinks = {}, phaseLabel = "all") {
   const metrics = {
     total: 0,
     included: 0,
     excluded: 0,
-    duplicate: 0,
     pending: 0,
   };
 
   for (const paper of papers) {
+    const metricType = getOverviewMetricType(paper, phaseLabel, highlightedLinks);
+    if (!metricType) continue;
     metrics.total += 1;
-    const metricType = getPaperMetricType(paper, highlightedLinks);
     if (metricType === "included") metrics.included += 1;
     else if (metricType === "excluded") metrics.excluded += 1;
-    else if (metricType === "duplicate") metrics.duplicate += 1;
     else metrics.pending += 1;
   }
 
@@ -1476,28 +1568,75 @@ function formatMetricPercentage(value, total) {
   return `${percentage.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% do total`;
 }
 
-function renderPaperMetrics(papers, highlightedLinks = {}) {
-  const metrics = computeOverviewMetrics(papers, highlightedLinks);
+function renderOverviewMetricScope() {
+  const select = $("#overviewMetricScopeSelect");
+  const hint = $("#overviewMetricScopeHint");
+  if (!select) return;
+
+  const phases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
+  const activePhaseLabel = getActivePhaseLabel();
+  const availableLabels = new Set(phases.map(phase => phase?.label).filter(Boolean));
+
+  // Mantém compatibilidade com a opção "active" criada anteriormente, mas
+  // converte a seleção para o rótulo real da fase para permitir navegar entre
+  // qualquer fase do projeto no mesmo seletor.
+  if (overviewMetricScope === "active") {
+    overviewMetricScope = activePhaseLabel || "all";
+  } else if (overviewMetricScope !== "all" && !availableLabels.has(overviewMetricScope)) {
+    overviewMetricScope = "all";
+  }
+
+  select.replaceChildren();
+
+  const generalOption = document.createElement("option");
+  generalOption.value = "all";
+  generalOption.textContent = "Projeto geral";
+  select.appendChild(generalOption);
+
+  phases.forEach((phase, index) => {
+    if (!phase?.label) return;
+    const option = document.createElement("option");
+    option.value = phase.label;
+    const phaseName = phase.title || phase.label || `Fase ${index + 1}`;
+    option.textContent = phase.label === activePhaseLabel
+      ? `${phaseName} (ativa)`
+      : phaseName;
+    select.appendChild(option);
+  });
+
+  select.value = overviewMetricScope;
+
+  if (hint) {
+    if (overviewMetricScope === "all") {
+      hint.textContent = "Resumo consolidado de todas as fases do projeto.";
+    } else {
+      const selectedPhase = phases.find(phase => phase?.label === overviewMetricScope);
+      const phaseName = selectedPhase?.title || selectedPhase?.label || "fase selecionada";
+      const activeSuffix = overviewMetricScope === activePhaseLabel ? " Esta é a fase ativa." : "";
+      hint.textContent = `Métricas somente de ${phaseName}.${activeSuffix} Artigos herdados não entram nessa contagem.`;
+    }
+  }
+}
+
+function renderPaperMetrics(papers, highlightedLinks = {}, scope = overviewMetricScope) {
+  const metrics = computeOverviewMetrics(papers, highlightedLinks, scope);
   const total = $("#paperMetricTotal");
   const included = $("#paperMetricIncluded");
   const excluded = $("#paperMetricExcluded");
   const pending = $("#paperMetricPending");
-  const duplicate = $("#paperMetricDuplicate");
   const totalDetail = $("#paperMetricTotalDetail");
   const includedDetail = $("#paperMetricIncludedDetail");
   const excludedDetail = $("#paperMetricExcludedDetail");
   const pendingDetail = $("#paperMetricPendingDetail");
-  const duplicateDetail = $("#paperMetricDuplicateDetail");
 
   if (total) total.textContent = String(metrics.total);
   if (included) included.textContent = String(metrics.included);
   if (excluded) excluded.textContent = String(metrics.excluded);
   if (pending) pending.textContent = String(metrics.pending);
-  if (duplicate) duplicate.textContent = String(metrics.duplicate);
 
   if (totalDetail) {
     totalDetail.textContent = !metrics.total
-      ? "Nenhum artigo registrado"
+      ? (scope === "all" ? "Nenhum artigo registrado" : "Nenhum artigo selecionado nesta fase")
       : metrics.pending
         ? `${metrics.pending} pendente${metrics.pending === 1 ? "" : "s"} de classificação`
         : "Todos os artigos estão classificados";
@@ -1505,7 +1644,6 @@ function renderPaperMetrics(papers, highlightedLinks = {}) {
   if (includedDetail) includedDetail.textContent = formatMetricPercentage(metrics.included, metrics.total);
   if (excludedDetail) excludedDetail.textContent = formatMetricPercentage(metrics.excluded, metrics.total);
   if (pendingDetail) pendingDetail.textContent = formatMetricPercentage(metrics.pending, metrics.total);
-  if (duplicateDetail) duplicateDetail.textContent = formatMetricPercentage(metrics.duplicate, metrics.total);
 }
 
 function ensureHistory(p) {
@@ -1592,9 +1730,6 @@ function unwrapStoragePayload(response) {
 }
 
 function getOverviewPaperKey(paper, fallbackIndex = 0) {
-  if (paper?.autoDuplicate && (paper?.id || paper?.id === 0)) {
-    return `duplicate:${paper.id}`;
-  }
   const normalizedUrl = normalizeUrl(paper?.url || "").trim().toLowerCase();
   if (normalizedUrl) return `url:${normalizedUrl}`;
   if (paper?.id || paper?.id === 0) return `id:${paper.id}`;
@@ -1650,7 +1785,7 @@ async function loadOverviewContext() {
   };
 
   const activePhaseLabel = state?.project?.activePhaseLabel
-    || state?.project?.phases?.at?.(-1)?.label
+    || state?.project?.phases?.find?.(phase => !phase?.completed)?.label
     || null;
   const activeConsolidatedPapers = (Array.isArray(state?.papers) ? state.papers : [])
     .filter(paper => !activePhaseLabel || getPaperClassificationForPhase(paper, activePhaseLabel));
@@ -1740,6 +1875,91 @@ function formatOverviewDate(value, includeTime = false) {
     : date.toLocaleDateString("pt-BR");
 }
 
+
+
+function getPaperCategoryForPhase(paper, phaseLabel, highlightedLinks = {}) {
+  if (!phaseLabel || phaseLabel === "all") return getPaperCategory(paper, highlightedLinks);
+  const classification = getPaperClassificationForPhase(paper, phaseLabel);
+  if (!classification) return null;
+  const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
+  const wanted = String(classification.categoryLabel || "").trim().toLowerCase();
+  if (wanted) {
+    const matched = categories.find(category => {
+      const label = String(category?.label || "").trim().toLowerCase();
+      const title = String(category?.title || "").trim().toLowerCase();
+      return wanted === label || wanted === title;
+    });
+    if (matched) return matched;
+  }
+  return getPaperCategory(paper, highlightedLinks);
+}
+
+function getPaperMetricTypeForPhase(paper, phaseLabel, highlightedLinks = {}) {
+  if (!phaseLabel || phaseLabel === "all") return getPaperMetricType(paper, highlightedLinks);
+  const classification = getPaperClassificationForPhase(paper, phaseLabel);
+  if (!classification) return "pending";
+
+  // Use a categoria da própria fase que está sendo filtrada. Antes este bloco
+  // referenciava `scope`, uma variável inexistente, interrompendo a renderização
+  // reativa da tabela sempre que um filtro por fase/situação era recalculado.
+  const category = getPaperCategoryForPhase(paper, phaseLabel, highlightedLinks);
+  if (category) return normalizeMetricType(category.metricType, inferMetricTypeFromCategory(category));
+  return normalizeMetricType(classification.outcome ?? paper?.status, "pending");
+}
+
+function getPaperPhaseLabels(paper) {
+  const labels = new Set();
+  const classifications = paper?.classifications;
+  if (classifications && typeof classifications === "object" && !Array.isArray(classifications)) {
+    Object.keys(classifications).filter(Boolean).forEach(label => labels.add(label));
+  }
+  [paper?.phaseLabel, paper?.phaseId, paper?.iterationId].filter(Boolean).forEach(label => labels.add(label));
+  return [...labels];
+}
+
+function paperBelongsToPhase(paper, phaseLabel) {
+  if (!phaseLabel || phaseLabel === "all") return true;
+  return Boolean(getPaperClassificationForPhase(paper, phaseLabel));
+}
+
+function getPhaseTitleByLabel(label) {
+  const phases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
+  const phase = phases.find(item => item?.label === label || item?.id === label || item?.title === label);
+  return phase?.title || phase?.label || label || "—";
+}
+
+function getPaperPhaseDisplay(paper) {
+  const labels = getPaperPhaseLabels(paper);
+  if (!labels.length) return getPaperPhaseTitle(paper);
+  return labels.map(getPhaseTitleByLabel).join(" · ");
+}
+
+function populatePaperFilterOptions() {
+  const phaseSelect = $("#filterPaperPhase");
+  const categorySelect = $("#filterPaperCategory");
+  if (phaseSelect) {
+    // O estado JS é a fonte de verdade. Isso evita o select voltar para um valor
+    // antigo ao ser reconstruído durante uma atualização reativa da tabela.
+    const currentValue = paperPhaseFilter === "active"
+      ? (phaseSelect.value || "all")
+      : (paperPhaseFilter || phaseSelect.value || "all");
+    const phases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
+    phaseSelect.innerHTML = '<option value="all">Todas as fases</option>' + phases.map(phase =>
+      `<option value="${escapeHtml(phase.label || phase.id || phase.title)}">${escapeHtml(phase.title || phase.label || "Fase")}</option>`
+    ).join("");
+    phaseSelect.value = [...phaseSelect.options].some(option => option.value === currentValue) ? currentValue : "all";
+  }
+  if (categorySelect) {
+    const currentValue = paperCategoryFilter || categorySelect.value || "all";
+    const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
+    categorySelect.innerHTML = '<option value="all">Todas as categorias</option><option value="uncategorized">Sem categoria</option>' + categories.map(category => {
+      const key = getPaperCategoryKey(category);
+      return `<option value="${escapeHtml(key)}">${escapeHtml(category.title || category.label || key)}</option>`;
+    }).join("");
+    categorySelect.value = [...categorySelect.options].some(option => option.value === currentValue) ? currentValue : "all";
+  }
+}
+
 function getCategoryFilterLabel(categoryKey) {
   if (!categoryKey || categoryKey === "all") return "";
   if (categoryKey === "uncategorized") return "Sem categoria";
@@ -1753,6 +1973,12 @@ function updatePaperFilterBar() {
   if (!bar || !text) return;
 
   const descriptions = [];
+  if (paperPhaseFilter === "active") {
+    const activeLabel = state?.project?.activePhaseLabel;
+    descriptions.push(`fase: ${getPhaseTitleByLabel(activeLabel)} (atual)`);
+  } else if (paperPhaseFilter && paperPhaseFilter !== "all") {
+    descriptions.push(`fase: ${getPhaseTitleByLabel(paperPhaseFilter)}`);
+  }
   if (paperMetricFilter !== "all") descriptions.push(`situação: ${getPaperMetricLabel(paperMetricFilter).toLowerCase()}`);
   const categoryLabel = getCategoryFilterLabel(paperCategoryFilter);
   if (categoryLabel) descriptions.push(`categoria: ${categoryLabel}`);
@@ -1769,6 +1995,10 @@ function clearPaperFilters({ clearSearch = false, render = true } = {}) {
     const searchInput = $("#search");
     if (searchInput) searchInput.value = "";
   }
+  const metricSelect = $("#filterPaperMetric");
+  const categorySelect = $("#filterPaperCategory");
+  if (metricSelect) metricSelect.value = "all";
+  if (categorySelect) categorySelect.value = "all";
   updatePaperFilterBar();
   if (render) renderPapersTable();
 }
@@ -1776,9 +2006,24 @@ function clearPaperFilters({ clearSearch = false, render = true } = {}) {
 function openPapersFromOverview(categoryKey = "all", year = "", metricType = "all") {
   paperCategoryFilter = categoryKey || "all";
   paperMetricFilter = metricType === "all" ? "all" : normalizeMetricType(metricType, "pending");
+
+  const overviewPhaseLabel = resolveOverviewPhaseLabel(overviewMetricScope);
+  paperPhaseFilter = overviewPhaseLabel === "all" ? "all" : overviewPhaseLabel;
+
   setActiveView("papers");
   const searchInput = $("#search");
   if (searchInput) searchInput.value = year === "Sem ano" ? "" : String(year || "");
+  const metricSelect = $("#filterPaperMetric");
+  const categorySelect = $("#filterPaperCategory");
+  const currentToggle = $("#filterCurrentPhase");
+  const phaseSelect = $("#filterPaperPhase");
+  if (metricSelect) metricSelect.value = paperMetricFilter;
+  if (categorySelect) categorySelect.value = paperCategoryFilter;
+  if (currentToggle) currentToggle.checked = false;
+  if (phaseSelect) {
+    phaseSelect.disabled = false;
+    phaseSelect.value = paperPhaseFilter;
+  }
   updatePaperFilterBar();
   renderPapersTable();
 }
@@ -1802,13 +2047,23 @@ async function renderOverview() {
       : "Última atualização: agora";
   }
 
-  renderPaperMetrics(papers, highlightedLinks);
-  renderCategoryDistribution(papers, highlightedLinks);
-  renderPhaseProgress(papers);
-  renderOverviewRecentArticles(papers, highlightedLinks);
+  renderOverviewMetricScope();
+  const consolidatedPapers = (Array.isArray(state?.papers) ? state.papers : [])
+    .filter(paper => paper?.visited !== false);
+
+  // A seleção da Visão Geral controla todo o conteúdo da página. Para uma
+  // fase específica, entram somente os artigos realmente adicionados/classificados
+  // naquela fase; herdados continuam visíveis na área de fases, mas não são
+  // contabilizados como trabalho novo da fase selecionada.
+  const overviewPapers = getOverviewScopedPapers(consolidatedPapers, overviewMetricScope);
+
+  renderPaperMetrics(consolidatedPapers, highlightedLinks, overviewMetricScope);
+  renderCategoryDistribution(overviewPapers, highlightedLinks, overviewMetricScope);
+  renderPhaseProgress(overviewPapers, overviewMetricScope);
+  renderOverviewRecentArticles(overviewPapers, highlightedLinks, overviewMetricScope);
 }
 
-function buildCategoryDistribution(papers, highlightedLinks = {}) {
+function buildCategoryDistribution(papers, highlightedLinks = {}, scope = overviewMetricScope) {
   const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
   const entries = categories.map(category => ({
     key: getPaperCategoryKey(category),
@@ -1819,8 +2074,9 @@ function buildCategoryDistribution(papers, highlightedLinks = {}) {
   const byKey = new Map(entries.map(entry => [entry.key, entry]));
   let uncategorized = 0;
 
+  const phaseLabel = resolveOverviewPhaseLabel(scope);
   for (const paper of papers) {
-    const category = getPaperCategory(paper, highlightedLinks);
+    const category = getPaperCategoryForPhase(paper, phaseLabel, highlightedLinks);
     const key = getPaperCategoryKey(category);
     if (key && byKey.has(key)) byKey.get(key).count += 1;
     else uncategorized += 1;
@@ -1833,13 +2089,13 @@ function buildCategoryDistribution(papers, highlightedLinks = {}) {
   return entries;
 }
 
-function renderCategoryDistribution(papers, highlightedLinks = {}) {
+function renderCategoryDistribution(papers, highlightedLinks = {}, scope = overviewMetricScope) {
   const donut = $("#categoryDonut");
   const totalElement = $("#categoryDonutTotal");
   const legend = $("#categoryLegend");
   if (!donut || !legend) return;
 
-  const entries = buildCategoryDistribution(papers, highlightedLinks);
+  const entries = buildCategoryDistribution(papers, highlightedLinks, scope);
   const total = papers.length;
   if (totalElement) totalElement.textContent = String(total);
 
@@ -1895,11 +2151,15 @@ function getPhaseOverviewStats(phase, paperCount) {
   return { total, processed, percentage };
 }
 
-function renderPhaseProgress(papers) {
+function renderPhaseProgress(papers, scope = overviewMetricScope) {
   const container = $("#phaseProgressList");
   if (!container) return;
   container.replaceChildren();
-  const phases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
+  const allPhases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
+  const phaseLabel = resolveOverviewPhaseLabel(scope);
+  const phases = phaseLabel && phaseLabel !== "all"
+    ? allPhases.filter(phase => phase?.label === phaseLabel)
+    : allPhases;
 
   if (!phases.length) {
     container.innerHTML = `<div class="overviewEmptyState">Crie uma fase para acompanhar o progresso do projeto.</div>`;
@@ -1907,14 +2167,16 @@ function renderPhaseProgress(papers) {
   }
 
   phases.slice(0, 6).forEach((phase, index) => {
+    const originalIndex = allPhases.findIndex(item => item?.label === phase?.label);
+    const displayIndex = originalIndex >= 0 ? originalIndex : index;
     const stats = getPhaseOverviewStats(phase, papers.length);
     const row = document.createElement("button");
     row.type = "button";
     row.className = "phaseProgressRow";
     row.innerHTML = `
-      <span class="phaseProgressNumber">${index + 1}</span>
+      <span class="phaseProgressNumber">${displayIndex + 1}</span>
       <span class="phaseProgressContent">
-        <span class="phaseProgressTop"><strong>${escapeHtml(phase.title || `Fase ${index + 1}`)}</strong><span>${stats.processed}/${stats.total}</span></span>
+        <span class="phaseProgressTop"><strong>${escapeHtml(phase.title || `Fase ${displayIndex + 1}`)}</strong><span>${stats.processed}/${stats.total}</span></span>
         <span class="phaseProgressTrack"><i style="width:${stats.percentage}%"></i></span>
       </span>
     `;
@@ -1932,13 +2194,21 @@ function getPaperPhaseTitle(paper) {
   return active?.title || active?.label || "—";
 }
 
-function renderOverviewRecentArticles(papers, highlightedLinks = {}) {
+function renderOverviewRecentArticles(papers, highlightedLinks = {}, scope = overviewMetricScope) {
   const tbody = $("#overviewRecentTable tbody");
   if (!tbody) return;
   tbody.replaceChildren();
 
+  const phaseLabel = resolveOverviewPhaseLabel(scope);
+  const getRecentDate = (paper) => {
+    if (phaseLabel && phaseLabel !== "all") {
+      const classification = getPaperClassificationForPhase(paper, phaseLabel);
+      return classification?.classifiedAt || paper?.updatedAt || paper?.createdAt || "";
+    }
+    return paper?.updatedAt || paper?.createdAt || "";
+  };
   const recent = [...papers]
-    .sort((a, b) => String(b?.updatedAt || b?.createdAt || "").localeCompare(String(a?.updatedAt || a?.createdAt || "")))
+    .sort((a, b) => String(getRecentDate(b)).localeCompare(String(getRecentDate(a))))
     .slice(0, 5);
 
   if (!recent.length) {
@@ -1949,11 +2219,13 @@ function renderOverviewRecentArticles(papers, highlightedLinks = {}) {
   }
 
   for (const paper of recent) {
-    const category = getPaperCategory(paper, highlightedLinks);
-    const color = getPaperCategoryColor(paper, highlightedLinks) || "#A5ADBA";
+    const category = getOverviewPaperCategory(paper, scope, highlightedLinks);
+    const color = category?.color
+      ? normalizeHexColor(category.color, "#A5ADBA")
+      : (phaseLabel === "all" ? getPaperCategoryColor(paper, highlightedLinks) : "#A5ADBA");
     const categoryLabel = category?.title || category?.label || "Sem categoria";
     const year = extractPaperYear(paper) || "—";
-    const date = paper?.updatedAt || paper?.createdAt;
+    const date = getRecentDate(paper);
     const row = document.createElement("tr");
     const title = escapeHtml(paper?.title || paper?.url || "(sem título)");
     const titleContent = paper?.url
@@ -1964,7 +2236,9 @@ function renderOverviewRecentArticles(papers, highlightedLinks = {}) {
       <td>${escapeHtml(getPaperAuthorsText(paper))}</td>
       <td>${escapeHtml(year)}</td>
       <td><span class="overviewCategoryBadge"><i style="background:${escapeHtml(color)}"></i>${escapeHtml(categoryLabel)}</span></td>
-      <td>${escapeHtml(getPaperPhaseTitle(paper))}</td>
+      <td>${escapeHtml(phaseLabel && phaseLabel !== "all"
+        ? (state?.project?.phases?.find(item => item?.label === phaseLabel)?.title || phaseLabel)
+        : getPaperPhaseTitle(paper))}</td>
       <td>${escapeHtml(formatOverviewDate(date, true))}</td>
     `;
     tbody.appendChild(row);
@@ -2014,19 +2288,23 @@ function showHistory(paperId) {
 }
 
 function getFilters() {
+  const activePhaseLabel = state?.project?.activePhaseLabel || "";
   return {
-    q: normalizeStr($("#search").value),
+    q: normalizeStr($("#search")?.value || ""),
     metric: paperMetricFilter,
     category: paperCategoryFilter,
+    phase: paperPhaseFilter === "active" ? activePhaseLabel : paperPhaseFilter,
   };
 }
 
 function paperMatchesFilters(paper, filters, highlightedLinks = {}) {
-  const category = getPaperCategory(paper, highlightedLinks);
+  const category = getPaperCategoryForPhase(paper, filters.phase, highlightedLinks);
 
   if (filters.metric && filters.metric !== "all") {
-    if (getPaperMetricType(paper, highlightedLinks) !== filters.metric) return false;
+    if (getPaperMetricTypeForPhase(paper, filters.phase, highlightedLinks) !== filters.metric) return false;
   }
+
+  if (filters.phase && filters.phase !== "all" && !paperBelongsToPhase(paper, filters.phase)) return false;
 
   if (filters.category && filters.category !== "all") {
     const categoryKey = getPaperCategoryKey(category) || "uncategorized";
@@ -2035,8 +2313,9 @@ function paperMatchesFilters(paper, filters, highlightedLinks = {}) {
 
   if (!filters.q) return true;
   const categoryText = category ? `${category.title || ""} ${category.label || ""}` : "sem categoria";
-  const metricText = getPaperMetricLabel(getPaperMetricType(paper, highlightedLinks));
-  const hay = normalizeStr(`${paper.title || ""} ${paper.authorsRaw || ""} ${(paper.tags || []).join(" ")} ${paper.year || ""} ${paper.url || ""} ${categoryText} ${metricText}`);
+  const metricText = getPaperMetricLabel(getPaperMetricTypeForPhase(paper, filters.phase, highlightedLinks));
+  const phaseText = getPaperPhaseDisplay(paper);
+  const hay = normalizeStr(`${paper.title || ""} ${paper.authorsRaw || ""} ${(paper.tags || []).join(" ")} ${paper.year || ""} ${paper.url || ""} ${categoryText} ${metricText} ${phaseText}`);
   return hay.includes(filters.q);
 }
 
@@ -2044,6 +2323,7 @@ async function renderPapersTable() {
   // token for this render; only the latest token may write to the DOM
   const myToken = ++renderToken;
 
+  populatePaperFilterOptions();
   const f = getFilters();
 
   // fetch highlighted links and svat_papers
@@ -2060,9 +2340,8 @@ async function renderPapersTable() {
   // Early cancellation: if a newer render started, bail out
   if (myToken !== renderToken) return;
 
-  // A aba Artigos é estritamente vinculada à fase ativa. Os registros
-  // consolidados servem apenas para completar metadados dos itens que já estão
-  // presentes no storage da fase; nunca introduzem artigos de outras fases.
+  // A aba Artigos parte do conjunto consolidado do projeto. A fase atual é
+  // apenas o filtro inicial e pode ser desmarcada para consultar todo o acervo.
   const globalPapers = Array.isArray(state?.papers) ? state.papers : [];
   const globalById = new Map(
     globalPapers
@@ -2075,6 +2354,11 @@ async function renderPapersTable() {
       .map(paper => [normalizeUrl(paper.url), paper])
   );
   const byKey = new Map();
+  globalPapers.forEach((paper, index) => {
+    if (!paper || typeof paper !== "object") return;
+    const key = getOverviewPaperKey(paper, index);
+    byKey.set(key, mergeOverviewPaper(byKey.get(key), paper));
+  });
   svat.forEach((scopedPaper, index) => {
     if (!scopedPaper || typeof scopedPaper !== "object") return;
     const consolidated = globalById.get(String(scopedPaper.id))
@@ -2103,10 +2387,6 @@ async function renderPapersTable() {
 
   const allRows = [...byKey.values()]
     .filter(paper => paper?.visited !== false);
-  const duplicateCandidates = allRows
-    .filter(paper => paper?.id || paper?.id === 0)
-    .filter(paper => getPaperMetricType(paper, hl) !== "duplicate")
-    .sort((a, b) => String(a.title || a.url || "").localeCompare(String(b.title || b.url || ""), "pt-BR"));
   const rows = allRows
     .filter(paper => paperMatchesFilters(paper, f, hl))
     .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
@@ -2117,8 +2397,8 @@ async function renderPapersTable() {
   for (const p of rows) {
     const tags = Array.isArray(p.tags) ? p.tags.join(";") : "";
     // Use a light tint from the selected category so the title stays readable.
-    const category = getPaperCategory(p, hl);
-    const metricType = getPaperMetricType(p, hl);
+    const category = getPaperCategoryForPhase(p, f.phase, hl);
+    const metricType = getPaperMetricTypeForPhase(p, f.phase, hl);
     const categoryDisplayLabel = p?.autoDuplicate
       ? "Duplicado automático"
       : (category?.title || category?.label || "Sem categoria");
@@ -2131,9 +2411,14 @@ async function renderPapersTable() {
       ? `<span class="paperCategoryMarker" style="background:${escapeHtml(categoryColor)}" aria-hidden="true"></span>`
       : "";
 
+    const activePhaseLabel = state?.project?.activePhaseLabel || "";
+    const belongsToActivePhase = !activePhaseLabel || paperBelongsToPhase(p, activePhaseLabel);
+    const rowCheckDisabled = belongsToActivePhase ? "" : 'disabled title="Artigo de outra fase: disponível apenas para consulta"';
+    const phaseDisplay = getPaperPhaseDisplay(p);
+
     rowsHtml += `
       <tr class="${rowClass}" ${rowStyle}>
-        <td><input type="checkbox" class="rowCheck" data-id="${escapeHtml(p.id)}" /></td>
+        <td><input type="checkbox" class="rowCheck" data-id="${escapeHtml(p.id)}" ${rowCheckDisabled} /></td>
         <td>
           <div class="paperTitleWrap">
             <button class="linkBtn" data-show-history="${escapeHtml(p.id)}" title="Ver histórico">${escapeHtml(p.title || "(sem título)")}</button>
@@ -2141,6 +2426,7 @@ async function renderPapersTable() {
           <div style="color:#666;font-size:11px;margin-top:4px">${escapeHtml(p.authorsRaw || "")} • ${escapeHtml(fmtDate(p.createdAt))}</div>
         </td>
         <td><input class="cellInput" data-field="year" data-id="${escapeHtml(p.id)}" value="${escapeHtml(p.year ?? "")}" placeholder="—" style="width:64px" /></td>
+        <td><span class="paperPhaseBadge" title="${escapeHtml(phaseDisplay)}">${escapeHtml(phaseDisplay)}</span></td>
         <td>
           <span class="paperCategoryCell">
             <span class="categoryBadge">
@@ -2148,7 +2434,6 @@ async function renderPapersTable() {
               <span>${escapeHtml(categoryDisplayLabel)}</span>
             </span>
             <span class="paperOutcomeBadge paperOutcomeBadge--${escapeHtml(metricType)}">${escapeHtml(getPaperMetricLabel(metricType))}</span>
-            ${metricType === "duplicate" ? renderDuplicateOriginalSelect(p, duplicateCandidates) : ""}
           </span>
         </td>
         <td><input class="cellInput" data-field="tags" data-id="${escapeHtml(p.id)}" value="${escapeHtml(tags)}" placeholder="ex: vis;ml" /></td>
@@ -2235,18 +2520,9 @@ function selectedPaperIds() {
 
 function getActivePhaseForPaperBulkActions() {
   const phases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
-  return phases.find(phase => phase?.label === state?.project?.activePhaseLabel)
-    || phases.at(-1)
+  return phases.find(phase => phase?.label === state?.project?.activePhaseLabel && !phase?.completed)
+    || phases.find(phase => !phase?.completed)
     || null;
-}
-
-function isProtectedAutomaticDuplicate(paper, phaseLabel = getActivePhaseForPaperBulkActions()?.label) {
-  if (!paper || typeof paper !== "object") return false;
-  const classification = phaseLabel
-    ? getPaperClassificationForPhase(paper, phaseLabel)
-    : null;
-  const outcome = normalizeMetricType(classification?.outcome ?? paper.status, "pending");
-  return paper.autoDuplicate === true || Boolean(paper.duplicateOfId) || outcome === "duplicate";
 }
 
 function getActivePhaseCategoriesForOutcome(outcome) {
@@ -2305,8 +2581,7 @@ function updatePaperBulkActionState() {
   const selectedPapers = selectedChecks
     .map(check => renderedPapersById.get(String(check.getAttribute("data-id"))))
     .filter(Boolean);
-  const classifiableCount = selectedPapers.filter(paper => !isProtectedAutomaticDuplicate(paper)).length;
-  const automaticDuplicateCount = selectedPapers.length - classifiableCount;
+  const classifiableCount = selectedPapers.length;
   const activePhase = getActivePhaseForPaperBulkActions();
   const phaseLocked = !activePhase || isPhaseCompleted(activePhase);
 
@@ -2317,10 +2592,7 @@ function updatePaperBulkActionState() {
     } else if (!selectedChecks.length) {
       selectionCount.textContent = "0 selecionados";
     } else {
-      const duplicateSuffix = automaticDuplicateCount
-        ? ` · ${automaticDuplicateCount} duplicata${automaticDuplicateCount === 1 ? "" : "s"} protegida${automaticDuplicateCount === 1 ? "" : "s"}`
-        : "";
-      selectionCount.textContent = `${selectedChecks.length} selecionado${selectedChecks.length === 1 ? "" : "s"}${duplicateSuffix}`;
+      selectionCount.textContent = `${selectedChecks.length} selecionado${selectedChecks.length === 1 ? "" : "s"}`;
     }
   }
 
@@ -2339,8 +2611,6 @@ function updatePaperBulkActionState() {
       button.title = "A fase ativa está concluída. Crie a próxima fase ou reabra a atual antes de alterar a triagem.";
     } else if (!selectedChecks.length) {
       button.title = "Selecione pelo menos um artigo.";
-    } else if (!classifiableCount) {
-      button.title = "Duplicatas automáticas não podem ser reclassificadas manualmente.";
     } else if (!categories.length) {
       button.title = `A fase ativa não possui uma categoria vinculada ao resultado ${copy.result}.`;
     } else if (categories.length === 1) {
@@ -2469,7 +2739,7 @@ function findPaperIndexForBulk(collection, paper) {
   const normalizedUrl = normalizeUrl(paper?.url || "");
   if (!normalizedUrl) return -1;
   return list.findIndex(item => (
-    !isProtectedAutomaticDuplicate(item)
+    true
     && normalizeUrl(item?.url || "") === normalizedUrl
   ));
 }
@@ -2519,7 +2789,7 @@ function createBulkClassifiedPaper(previousPaper, category, phaseLabel, classifi
           const normalizedTag = String(tag || "").trim().toLowerCase();
           return normalizedTag
             && !categoryReferences.has(normalizedTag)
-            && normalizedTag !== "duplicado-automatico";
+;
         })
       : []),
     category.label,
@@ -2558,13 +2828,9 @@ function createBulkClassifiedPaper(previousPaper, category, phaseLabel, classifi
         inherited: inheritedInCurrentPhase,
         entryType,
         inheritedFromPhaseLabel,
-        duplicateOfId: null,
         automatic: false,
       },
     },
-    duplicateOfId: null,
-    autoDuplicate: false,
-    duplicateSequence: null,
     tags,
     highlightedColor: normalizeHexColor(category.color, category.color || ""),
     inherited: inheritedInCurrentPhase,
@@ -2596,11 +2862,7 @@ async function requestPaperBulkOutcome(outcome) {
     return;
   }
 
-  const classifiablePapers = selectedPapers.filter(paper => !isProtectedAutomaticDuplicate(paper));
-  if (!classifiablePapers.length) {
-    alert("Duplicatas automáticas não podem ser reclassificadas manualmente.");
-    return;
-  }
+  const classifiablePapers = selectedPapers;
 
   const categories = getActivePhaseCategoriesForOutcome(normalizedOutcome);
   const copy = PAPER_BULK_ACTION_COPY[normalizedOutcome] || PAPER_BULK_ACTION_COPY.pending;
@@ -2658,14 +2920,8 @@ async function applyPaperBulkCategory(category, requestedOutcome) {
     const classifiedAt = new Date().toISOString();
     const changedPapers = [];
     const processedIds = new Set();
-    let skippedAutomaticDuplicates = 0;
 
     for (const renderedPaper of selectedPapers) {
-      if (isProtectedAutomaticDuplicate(renderedPaper, activePhase.label)) {
-        skippedAutomaticDuplicates += 1;
-        continue;
-      }
-
       const scopedIndex = findPaperIndexForBulk(scopedPapers, renderedPaper);
       const consolidatedIndex = findPaperIndexForBulk(consolidatedPapers, renderedPaper);
       const scopedPaper = scopedIndex >= 0 ? scopedPapers[scopedIndex] : null;
@@ -2675,11 +2931,6 @@ async function applyPaperBulkCategory(category, requestedOutcome) {
         scopedPaper,
         renderedPaper
       );
-
-      if (isProtectedAutomaticDuplicate(previousPaper, activePhase.label)) {
-        skippedAutomaticDuplicates += 1;
-        continue;
-      }
 
       const nextPaper = createBulkClassifiedPaper(
         previousPaper,
@@ -2748,11 +2999,8 @@ async function applyPaperBulkCategory(category, requestedOutcome) {
     const copy = PAPER_BULK_ACTION_COPY[normalizedOutcome] || PAPER_BULK_ACTION_COPY.pending;
     const quantity = changedPapers.length;
     const resultText = quantity === 1 ? copy.singular : copy.plural;
-    const duplicateText = skippedAutomaticDuplicates
-      ? ` ${skippedAutomaticDuplicates} duplicata${skippedAutomaticDuplicates === 1 ? " automática foi mantida" : "s automáticas foram mantidas"} sem alteração.`
-      : "";
     setPaperBulkStatus(
-      `${quantity} artigo${quantity === 1 ? "" : "s"} ${resultText} com a categoria “${category.title || category.label}”.${duplicateText}`,
+      `${quantity} artigo${quantity === 1 ? "" : "s"} ${resultText} com a categoria “${category.title || category.label}”.`,
       "success"
     );
   } catch (error) {
@@ -2901,6 +3149,11 @@ function bindEvents() {
     });
   });
 
+  $('#overviewMetricScopeSelect')?.addEventListener('change', (event) => {
+    overviewMetricScope = event.target?.value || 'all';
+    renderOverview();
+  });
+
   $('#btnClearPaperFilters')?.addEventListener('click', () => {
     clearPaperFilters({ clearSearch: false, render: true });
   });
@@ -2938,11 +3191,49 @@ function bindEvents() {
     if (e.target === modal) modal.classList.add("hidden");
   });
 
-  // Pesquisa de artigos
+  // Pesquisa e filtros de artigos
   $("#search")?.addEventListener("input", renderPapersTable);
+  $("#filterCurrentPhase")?.addEventListener("change", (event) => {
+    const checked = Boolean(event.target.checked);
+    paperPhaseFilter = checked ? "active" : ($("#filterPaperPhase")?.value || "all");
+    const phaseSelect = $("#filterPaperPhase");
+    if (phaseSelect) phaseSelect.disabled = checked;
+    updatePaperFilterBar();
+    renderPapersTable();
+  });
+  $("#filterPaperPhase")?.addEventListener("change", (event) => {
+    if (!$("#filterCurrentPhase")?.checked) paperPhaseFilter = event.target.value || "all";
+    updatePaperFilterBar();
+    renderPapersTable();
+  });
+  $("#filterPaperMetric")?.addEventListener("change", (event) => {
+    paperMetricFilter = event.target.value || "all";
+    updatePaperFilterBar();
+    renderPapersTable();
+  });
+  $("#filterPaperCategory")?.addEventListener("change", (event) => {
+    paperCategoryFilter = event.target.value || "all";
+    updatePaperFilterBar();
+    renderPapersTable();
+  });
+  $("#btnResetPaperViewFilters")?.addEventListener("click", () => {
+    paperPhaseFilter = "all";
+    paperMetricFilter = "all";
+    paperCategoryFilter = "all";
+    const currentToggle = $("#filterCurrentPhase");
+    const phaseSelect = $("#filterPaperPhase");
+    const metricSelect = $("#filterPaperMetric");
+    const categorySelect = $("#filterPaperCategory");
+    if (currentToggle) currentToggle.checked = false;
+    if (phaseSelect) { phaseSelect.disabled = false; phaseSelect.value = "all"; }
+    if (metricSelect) metricSelect.value = "all";
+    if (categorySelect) categorySelect.value = "all";
+    updatePaperFilterBar();
+    renderPapersTable();
+  });
   $("#checkAll")?.addEventListener("change", (e) => {
     const checked = e.target.checked;
-    $$("#papersTable .rowCheck").forEach(ch => { ch.checked = checked; });
+    $$("#papersTable .rowCheck").forEach(ch => { if (!ch.disabled) ch.checked = checked; });
     updatePaperBulkActionState();
   });
 
@@ -2979,6 +3270,9 @@ function bindEvents() {
   const btnAddCategoryCriterion = document.getElementById("btnAddCategoryCriterion");
   const categoryTitleError = document.getElementById("categoryTitleError");
   const categoryRequiredNotice = document.getElementById("categoryRequiredNotice");
+  const defaultCategoriesSuggestion = document.getElementById("defaultCategoriesSuggestion");
+  const btnCreateDefaultCategories = document.getElementById("btnCreateDefaultCategories");
+  const defaultCategoriesError = document.getElementById("defaultCategoriesError");
   const articleTutorialPanel = document.getElementById("articleTutorialPanel");
   const btnCloseArticleTutorial = document.getElementById("btnCloseArticleTutorial");
   const highlightSearch = document.getElementById("highlightSearch");
@@ -2989,6 +3283,33 @@ function bindEvents() {
   const makeLabel = (value) => String(value || "")
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+  const DEFAULT_TUTORIAL_CATEGORIES = Object.freeze([
+    {
+      title: "Incluir",
+      label: "incluir",
+      description: "Artigos que atendem aos critérios da fase e devem seguir para a próxima etapa da pesquisa.",
+      color: "#22C55E",
+      metricType: "included",
+      criteria: [],
+    },
+    {
+      title: "Excluir",
+      label: "excluir",
+      description: "Artigos que não atendem aos critérios da fase e não devem seguir na progressão.",
+      color: "#EF4444",
+      metricType: "excluded",
+      criteria: [],
+    },
+    {
+      title: "Pendente",
+      label: "pendente",
+      description: "Artigos que ainda precisam ser analisados antes de uma decisão de inclusão ou exclusão.",
+      color: "#F59E0B",
+      metricType: "pending",
+      criteria: [],
+    },
+  ]);
 
   function renderCategoryCriteria() {
     if (!categoryCriteriaInput) return;
@@ -3101,6 +3422,11 @@ function bindEvents() {
     document.body.classList.toggle('categoryCreationRequired', categoryCreationRequired);
     categoryPanel?.classList.toggle('categoryCreationRequiredPanel', categoryCreationRequired);
     categoryRequiredNotice?.classList.toggle('hidden', !categoryCreationRequired);
+    defaultCategoriesSuggestion?.classList.toggle('hidden', !categoryCreationRequired);
+    if (defaultCategoriesError) {
+      defaultCategoriesError.textContent = "";
+      defaultCategoriesError.classList.remove("visible");
+    }
 
     if (categoryPanelTitle && !editingCategoryLabel) {
       categoryPanelTitle.textContent = categoryCreationRequired ? 'Crie a primeira categoria' : 'Nova categoria';
@@ -3225,6 +3551,80 @@ function bindEvents() {
     }
   }
 
+  async function createDefaultTutorialCategories() {
+    const project = state?.project;
+    if (!project?.id) return alert("Nenhum projeto ativo.");
+
+    if (defaultCategoriesError) {
+      defaultCategoriesError.textContent = "";
+      defaultCategoriesError.classList.remove("visible");
+    }
+
+    const originalText = btnCreateDefaultCategories?.textContent;
+    if (btnCreateDefaultCategories) {
+      btnCreateDefaultCategories.disabled = true;
+      btnCreateDefaultCategories.textContent = "Criando categorias...";
+    }
+
+    try {
+      const existingMetricTypes = new Set(
+        (project.categories || []).map(category => normalizeCategoryMetricType(
+          category?.metricType,
+          inferMetricTypeFromCategory(category || {})
+        ))
+      );
+
+      for (const categoryData of DEFAULT_TUTORIAL_CATEGORIES) {
+        if (existingMetricTypes.has(categoryData.metricType)) continue;
+        project.addCategory({ ...categoryData, criteria: [...categoryData.criteria] });
+        existingMetricTypes.add(categoryData.metricType);
+      }
+
+      // As categorias essenciais precisam estar disponíveis na fase ativa para
+      // que Incluir, Excluir e Pendente funcionem imediatamente na triagem.
+      const activePhase = project.getActivePhase?.()
+        || project.phases?.find(phase => phase.label === project.activePhaseLabel)
+        || null;
+      if (activePhase) {
+        const essentialLabels = (project.categories || [])
+          .filter(category => DEFAULT_TUTORIAL_CATEGORIES.some(item => (
+            normalizeCategoryMetricType(category?.metricType, inferMetricTypeFromCategory(category || {})) === item.metricType
+          )))
+          .map(category => category.label)
+          .filter(Boolean);
+        activePhase.categories = [...new Set([...(activePhase.categories || []), ...essentialLabels])];
+      }
+
+      await storage.saveProject(project);
+      await reloadCategoryProjectFromWebSocket(project.id);
+      loadCategories();
+      renderPhaseCategories?.([]);
+      renderAll();
+
+      try {
+        await updateScholarCategoryMenu();
+      } catch (menuError) {
+        console.warn('As categorias padrão foram salvas, mas o menu do Google Scholar não pôde ser atualizado imediatamente.', menuError);
+      }
+
+      applyCategoryRequirementUI(false);
+      closeCategoryPanel(true);
+      scheduleArticlesTutorial(TUTORIAL_TRANSITION_DELAY);
+    } catch (error) {
+      console.warn("default category creation failed", error);
+      if (defaultCategoriesError) {
+        defaultCategoriesError.textContent = error?.message || "Não foi possível criar as categorias padrão.";
+        defaultCategoriesError.classList.add("visible");
+      }
+    } finally {
+      if (btnCreateDefaultCategories) {
+        btnCreateDefaultCategories.disabled = false;
+        btnCreateDefaultCategories.textContent = originalText || "Criar categorias padrão";
+      }
+    }
+  }
+
+  btnCreateDefaultCategories?.addEventListener("click", createDefaultTutorialCategories);
   btnShowAddCategory?.addEventListener("click", () => openCategoryPanel());
   btnCloseCategory?.addEventListener("click", () => {
     if (categoryCreationRequired) {
@@ -3374,6 +3774,7 @@ function bindEvents() {
   let phaseEditingCard = null; // card em edição
   let phaseEditingLabel = null; // label original da fase em edição
   let phaseLabelStatus = 'pending'; // 'pending' | 'done'
+  let phaseDraggingLabel = null;
 
   function getProjectPhases() {
     return Array.isArray(state?.project?.phases) ? state.project.phases : [];
@@ -3387,19 +3788,37 @@ function bindEvents() {
     return Boolean(label && getLatestPhase()?.label === label);
   }
 
+  function getActivePhaseIndex() {
+    return getProjectPhases().findIndex(phase => phase?.label === state?.project?.activePhaseLabel);
+  }
+
+  function canDeletePhaseLabel(label) {
+    const phases = getProjectPhases();
+    const phaseIndex = phases.findIndex(phase => phase?.label === label);
+    const activeIndex = getActivePhaseIndex();
+    if (phaseIndex < 0 || phases.length <= 1) return false;
+    // O histórico e a fase ativa são protegidos. Apenas o planejamento futuro
+    // pode ser removido livremente.
+    return activeIndex >= 0 && phaseIndex > activeIndex;
+  }
+
+  function isReorderablePlannedPhase(label) {
+    return canDeletePhaseLabel(label);
+  }
+
   function canCreateNextPhase() {
-    const latest = getLatestPhase();
-    return !latest || !!latest.completed;
+    // O plano pode ser montado livremente; a conclusão controla apenas a
+    // progressão/ativação e a herança de artigos.
+    return true;
   }
 
   function updatePhaseCreationAvailability() {
     if (!btnShowAddPhase) return;
     const latest = getLatestPhase();
-    const allowed = canCreateNextPhase();
-    btnShowAddPhase.disabled = !allowed;
-    btnShowAddPhase.title = allowed
-      ? (latest ? 'Adicionar a próxima fase' : 'Adicionar a primeira fase')
-      : `Conclua a fase "${latest?.title || latest?.label || 'atual'}" antes de criar outra.`;
+    btnShowAddPhase.disabled = false;
+    btnShowAddPhase.title = latest
+      ? 'Adicionar uma fase planejada ao plano de pesquisa'
+      : 'Adicionar a primeira fase';
   }
 
   function updateToggleButtonUI(){
@@ -3413,8 +3832,8 @@ function bindEvents() {
   if(btnTogglePhaseStatus){
     btnTogglePhaseStatus.addEventListener('click', (e) => {
       e.preventDefault();
-      if (!phaseEditingLabel || !isLatestPhaseLabel(phaseEditingLabel)) {
-        alert('Somente a fase atual mais recente pode ter o rótulo alterado. Para retornar a uma fase anterior, remova a fase atual.');
+      if (!phaseEditingLabel || state?.project?.activePhaseLabel !== phaseEditingLabel) {
+        alert('Somente a fase ativa pode ser concluída. As fases futuras permanecem planejadas até chegar a vez delas.');
         return;
       }
       if (phaseLabelStatus !== 'done') {
@@ -3532,16 +3951,22 @@ function bindEvents() {
   function getPhaseStats(phase = {}){
     const papers = phase.papers || {};
     const dynamic = getDynamicPhaseStats(phase.label);
+    const inheritedRefs = new Set(Array.isArray(papers.inherited) ? papers.inherited.map(String) : []);
+    const legacyNewCount = Array.isArray(papers.new)
+      ? papers.new.filter(reference => !inheritedRefs.has(String(reference))).length
+      : 0;
     return {
-      inherited: Math.max(
-        Array.isArray(papers.inherited) ? papers.inherited.length : 0,
-        dynamic.inherited
+      inherited: Math.max(inheritedRefs.size, dynamic.inherited),
+      pending: Math.max(legacyNewCount, dynamic.pending),
+      selected: Math.max(
+        Array.isArray(papers.selected)
+          ? papers.selected.filter(reference => !inheritedRefs.has(String(reference))).length
+          : 0,
+        dynamic.included
       ),
-      pending: Math.max(Array.isArray(papers.new) ? papers.new.length : 0, dynamic.pending),
-      selected: Math.max(Array.isArray(papers.selected) ? papers.selected.length : 0, dynamic.included),
       removed: Math.max(
         Array.isArray(papers.removed) ? papers.removed.length : 0,
-        dynamic.excluded + dynamic.duplicate
+        dynamic.excluded
       ),
       utilization: phase.completed
         ? 100
@@ -3558,25 +3983,34 @@ function bindEvents() {
     const labelStatus = phaseData.labelStatus || (phaseData.completed ? 'done' : 'pending');
     const isCompleted = isPhaseCompleted({ ...phaseData, labelStatus });
     const stats = phaseData.stats || getPhaseStats(phaseData);
-    const isFirstPhase = phaseIndex === 0;
     const isLatestPhase = phaseIndex === phaseCount - 1;
+    const isActivePhase = state?.project?.activePhaseLabel === label;
+    const isPlannedPhase = !isCompleted && !isActivePhase;
+    const isDraggablePhase = isReorderablePlannedPhase(label);
     const archivePanelId = getPhaseArchiveDomId(label);
 
     const el = document.createElement('div');
     el.className = 'phaseCard';
-    if (state?.project?.activePhaseLabel === label) el.classList.add('active');
-    if (!isLatestPhase) el.classList.add('phaseCard--locked');
+    if (isActivePhase) el.classList.add('active');
+    if (isPlannedPhase) el.classList.add('phaseCard--locked');
     if (isCompleted) {
       el.classList.add('phaseCard--completed');
+      el.title = 'Clique para consultar os artigos trabalhados nesta fase.';
+    }
+    if (isCompleted || isActivePhase) {
       el.setAttribute('aria-controls', archivePanelId);
       el.setAttribute('aria-expanded', String(expandedCompletedPhaseLabel === label));
-      el.title = 'Clique para consultar os artigos trabalhados nesta fase.';
     }
     el.dataset.label = label;
     el.dataset.labelStatus = labelStatus;
     el.dataset.desc = desc;
     el.dataset.criteria = criteria;
     el.dataset.categories = JSON.stringify(categories);
+    el.draggable = isDraggablePhase;
+    if (isDraggablePhase) {
+      el.classList.add('phaseCard--draggable');
+      el.title = 'Arraste para reorganizar esta fase planejada.';
+    }
 
     const safeTitle = escapeHtml(title || '(sem título)');
     const s = stats || { inherited:0, pending:0, selected:0, removed:0, utilization:0 };
@@ -3587,27 +4021,84 @@ function bindEvents() {
         <div class="phaseHeadText">
           <div class="phaseTitle">${safeTitle}</div>
         </div>
+        ${isDraggablePhase ? '<span class="phaseDragHandle" title="Arraste para reposicionar" aria-label="Arraste para reposicionar">⋮⋮</span>' : ''}
       </div>
       <div class="phaseCardBody">
         <div class="papersSection">
           <div class="papersTitle">📊 Triagem de artigos</div>
           <div class="papersGrid">
-            ${isFirstPhase ? '' : `<div title="Artigos incluídos na fase anterior"><span class="muted">Herdados:</span> <strong>${s.inherited}</strong></div>`}
-            <div title="Artigos ainda classificados como pendentes"><span class="muted">Pendentes:</span> <strong>${s.pending}</strong></div>
-            <div title="Artigos classificados por categorias de inclusão"><span class="muted">Selecionados:</span> <strong>${s.selected}</strong></div>
+            <div title="Artigos selecionados na fase anterior e recebidos nesta fase"><span class="muted">Herdados:</span> <strong>${s.inherited}</strong></div>
+            <div title="Artigos novos desta fase ainda sem decisão"><span class="muted">Pendentes:</span> <strong>${s.pending}</strong></div>
+            <div title="Artigos selecionados durante esta fase"><span class="muted">Selecionados:</span> <strong>${s.selected}</strong></div>
             <div title="Artigos excluídos ou identificados como duplicados"><span class="muted">Removidos:</span> <strong>${s.removed}</strong></div>
           </div>
-          <div class="papersUtil">Rótulo: <strong class="phaseLabelStatus ${labelStatus === 'done' ? 'done' : 'pending'}">${labelStatus === 'done' ? 'Concluído' : 'Em análise'}</strong></div>
+          <div class="papersUtil">Rótulo: <strong class="phaseLabelStatus ${isCompleted ? 'done' : 'pending'}">${isCompleted ? 'Concluído' : (isActivePhase ? 'Em análise' : 'Planejada')}</strong></div>
         </div>
       </div>
       <div class="phaseCardFooter">
         <span class="activeLabel pill" aria-hidden="true">Ativo</span>
         <div class="phaseCardActions">
-          ${isCompleted ? `<button class="btn small phaseArchiveToggle" type="button" data-action="archive" aria-controls="${archivePanelId}" aria-expanded="${expandedCompletedPhaseLabel === label ? 'true' : 'false'}"><span>${expandedCompletedPhaseLabel === label ? 'Ocultar artigos' : 'Ver artigos'}</span><span class="phaseArchiveChevron" aria-hidden="true">⌄</span></button>` : ''}
+          ${(isCompleted || isActivePhase) ? `<button class="btn small phaseArchiveToggle" type="button" data-action="archive" aria-controls="${archivePanelId}" aria-expanded="${expandedCompletedPhaseLabel === label ? 'true' : 'false'}"><span>${expandedCompletedPhaseLabel === label ? 'Ocultar artigos' : 'Ver artigos'}</span><span class="phaseArchiveChevron" aria-hidden="true">⌄</span></button>` : ''}
           <button class="btn small" data-action="edit">Editar</button>
         </div>
       </div>
     `;
+
+    if (isDraggablePhase) {
+      el.addEventListener('dragstart', (ev) => {
+        ev.stopPropagation();
+        ev.dataTransfer.effectAllowed = 'move';
+        phaseDraggingLabel = label;
+        ev.dataTransfer.setData('text/plain', label);
+        el.classList.add('phaseCard--dragging');
+      });
+      el.addEventListener('dragend', () => {
+        phaseDraggingLabel = null;
+        el.classList.remove('phaseCard--dragging');
+        phasesList?.querySelectorAll('.phaseCard--drag-over').forEach(card => card.classList.remove('phaseCard--drag-over'));
+      });
+      el.addEventListener('dragover', (ev) => {
+        const draggedLabel = phaseDraggingLabel;
+        if (!draggedLabel || draggedLabel === label || !isReorderablePlannedPhase(draggedLabel)) return;
+        ev.preventDefault();
+        ev.dataTransfer.dropEffect = 'move';
+        el.classList.add('phaseCard--drag-over');
+      });
+      el.addEventListener('dragleave', () => el.classList.remove('phaseCard--drag-over'));
+      el.addEventListener('drop', async (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        el.classList.remove('phaseCard--drag-over');
+        const draggedLabel = phaseDraggingLabel || ev.dataTransfer?.getData('text/plain');
+        phaseDraggingLabel = null;
+        if (!draggedLabel || draggedLabel === label) return;
+
+        const phases = getProjectPhases();
+        const sourceIndex = phases.findIndex(phase => phase?.label === draggedLabel);
+        const targetIndex = phases.findIndex(phase => phase?.label === label);
+        const activeIndex = getActivePhaseIndex();
+        if (sourceIndex <= activeIndex || targetIndex <= activeIndex) {
+          alert('Somente fases planejadas depois da fase ativa podem ser reposicionadas.');
+          return;
+        }
+
+        const reordered = phases.slice();
+        const [moved] = reordered.splice(sourceIndex, 1);
+        reordered.splice(targetIndex, 0, moved);
+        const orderedLabels = reordered.map(phase => phase?.label).filter(Boolean);
+
+        try {
+          await storage.reorderPhases(state.project.id, orderedLabels);
+          await reloadActiveProjectAfterPhaseChange();
+          renderPhasesFromProject();
+          renderHeader();
+          await renderOverview();
+        } catch (error) {
+          console.warn('reorderPhases failed', error);
+          alert(error?.message || 'Não foi possível reorganizar as fases.');
+        }
+      });
+    }
 
     const btnArchive = el.querySelector('button[data-action="archive"]');
     if (btnArchive) btnArchive.addEventListener('click', (ev) => {
@@ -3625,10 +4116,12 @@ function bindEvents() {
       phaseLabelStatus = el.dataset.labelStatus || labelStatus || 'pending';
       phaseEditingLabel = el.dataset.label || label;
       if (btnTogglePhaseStatus) {
-        btnTogglePhaseStatus.disabled = !isLatestPhase;
-        btnTogglePhaseStatus.title = isLatestPhase
-          ? 'Alterar o rótulo da fase atual'
-          : 'Fases anteriores permanecem concluídas enquanto existir uma fase posterior.';
+        btnTogglePhaseStatus.disabled = !isActivePhase;
+        btnTogglePhaseStatus.title = isActivePhase
+          ? 'Concluir a fase ativa e avançar para a próxima planejada'
+          : (isCompleted
+            ? 'Esta fase já foi concluída.'
+            : 'Esta fase está planejada e será liberada após a conclusão da fase ativa.');
       }
       updateToggleButtonUI();
       phaseEditingCard = el;
@@ -3649,8 +4142,9 @@ function bindEvents() {
         return;
       }
 
-      if (!isLatestPhase) {
-        alert('A fase mais recente é a única que pode ficar ativa. Para retornar a esta fase, remova o card da fase atual.');
+      if (!isActivePhase) {
+        const active = getProjectPhases().find(phase => phase?.label === state?.project?.activePhaseLabel);
+        alert('Conclua a fase ativa para ativar a próxima.');
         return;
       }
 
@@ -3681,18 +4175,18 @@ function bindEvents() {
     if(!phasesList) return;
     phasesList.innerHTML = '';
     const phases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
-    const completedLabels = new Set(
-      phases.filter(phase => isPhaseCompleted(phase)).map(phase => phase?.label).filter(Boolean)
+    const viewablePhaseLabels = new Set(
+      phases
+        .filter(phase => isPhaseCompleted(phase) || phase?.label === state?.project?.activePhaseLabel)
+        .map(phase => phase?.label)
+        .filter(Boolean)
     );
-    if (expandedCompletedPhaseLabel && !completedLabels.has(expandedCompletedPhaseLabel)) {
+    if (expandedCompletedPhaseLabel && !viewablePhaseLabels.has(expandedCompletedPhaseLabel)) {
       expandedCompletedPhaseLabel = null;
-    }
-    if (phases.length) {
-      state.project.activePhaseLabel = phases.at(-1).label;
     }
     phases.forEach((phase, index) => {
       phasesList.appendChild(createPhaseCard(phase, index, phases.length));
-      if (isPhaseCompleted(phase)) {
+      if (isPhaseCompleted(phase) || phase?.label === state?.project?.activePhaseLabel) {
         phasesList.appendChild(createCompletedPhaseArchivePanel(phase));
       }
     });
@@ -3762,14 +4256,12 @@ function bindEvents() {
         : (phaseCreationRequired ? 'Crie a primeira fase' : 'Nova fase');
     }
     if(btnDeletePhase){
-      const canDelete = isEditing
-        && getProjectPhases().length > 1
-        && isLatestPhaseLabel(phaseEditingLabel);
+      const canDelete = isEditing && canDeletePhaseLabel(phaseEditingLabel);
       btnDeletePhase.style.display = isEditing ? '' : 'none';
       btnDeletePhase.disabled = !canDelete;
       btnDeletePhase.title = canDelete
-        ? 'Excluir a fase atual e retornar à anterior'
-        : 'O projeto deve manter a primeira fase; fases anteriores só podem ser acessadas removendo a atual.';
+        ? 'Excluir esta fase planejada'
+        : 'A fase ativa e todas as fases anteriores fazem parte do histórico e não podem ser excluídas.';
     }
     setTimeout(() => phaseTitleInput?.focus(), 60);
   }
@@ -3795,7 +4287,6 @@ function bindEvents() {
     updateToggleButtonUI();
     if(phaseTitleError){ phaseTitleError.classList.remove('visible'); phaseTitleError.textContent=''; }
     if(phaseDescError){ phaseDescError.classList.remove('visible'); phaseDescError.textContent=''; }
-    if(phaseCriteriaError){ phaseCriteriaError.classList.remove('visible'); phaseCriteriaError.textContent=''; }
     if(phaseCategoriesError){ phaseCategoriesError.classList.remove('visible'); phaseCategoriesError.textContent=''; }
     if(btnDeletePhase) btnDeletePhase.style.display = 'none';
   }
@@ -3906,7 +4397,7 @@ function bindEvents() {
 
   // Disable save until required fields are filled
   function updateSaveState(){
-    const ok = (phaseTitleInput?.value || '').trim() && (phaseDescInput?.value || '').trim() && (phaseCriteriaInput?.value || '').trim();
+    const ok = (phaseTitleInput?.value || '').trim() && (phaseDescInput?.value || '').trim();
     if(btnSavePhase) {
       if(ok) btnSavePhase.classList.add('ready'); else btnSavePhase.classList.remove('ready');
     }
@@ -3914,7 +4405,7 @@ function bindEvents() {
   // Init
   // keep button enabled so user can attempt save and see validation messages
   updateSaveState();
-  [phaseTitleInput, phaseDescInput, phaseCriteriaInput].forEach(inp => {
+  [phaseTitleInput, phaseDescInput].forEach(inp => {
     if(!inp) return;
     inp.addEventListener('input', (e) => {
       updateSaveState();
@@ -3923,7 +4414,6 @@ function bindEvents() {
       const id = e.target.id;
       if(id === 'phaseTitle' && phaseTitleError){ phaseTitleError.classList.remove('visible'); phaseTitleError.textContent=''; }
       if(id === 'phaseDesc' && phaseDescError){ phaseDescError.classList.remove('visible'); phaseDescError.textContent=''; }
-      if(id === 'phaseCriteria' && phaseCriteriaError){ phaseCriteriaError.classList.remove('visible'); phaseCriteriaError.textContent=''; }
     });
   });
   async function reloadActiveProjectAfterPhaseChange(){
@@ -3952,34 +4442,23 @@ function bindEvents() {
     const completesRequiredFirstPhase = phaseCreationRequired && !phaseEditingLabel;
     const title = (phaseTitleInput?.value || '').trim();
     const desc = (phaseDescInput?.value || '').trim();
-    const criteriaText = (phaseCriteriaInput?.value || '').trim();
     if(phaseTitleError){ phaseTitleError.classList.remove('visible'); phaseTitleError.textContent=''; }
     if(phaseDescError){ phaseDescError.classList.remove('visible'); phaseDescError.textContent=''; }
-    if(phaseCriteriaError){ phaseCriteriaError.classList.remove('visible'); phaseCriteriaError.textContent=''; }
     if(phaseCategoriesError){ phaseCategoriesError.classList.remove('visible'); phaseCategoriesError.textContent=''; }
 
     const emptyFields = [];
     if(!title) emptyFields.push('title');
     if(!desc) emptyFields.push('desc');
-    if(!criteriaText) emptyFields.push('criteria');
     if(emptyFields.length){
       if(emptyFields.includes('title') && phaseTitleError){ phaseTitleError.textContent = 'Preencha o título da fase.'; phaseTitleError.classList.add('visible'); }
       if(emptyFields.includes('desc') && phaseDescError){ phaseDescError.textContent = 'Preencha a descrição da fase.'; phaseDescError.classList.add('visible'); }
-      if(emptyFields.includes('criteria') && phaseCriteriaError){ phaseCriteriaError.textContent = 'Preencha os critérios da fase.'; phaseCriteriaError.classList.add('visible'); }
       if(emptyFields[0] === 'title') phaseTitleInput?.focus();
       else if(emptyFields[0] === 'desc') phaseDescInput?.focus();
-      else if(emptyFields[0] === 'criteria') phaseCriteriaInput?.focus();
       return;
     }
 
     if(!state?.project?.id){
       alert('Abra um projeto antes de salvar fases.');
-      return;
-    }
-
-    if (!phaseEditingLabel && !canCreateNextPhase()) {
-      const latest = getLatestPhase();
-      alert(`Conclua a fase "${latest?.title || latest?.label || 'atual'}" antes de criar uma nova fase.`);
       return;
     }
 
@@ -4004,19 +4483,6 @@ function bindEvents() {
       normalizeCategoryMetricType(category?.metricType, 'pending') === 'pending'
     ));
 
-    if (!phaseEditingLabel) {
-      const previousPhase = getLatestPhase();
-      const previousStats = previousPhase ? getPhaseStats(previousPhase) : null;
-      if (previousPhase && previousStats?.selected > 0 && !inheritanceCategory) {
-        if (phaseCategoriesError) {
-          phaseCategoriesError.textContent = `Selecione uma categoria com impacto Pendente para receber os ${previousStats.selected} artigo(s) incluído(s) da fase anterior.`;
-          phaseCategoriesError.classList.add('visible');
-        }
-        phaseCategoriesInput?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        return;
-      }
-    }
-
     if (phaseEditingLabel && phaseLabelStatus === 'done') {
       const editedPhase = getProjectPhases().find(phase => phase?.label === phaseEditingLabel);
       const editedStats = getPhaseStats(editedPhase || {});
@@ -4026,8 +4492,8 @@ function bindEvents() {
       }
     }
 
-    if (phaseEditingLabel && !isLatestPhaseLabel(phaseEditingLabel) && phaseLabelStatus !== 'done') {
-      alert('Fases anteriores permanecem concluídas enquanto existir uma fase posterior. Para retornar, remova a fase atual.');
+    if (phaseEditingLabel && phaseLabelStatus === 'done' && state?.project?.activePhaseLabel !== phaseEditingLabel) {
+      alert('Somente a fase ativa pode ser concluída. As fases futuras permanecem planejadas.');
       return;
     }
 
@@ -4037,7 +4503,9 @@ function bindEvents() {
       completed: phaseLabelStatus === 'done',
       categories,
       inheritanceCategoryLabel: inheritanceCategory?.label || null,
-      criteria: phaseTextToCriteria(criteriaText)
+      criteria: phaseEditingLabel
+        ? (getProjectPhases().find(phase => phase?.label === phaseEditingLabel)?.criteria || [])
+        : []
     };
 
     try {
@@ -4089,11 +4557,11 @@ function bindEvents() {
       alert('O projeto deve manter pelo menos uma fase. A primeira fase não pode ser excluída.');
       return;
     }
-    if (!isLatestPhaseLabel(phaseEditingLabel)) {
-      alert('Somente a fase atual mais recente pode ser removida. Remova as fases posteriores primeiro.');
+    if (!canDeletePhaseLabel(phaseEditingLabel)) {
+      alert('Somente fases planejadas depois da fase ativa podem ser excluídas. A fase ativa e o histórico anterior ficam protegidos.');
       return;
     }
-    if(!confirm('Excluir a fase atual e retornar à fase anterior? Os artigos marcados exclusivamente nesta fase serão removidos do seu escopo.')) return;
+    if(!confirm('Excluir esta fase planejada? Esta ação remove a fase do planejamento, sem alterar a fase ativa nem as fases já concluídas.')) return;
     if(!state?.project?.id){
       alert('Abra um projeto antes de excluir fases.');
       return;
