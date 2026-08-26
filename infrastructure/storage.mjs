@@ -513,7 +513,7 @@ class NodeFsStrategy {
     });
   }
 
-  inheritIncludedPapers(projectID, project, previousPhase, nextPhase) {
+  inheritIncludedPapers(projectID, project, previousPhase, nextPhase, { activateNextPhase = true } = {}) {
     const inheritedPapers = previousPhase
       ? this.collectIncludedPapersForPhase(projectID, previousPhase.label)
       : [];
@@ -612,8 +612,12 @@ class NodeFsStrategy {
       ...previousScopedProject,
       id: project.id || projectID,
       title: project.name || project.title || previousScopedProject.title || 'Projeto',
-      activePhaseLabel: nextPhase.label,
-      currentIterationId: nextPhase.label,
+      activePhaseLabel: activateNextPhase
+        ? nextPhase.label
+        : (project.activePhaseLabel || previousScopedProject.activePhaseLabel || nextPhase.label),
+      currentIterationId: activateNextPhase
+        ? nextPhase.label
+        : (project.currentIterationId || previousScopedProject.currentIterationId || nextPhase.label),
       updatedAt: inheritedAt,
     };
 
@@ -644,6 +648,12 @@ class NodeFsStrategy {
       inheritedCount: inheritedReferences.length,
       pendingCategoryLabel: null,
     };
+  }
+
+  inheritIncludedPapersForNewPhase(projectID, project, previousPhase, nextPhase) {
+    return this.inheritIncludedPapers(projectID, project, previousPhase, nextPhase, {
+      activateNextPhase: false,
+    });
   }
 
   cleanupDeletedPhasePaperReferences(projectID, deletedPhaseLabel, fallbackPhaseLabel = null) {
@@ -1011,76 +1021,48 @@ class NodeFsStrategy {
       || {};
     const project = this.normalizeProjectPhaseCategoryModel(rawProject);
     const phases = Array.isArray(project.phases) ? project.phases : [];
-    const activePhase = phases.find(phase => phase?.label === project.activePhaseLabel && !phase?.completed)
-      || phases.find(phase => !phase?.completed)
-      || null;
-    if (!activePhase) {
-      return {
-        status: 'ok',
-        data: { highlightedLinks: {}, svat_papers: [], svat_project: null },
-      };
-    }
-
-    const scopedPath = this.getPhaseScopedStoragePath(this.activeProjectID, activePhase.label);
-    const activeScoped = scopedPath ? (this.readJson(scopedPath) || {}) : {};
-    const scopedPapers = Array.isArray(activeScoped.svat_papers) ? activeScoped.svat_papers : [];
-    const rawLinks = activeScoped.highlightedLinks
-      && typeof activeScoped.highlightedLinks === 'object'
-      && !Array.isArray(activeScoped.highlightedLinks)
-      ? activeScoped.highlightedLinks
-      : {};
-
-    const selectedCategoryLabels = new Set(
-      (Array.isArray(activePhase.categories) ? activePhase.categories : []).filter(Boolean)
-    );
     const categoryMap = this.getCategoryMap(project);
     const highlightedLinks = {};
-    const paperUrls = new Set();
+    const allProjectPapers = this.readProjectPaperEntries(this.activeProjectID)
+      .map(entry => entry.paper)
+      .filter(paper => paper && typeof paper === 'object' && paper.visited !== false);
 
-    // A categoria escolhida no painel da fase é a fonte única da visibilidade no
-    // Scholar. O artigo continua persistido na fase, mas só é pintado quando sua
-    // classificação atual pertence a uma das categorias marcadas na fase ativa.
-    for (const paper of scopedPapers) {
-      if (!paper || typeof paper !== 'object' || paper.visited === false) continue;
+    for (const paper of allProjectPapers) {
       const normalizedUrl = normalizeArticleUrl(paper.url || '');
-      if (normalizedUrl) paperUrls.add(normalizedUrl);
       if (!normalizedUrl) continue;
 
-      const classification = this.getPaperClassificationForPhase(paper, activePhase.label);
-      const categoryLabel = classification?.categoryLabel
-        || ((paper.phaseLabel || paper.iterationId) === activePhase.label ? paper.categoryLabel : null);
-      if (!categoryLabel || !selectedCategoryLabels.has(categoryLabel)) continue;
+      const classifications = paper.classifications
+        && typeof paper.classifications === 'object'
+        && !Array.isArray(paper.classifications)
+        ? paper.classifications
+        : {};
 
-      const category = categoryMap.get(categoryLabel);
+      const classifiedEntries = Object.entries(classifications)
+        .map(([phaseLabel, classification]) => ({
+          phaseLabel,
+          classification,
+        }))
+        .filter(item => item.classification && item.classification.categoryLabel)
+        .sort((first, second) => String(second.classification?.classifiedAt || '').localeCompare(String(first.classification?.classifiedAt || '')));
+
+      const latestClassification = classifiedEntries[0];
+      if (!latestClassification) continue;
+
+      const category = categoryMap.get(latestClassification.classification.categoryLabel)
+        || null;
       if (!category) continue;
-      const outcome = normalizeMetricType(classification?.outcome ?? paper.status, 'pending');
 
       const rawUrl = String(paper.url || '').trim();
       if (!rawUrl) continue;
-      highlightedLinks[rawUrl] = category.color || rawLinks[rawUrl] || 'yellow';
-    }
-
-    // Compatibilidade com marcações antigas que ainda não possuem um registro
-    // de artigo. Nelas, a cor é usada apenas para localizar uma categoria ativa;
-    // registros atuais nunca dependem da cor para determinar sua categoria.
-    const selectedColors = new Set(
-      [...selectedCategoryLabels]
-        .map(label => String(categoryMap.get(label)?.color || '').trim().toLowerCase())
-        .filter(Boolean)
-    );
-    for (const [url, color] of Object.entries(rawLinks)) {
-      const normalizedUrl = normalizeArticleUrl(url);
-      if (!normalizedUrl || paperUrls.has(normalizedUrl)) continue;
-      if (!selectedColors.has(String(color || '').trim().toLowerCase())) continue;
-      highlightedLinks[url] = color;
+      highlightedLinks[rawUrl] = category.color || 'yellow';
     }
 
     return {
       status: 'ok',
       data: {
         highlightedLinks,
-        svat_papers: scopedPapers,
-        svat_project: activeScoped.svat_project || null,
+        svat_papers: allProjectPapers,
+        svat_project: project,
       },
     };
   }
@@ -1170,6 +1152,15 @@ class NodeFsStrategy {
     // Somente a primeira fase é ativada no momento da criação. As seguintes
     // permanecem planejadas até a fase ativa ser concluída.
     if (!project.activePhaseLabel) project.activePhaseLabel = phase.label;
+
+    const previousPhase = project.phases.length > 1
+      ? project.phases[project.phases.length - 2]
+      : null;
+    if (previousPhase) {
+      const inheritanceResult = this.inheritIncludedPapersForNewPhase(projectID, project, previousPhase, phase);
+      if (inheritanceResult?.status === 'error') return inheritanceResult;
+    }
+
     project.updatedAt = new Date().toISOString();
     this.syncPhasePaperBuckets(projectID, project);
 
@@ -1230,12 +1221,6 @@ class NodeFsStrategy {
       return {
         status: 'error',
         message: 'Somente a fase ativa pode ser concluída. As fases futuras permanecem planejadas até chegar a vez delas.',
-      };
-    }
-    if (isReopening) {
-      return {
-        status: 'error',
-        message: 'Uma fase já concluída não pode ser reaberta depois que a progressão avançou.',
       };
     }
     if (isCompletingNow && pendingCount > 0) {
@@ -1400,21 +1385,40 @@ class NodeFsStrategy {
     if (phaseIndex === -1) return { status: 'error', message: 'Fase não encontrada.' };
 
     const activePhaseIndex = project.phases.findIndex((p) => p.label === project.activePhaseLabel);
-    if (activePhaseIndex === -1 || phaseIndex <= activePhaseIndex) {
+    if (activePhaseIndex === -1) {
       return {
         status: 'error',
-        message: 'Somente fases planejadas depois da fase ativa podem ser excluídas. A fase ativa e o histórico anterior estão protegidos.'
+        message: 'Não foi possível localizar a fase ativa do projeto.',
+      };
+    }
+    if (phaseIndex < activePhaseIndex) {
+      return {
+        status: 'error',
+        message: 'Somente a fase ativa ou fases planejadas depois dela podem ser excluídas. O histórico anterior está protegido.'
       };
     }
 
     project.phases.splice(phaseIndex, 1);
-    const previousPhase = project.phases.at(-1) || null;
+    const previousPhase = phaseIndex > 0 ? project.phases[phaseIndex - 1] : null;
+    if (previousPhase) {
+      previousPhase.completed = false;
+      project.activePhaseLabel = previousPhase.label;
+    }
+    const nextActivePhase = previousPhase
+      || project.phases[phaseIndex]
+      || project.phases.find((p) => !p.completed)
+      || project.phases.at(-1)
+      || null;
 
     const phaseDir = this.path.join(this.baseDir, projectID, 'phases', phaseLabel);
     if (this.fs.existsSync(phaseDir)) {
       this.fs.rmSync(phaseDir, { recursive: true, force: true });
     }
-    this.cleanupDeletedPhasePaperReferences(projectID, phaseLabel, project.activePhaseLabel || previousPhase?.label || null);
+    this.cleanupDeletedPhasePaperReferences(projectID, phaseLabel, nextActivePhase?.label || previousPhase?.label || null);
+
+    if (project.activePhaseLabel === phaseLabel) {
+      project.activePhaseLabel = nextActivePhase?.label || null;
+    }
 
     project.updatedAt = new Date().toISOString();
     this.syncPhasePaperBuckets(projectID, project);

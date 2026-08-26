@@ -1891,7 +1891,7 @@ function getPaperCategoryForPhase(paper, phaseLabel, highlightedLinks = {}) {
     });
     if (matched) return matched;
   }
-  return getPaperCategory(paper, highlightedLinks);
+  return null;
 }
 
 function getPaperMetricTypeForPhase(paper, phaseLabel, highlightedLinks = {}) {
@@ -1899,11 +1899,6 @@ function getPaperMetricTypeForPhase(paper, phaseLabel, highlightedLinks = {}) {
   const classification = getPaperClassificationForPhase(paper, phaseLabel);
   if (!classification) return "pending";
 
-  // Use a categoria da própria fase que está sendo filtrada. Antes este bloco
-  // referenciava `scope`, uma variável inexistente, interrompendo a renderização
-  // reativa da tabela sempre que um filtro por fase/situação era recalculado.
-  const category = getPaperCategoryForPhase(paper, phaseLabel, highlightedLinks);
-  if (category) return normalizeMetricType(category.metricType, inferMetricTypeFromCategory(category));
   return normalizeMetricType(classification.outcome ?? paper?.status, "pending");
 }
 
@@ -2843,6 +2838,15 @@ function createBulkClassifiedPaper(previousPaper, category, phaseLabel, classifi
   };
 }
 
+function isPaperLockedInActivePhase(paper, activePhaseLabel) {
+  if (!paper || !activePhaseLabel) return false;
+  const classification = getPaperClassificationForPhase(paper, activePhaseLabel);
+  if (!classification) return false;
+  return classification.inherited === true
+    || String(classification.entryType || "").toLowerCase() === "inherited"
+    || Boolean(classification.inheritedFromPhaseLabel);
+}
+
 async function requestPaperBulkOutcome(outcome) {
   const normalizedOutcome = normalizeCategoryMetricType(outcome, "pending");
   const selectedPapers = getSelectedRenderedPapers();
@@ -2903,6 +2907,11 @@ async function applyPaperBulkCategory(category, requestedOutcome) {
   const selectedPapers = getSelectedRenderedPapers();
   if (!selectedPapers.length) {
     alert("Selecione pelo menos 1 artigo.");
+    return;
+  }
+
+  if (selectedPapers.some(paper => isPaperLockedInActivePhase(paper, activePhase.label))) {
+    alert("Artigos herdados da fase anterior ficam travados nesta fase e não podem mudar de categoria.");
     return;
   }
 
@@ -3797,9 +3806,9 @@ function bindEvents() {
     const phaseIndex = phases.findIndex(phase => phase?.label === label);
     const activeIndex = getActivePhaseIndex();
     if (phaseIndex < 0 || phases.length <= 1) return false;
-    // O histórico e a fase ativa são protegidos. Apenas o planejamento futuro
-    // pode ser removido livremente.
-    return activeIndex >= 0 && phaseIndex > activeIndex;
+    // O histórico anterior continua protegido, mas a fase ativa pode ser
+    // removida. Fases futuras também podem ser excluídas.
+    return activeIndex >= 0 && phaseIndex >= activeIndex;
   }
 
   function isReorderablePlannedPhase(label) {
@@ -3833,7 +3842,7 @@ function bindEvents() {
     btnTogglePhaseStatus.addEventListener('click', (e) => {
       e.preventDefault();
       if (!phaseEditingLabel || state?.project?.activePhaseLabel !== phaseEditingLabel) {
-        alert('Somente a fase ativa pode ser concluída. As fases futuras permanecem planejadas até chegar a vez delas.');
+        alert('Somente a fase ativa pode alternar entre concluída e em análise. As fases futuras permanecem planejadas até chegar a vez delas.');
         return;
       }
       if (phaseLabelStatus !== 'done') {
@@ -4260,8 +4269,8 @@ function bindEvents() {
       btnDeletePhase.style.display = isEditing ? '' : 'none';
       btnDeletePhase.disabled = !canDelete;
       btnDeletePhase.title = canDelete
-        ? 'Excluir esta fase planejada'
-        : 'A fase ativa e todas as fases anteriores fazem parte do histórico e não podem ser excluídas.';
+        ? 'Excluir esta fase'
+        : 'As fases anteriores ao histórico ativo continuam protegidas.';
     }
     setTimeout(() => phaseTitleInput?.focus(), 60);
   }
@@ -4492,7 +4501,7 @@ function bindEvents() {
       }
     }
 
-    if (phaseEditingLabel && phaseLabelStatus === 'done' && state?.project?.activePhaseLabel !== phaseEditingLabel) {
+    if (phaseEditingLabel && state?.project?.activePhaseLabel !== phaseEditingLabel && phaseLabelStatus === 'done') {
       alert('Somente a fase ativa pode ser concluída. As fases futuras permanecem planejadas.');
       return;
     }
@@ -4558,10 +4567,10 @@ function bindEvents() {
       return;
     }
     if (!canDeletePhaseLabel(phaseEditingLabel)) {
-      alert('Somente fases planejadas depois da fase ativa podem ser excluídas. A fase ativa e o histórico anterior ficam protegidos.');
+      alert('Somente a fase ativa ou fases planejadas depois dela podem ser excluídas. O histórico anterior fica protegido.');
       return;
     }
-    if(!confirm('Excluir esta fase planejada? Esta ação remove a fase do planejamento, sem alterar a fase ativa nem as fases já concluídas.')) return;
+    if(!confirm('Excluir esta fase? Se for a fase ativa, o sistema irá promover automaticamente a próxima fase disponível.')) return;
     if(!state?.project?.id){
       alert('Abra um projeto antes de excluir fases.');
       return;
