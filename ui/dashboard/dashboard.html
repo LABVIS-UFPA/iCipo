@@ -250,10 +250,11 @@
                   <th style="width:36px"><input type="checkbox" id="checkAll" /></th>
                   <th>Título</th>
                   <th style="width:72px">Ano</th>
-                  <th style="width:190px">Fases</th>
-                  <th style="width:230px">Categoria</th>
-                  <th style="width:150px">Tags</th>
-                  <th style="width:120px">Links / Origem</th>
+                  <th style="width:auto">Fases</th>
+                  <th style="width:auto">Categoria</th>
+                  <th style="width:auto">Tags</th>
+                  <th style="width:80px">Links / Origem</th>
+                  <th style="width:140px">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -342,6 +343,57 @@
             </div>
             <p id="paperBulkCategoryModalDescription" class="paperBulkCategoryModalDescription"></p>
             <div id="paperBulkCategoryOptions" class="paperBulkCategoryOptions" role="list"></div>
+          </div>
+        </div>
+
+        <!-- SNOWBALL STOP MODAL -->
+        <div id="snowballStopModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="snowballStopModalTitle" aria-hidden="true" style="z-index: 1000">
+          <div class="modalCard" style="max-width:400px">
+            <div style="font-weight:900; margin-bottom: 12px; font-size: 16px;" id="snowballStopModalTitle">Concluir Snowballing?</div>
+            <p style="margin-bottom: 24px; color: #526075; font-size: 14px; line-height: 1.5;">Você finalizou a busca reversa a partir deste artigo ou deseja apenas pausar?</p>
+            <div style="display: flex; gap: 8px; justify-content: flex-end;">
+              <button id="btnSnowballStopPause" class="btn ghost">Apenas pausar</button>
+              <button id="btnSnowballStopComplete" class="btn" style="background:var(--good); border-color:var(--good); color:white; box-shadow: 0 2px 4px rgba(0,0,0,0.1)">✔ Finalizar Artigo</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="snowballStartModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="snowballStartModalTitle" aria-describedby="snowballStartModalDescription" aria-hidden="true" style="z-index: 1000">
+          <div class="modalCard" style="max-width:400px">
+            <div style="font-weight:900; margin-bottom: 12px; font-size: 16px;" id="snowballStartModalTitle">Iniciar Snowballing?</div>
+            <p id="snowballStartModalDescription" style="margin-bottom: 24px; color: #526075; font-size: 14px; line-height: 1.5;">Este artigo foi incluído na fase atual. Deseja iniciar o Snowballing a partir dele?</p>
+            <div style="display: flex; gap: 8px; justify-content: flex-end;">
+              <button id="btnSnowballStartCancel" class="btn ghost" type="button">Cancelar</button>
+              <button id="btnSnowballStartProceed" class="btn" style="background:var(--good); border-color:var(--good); color:white; box-shadow: 0 2px 4px rgba(0,0,0,0.1)" type="button">Prosseguir</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- INHERITANCE REVIEWED MODAL -->
+        <div id="inheritanceReviewedModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="inheritanceReviewedModalTitle" aria-hidden="true" style="z-index: 1000">
+          <div class="modalCard" style="max-width: 600px; display: flex; flex-direction: column; max-height: 85vh;">
+            <div class="row" style="justify-content:space-between;align-items:center; flex-shrink: 0;">
+              <div style="font-weight:900; font-size: 16px;" id="inheritanceReviewedModalTitle">Herança de Artigos</div>
+              <button id="btnCloseInheritanceModal" class="btn" type="button">Cancelar</button>
+            </div>
+            <p style="margin-top: 12px; margin-bottom: 12px; color: #526075; font-size: 14px; flex-shrink: 0;">
+              Os artigos abaixo já estavam na fase atual (foram herdados) e irão para a nova fase. Selecione quais deles você deseja que mantenham ou recebam o selo de <strong>✔ Revisado</strong> na nova fase.
+            </p>
+            <div class="tableWrap u-scroll-y" style="flex-grow: 1; margin-bottom: 16px;">
+              <table class="table" id="inheritanceModalTable">
+                <thead>
+                  <tr>
+                    <th style="width:36px"><input type="checkbox" id="inheritanceCheckAll" /></th>
+                    <th>Título</th>
+                    <th style="width:120px">Status Atual</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div style="display: flex; gap: 8px; justify-content: flex-end; flex-shrink: 0;">
+              <button id="btnConfirmInheritanceModal" class="btn" style="background:var(--good); border-color:var(--good); color:white; box-shadow: 0 2px 4px rgba(0,0,0,0.1)">Salvar Fase</button>
+            </div>
           </div>
         </div>
 
