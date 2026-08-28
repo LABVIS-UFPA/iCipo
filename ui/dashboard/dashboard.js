@@ -2492,13 +2492,23 @@ async function renderPapersTable() {
         </td>
         <td><input class="cellInput" data-field="tags" data-id="${escapeHtml(p.id)}" value="${escapeHtml(tags)}" placeholder="ex: vis;ml" /></td>
         <td>
-          <div style="display:flex;gap:4px;align-items:center;">
-            <a class="link" href="${escapeHtml(p.url)}" target="_blank" rel="noreferrer">Abrir</a>
+          <a class="link" href="${escapeHtml(p.url)}" target="_blank" rel="noreferrer">Abrir</a>
+        </td>
+        <td>
+          <div style="display:flex;gap:8px;align-items:center;">
             ${(() => {
               const isActive = currentSnowballParentId === String(p.id);
               const style = isActive ? 'background:var(--accent);color:white;border-color:var(--accent);' : '';
               const title = isActive ? 'Snowballing ativo (clique em Parar no aviso para cancelar)' : 'Iniciar Snowballing a partir deste artigo';
               return `<button type="button" class="btn ghost small snowballBtn ${isActive ? 'active' : ''}" style="${style}" data-snowball-id="${escapeHtml(p.id)}" data-snowball-title="${escapeHtml(p.title || "(sem título)")}" title="${title}" aria-label="Snowballing">🔗</button>`;
+            })()}
+            ${(() => {
+              if (p.reviewed === true || p.reviewed === "completed") {
+                return `<span class="paperPhaseBadge" style="background:var(--good); border-color:var(--good); color:white;" title="Snowballing / Revisão Concluída">✔ Revisado</span>`;
+              } else if (p.reviewed === "paused") {
+                return `<span class="paperPhaseBadge" style="background:var(--warn); border-color:var(--warn); color:white;" title="Snowballing Pausado">⏸ Pausado</span>`;
+              }
+              return '';
             })()}
           </div>
         </td>
@@ -2526,7 +2536,53 @@ async function renderPapersTable() {
       const parentId = btn.getAttribute("data-snowball-id");
       const parentTitle = btn.getAttribute("data-snowball-title");
       if (currentSnowballParentId === parentId) {
+        // Turning off
+        const isCompleted = await new Promise((resolve) => {
+          const modal = document.getElementById("snowballStopModal");
+          const btnPause = document.getElementById("btnSnowballStopPause");
+          const btnComplete = document.getElementById("btnSnowballStopComplete");
+          if (!modal) return resolve(false);
+          const close = (completed) => {
+            modal.classList.add("hidden");
+            btnPause.onclick = null;
+            btnComplete.onclick = null;
+            resolve(completed);
+          };
+          btnPause.onclick = () => close(false);
+          btnComplete.onclick = () => close(true);
+          modal.classList.remove("hidden");
+        });
+
+        if (isCompleted !== undefined) {
+          const renderedPaper = renderedPapersById.get(String(parentId));
+          const projectPaper = state?.papers?.find(p => String(p.id) === String(parentId)) || null;
+          let scopedPapers = [];
+          let scopedPaper = null;
+          try {
+            const scoped = await storage.get(["svat_papers"]);
+            scopedPapers = Array.isArray(scoped?.svat_papers) ? scoped.svat_papers : [];
+            scopedPaper = scopedPapers.find(p => String(p.id) === String(parentId))
+              || scopedPapers.find(p => normalizeUrl(p?.url || "") === normalizeUrl(renderedPaper?.url || ""))
+              || null;
+          } catch (error) {}
+          
+          const paper = projectPaper || scopedPaper;
+          if (paper) {
+            const prev = paper.reviewed;
+            const next = isCompleted ? "completed" : "paused";
+            const targets = [...new Set([projectPaper, scopedPaper].filter(Boolean))];
+            for (const target of targets) {
+              target.reviewed = next;
+              target.updatedAt = new Date().toISOString();
+            }
+            pushHistory(paper, "update_field", { field: "reviewed", from: prev, to: next });
+            if (projectPaper) await storage.savePaper(projectPaper);
+            if (scopedPaper) await storage.set({ svat_papers: scopedPapers });
+          }
+        }
+
         await storage.set({ svat_current_snowball_parent: null, svat_current_snowball_title: null });
+        renderAll();
       } else {
         await storage.set({ svat_current_snowball_parent: parentId, svat_current_snowball_title: parentTitle });
       }

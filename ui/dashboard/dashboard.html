@@ -250,10 +250,11 @@
                   <th style="width:36px"><input type="checkbox" id="checkAll" /></th>
                   <th>Título</th>
                   <th style="width:72px">Ano</th>
-                  <th style="width:190px">Fases</th>
-                  <th style="width:230px">Categoria</th>
-                  <th style="width:150px">Tags</th>
-                  <th style="width:120px">Links / Origem</th>
+                  <th style="width:auto">Fases</th>
+                  <th style="width:auto">Categoria</th>
+                  <th style="width:auto">Tags</th>
+                  <th style="width:80px">Links / Origem</th>
+                  <th style="width:140px">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -342,6 +343,18 @@
             </div>
             <p id="paperBulkCategoryModalDescription" class="paperBulkCategoryModalDescription"></p>
             <div id="paperBulkCategoryOptions" class="paperBulkCategoryOptions" role="list"></div>
+          </div>
+        </div>
+
+        <!-- SNOWBALL STOP MODAL -->
+        <div id="snowballStopModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="snowballStopModalTitle" aria-hidden="true" style="z-index: 1000">
+          <div class="modalCard" style="max-width:400px">
+            <div style="font-weight:900; margin-bottom: 12px; font-size: 16px;" id="snowballStopModalTitle">Concluir Snowballing?</div>
+            <p style="margin-bottom: 24px; color: #526075; font-size: 14px; line-height: 1.5;">Você finalizou a busca reversa a partir deste artigo ou deseja apenas pausar?</p>
+            <div style="display: flex; gap: 8px; justify-content: flex-end;">
+              <button id="btnSnowballStopPause" class="btn ghost">Apenas pausar</button>
+              <button id="btnSnowballStopComplete" class="btn" style="background:var(--good); border-color:var(--good); color:white; box-shadow: 0 2px 4px rgba(0,0,0,0.1)">✔ Finalizar Artigo</button>
+            </div>
           </div>
         </div>
 
