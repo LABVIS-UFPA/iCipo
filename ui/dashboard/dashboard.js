@@ -2593,6 +2593,38 @@ async function renderPapersTable() {
         await storage.set({ svat_current_snowball_parent: null, svat_current_snowball_title: null });
         renderAll();
       } else {
+        const paper = renderedPapersById.get(String(parentId));
+        const activePhaseLabel = getActivePhaseLabel();
+        const activeClassification = getPaperClassificationForPhase(paper, activePhaseLabel);
+        const wasIncludedInCurrentPhase = activeClassification
+          && normalizeMetricType(activeClassification.outcome ?? paper?.status, "pending") === "included"
+          && !isInheritedPhaseClassification(activeClassification)
+          && activeClassification.phaseLabel === activePhaseLabel;
+
+        if (wasIncludedInCurrentPhase) {
+          const shouldProceed = await new Promise((resolve) => {
+            const modal = document.getElementById("snowballStartModal");
+            const cancelButton = document.getElementById("btnSnowballStartCancel");
+            const proceedButton = document.getElementById("btnSnowballStartProceed");
+            if (!modal || !cancelButton || !proceedButton) return resolve(false);
+
+            const close = (proceed) => {
+              modal.classList.add("hidden");
+              modal.setAttribute("aria-hidden", "true");
+              cancelButton.onclick = null;
+              proceedButton.onclick = null;
+              resolve(proceed);
+            };
+
+            cancelButton.onclick = () => close(false);
+            proceedButton.onclick = () => close(true);
+            modal.classList.remove("hidden");
+            modal.setAttribute("aria-hidden", "false");
+          });
+
+          if (!shouldProceed) return;
+        }
+
         await storage.set({ svat_current_snowball_parent: parentId, svat_current_snowball_title: parentTitle });
       }
       updateSnowballBanner();
