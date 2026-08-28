@@ -148,7 +148,8 @@ class NodeFsStrategy {
       phase => phase?.label === normalized.activePhaseLabel && !phase?.completed
     );
     const firstPendingPhase = normalized.phases.find(phase => !phase?.completed) || null;
-    normalized.activePhaseLabel = (persistedActive || firstPendingPhase)?.label || null;
+    const fallbackPhase = normalized.phases.at(-1) || null;
+    normalized.activePhaseLabel = (persistedActive || firstPendingPhase || fallbackPhase)?.label || null;
 
     // Projetos antigos podem chegar sem categorias vinculadas. Quando já há
     // categorias no projeto, garante ao menos uma opção ativa em cada fase.
@@ -1240,7 +1241,7 @@ class NodeFsStrategy {
     project.phases[idx] = phase;
     if (isActivePhase) {
       project.activePhaseLabel = isCompletingNow
-        ? (nextPhase?.label || null)
+        ? (nextPhase?.label || phase.label)
         : phase.label;
     }
     project.updatedAt = new Date().toISOString();

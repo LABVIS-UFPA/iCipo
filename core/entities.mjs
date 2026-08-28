@@ -87,7 +87,7 @@ class Project {
     if (persistedActive) return;
 
     const firstPending = this.phases.find(phase => !phase.completed) || null;
-    this.activePhaseLabel = firstPending?.label || null;
+    this.activePhaseLabel = firstPending?.label || this.phases.at(-1)?.label || null;
   }
 
   // --- Category management ---
@@ -365,7 +365,7 @@ class Project {
     this.phases[phaseIndex] = nextPhase;
     if (this.activePhaseLabel === previousPhase.label) {
       this.activePhaseLabel = isCompletingNow
-        ? (this.phases[phaseIndex + 1]?.label || null)
+        ? (this.phases[phaseIndex + 1]?.label || nextPhase.label)
         : nextPhase.label;
     }
     this._touch();

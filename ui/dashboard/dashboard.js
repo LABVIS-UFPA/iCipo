@@ -27,8 +27,8 @@ let paperBulkBusy = false;
 let paperBulkPendingOutcome = null;
 let paperBulkStatusTimer = null;
 let expandedCompletedPhaseLabel = null;
-let refreshPhaseCards = () => {};
-let syncRequirementViews = () => {};
+let refreshPhaseCards = () => { };
+let syncRequirementViews = () => { };
 let dashboardRefreshTimer = null;
 let dashboardRefreshInFlight = null;
 let dashboardRefreshQueued = false;
@@ -330,8 +330,8 @@ function getPhaseArchiveRecords(phase = {}) {
       || null;
     let outcome = normalizeMetricType(
       safeClassification.outcome
-        ?? fallback.outcome
-        ?? (paperPhaseLabel === phaseLabel ? safePaper.status : "pending"),
+      ?? fallback.outcome
+      ?? (paperPhaseLabel === phaseLabel ? safePaper.status : "pending"),
       "pending"
     );
     if (
@@ -388,10 +388,10 @@ function getPhaseArchiveRecords(phase = {}) {
     return paperById.get(rawReference)
       || paperByUrl.get(normalizeUrl(rawReference))
       || {
-        id: rawReference,
-        title: `Registro ${rawReference}`,
-        url: /^https?:\/\//i.test(rawReference) ? rawReference : "",
-      };
+      id: rawReference,
+      title: `Registro ${rawReference}`,
+      url: /^https?:\/\//i.test(rawReference) ? rawReference : "",
+    };
   };
 
   const phasePapers = phase?.papers && typeof phase.papers === "object" ? phase.papers : {};
@@ -877,7 +877,7 @@ function loadCategories({ refreshContextMenu = true } = {}) {
   const project = state && state.project ? state.project : null;
 
   const rawCats = Array.isArray(project?.categories) ? project.categories : [];
-  
+
   // Copy to avoid mutating original data during sort, which can cause issues with state management and rendering
   const items = [...rawCats];
 
@@ -1261,7 +1261,7 @@ async function loadState() {
   return new Promise((resolve, reject) => {
     storage.getActiveProject().then(async (res) => {
 
-      if(!res) throw new Error("No active project");
+      if (!res) throw new Error("No active project");
 
       let project = res;
       let papers = [];
@@ -1285,7 +1285,7 @@ async function loadState() {
 
     }).catch((err) => {
       console.log('getActiveProject failed', err);
-      if(err.message === "No active project"){
+      if (err.message === "No active project") {
         state = baseState;
         dashboardAccessState = 'project-required';
         phaseCreationRequired = false;
@@ -1294,23 +1294,23 @@ async function loadState() {
         toggleServerOfflineNotice(false);
         toggleNoActiveProjectNotice(true);
         resolve(baseState);
-      }else if(err.message === "WebSocket not connected"){
+      } else if (err.message === "WebSocket not connected") {
         state = baseState;
         dashboardAccessState = 'offline';
         phaseCreationRequired = false;
         dashboardIntroRequired = false;
         categoryCreationRequired = false;
-        toggleServerOfflineNotice(true); 
+        toggleServerOfflineNotice(true);
         toggleNoActiveProjectNotice(false);
         resolve(baseState);
-      }else{
+      } else {
         reject(err);
       }
-      
-    }); 
+
+    });
   });
 
-  
+
 }
 
 function getPaperCellBeingEdited() {
@@ -1466,6 +1466,7 @@ function getLatestPaperClassification(paper) {
 function getActivePhaseLabel() {
   return state?.project?.activePhaseLabel
     || state?.project?.phases?.find?.(phase => !isPhaseCompleted(phase))?.label
+    || state?.project?.phases?.at?.(-1)?.label
     || null;
 }
 
@@ -1748,6 +1749,14 @@ function mergeOverviewPaper(base = {}, incoming = {}) {
       && value && typeof value === "object" && !Array.isArray(value)
     ) {
       merged[key] = { ...current, ...value };
+      continue;
+    }
+
+    // Para o campo `reviewed`, sempre preferir o valor mais forte:
+    // 'completed' > true > 'paused' > false/undefined
+    if (key === "reviewed") {
+      const reviewedRank = (v) => v === 'completed' ? 3 : v === true ? 2 : v === 'paused' ? 1 : 0;
+      if (reviewedRank(value) > reviewedRank(current)) merged[key] = value;
       continue;
     }
 
@@ -2233,8 +2242,8 @@ function renderOverviewRecentArticles(papers, highlightedLinks = {}, scope = ove
       <td>${escapeHtml(year)}</td>
       <td><span class="overviewCategoryBadge"><i style="background:${escapeHtml(color)}"></i>${escapeHtml(categoryLabel)}</span></td>
       <td>${escapeHtml(phaseLabel && phaseLabel !== "all"
-        ? (state?.project?.phases?.find(item => item?.label === phaseLabel)?.title || phaseLabel)
-        : getPaperPhaseTitle(paper))}</td>
+      ? (state?.project?.phases?.find(item => item?.label === phaseLabel)?.title || phaseLabel)
+      : getPaperPhaseTitle(paper))}</td>
       <td>${escapeHtml(formatOverviewDate(date, true))}</td>
     `;
     tbody.appendChild(row);
@@ -2280,10 +2289,10 @@ function showHistory(paperId) {
 
   if (title) title.textContent = `Histórico: ${(paper.title || paper.url || paper.id).slice(0, 90)}`;
   if (tbody) renderHistoryTable(tbody, paper.history);
-  
+
   const btnParent = document.getElementById("btnViewParentPaper");
   const btnChild = document.getElementById("btnViewChildPapers");
-  
+
   if (btnParent) {
     if (paper.parentPaperId) {
       btnParent.style.display = "";
@@ -2299,7 +2308,7 @@ function showHistory(paperId) {
       btnParent.style.display = "none";
     }
   }
-  
+
   if (btnChild) {
     const activePhase = state?.project?.activePhaseLabel || "";
     const children = state?.papers?.filter(p => {
@@ -2497,19 +2506,19 @@ async function renderPapersTable() {
         <td>
           <div style="display:flex;gap:8px;align-items:center;">
             ${(() => {
-              const isActive = currentSnowballParentId === String(p.id);
-              const style = isActive ? 'background:var(--accent);color:white;border-color:var(--accent);' : '';
-              const title = isActive ? 'Snowballing ativo (clique em Parar no aviso para cancelar)' : 'Iniciar Snowballing a partir deste artigo';
-              return `<button type="button" class="btn ghost small snowballBtn ${isActive ? 'active' : ''}" style="${style}" data-snowball-id="${escapeHtml(p.id)}" data-snowball-title="${escapeHtml(p.title || "(sem título)")}" title="${title}" aria-label="Snowballing">🔗</button>`;
-            })()}
+        const isActive = currentSnowballParentId === String(p.id);
+        const style = isActive ? 'background:var(--accent);color:white;border-color:var(--accent);' : '';
+        const title = isActive ? 'Snowballing ativo (clique em Parar no aviso para cancelar)' : 'Iniciar Snowballing a partir deste artigo';
+        return `<button type="button" class="btn ghost small snowballBtn ${isActive ? 'active' : ''}" style="${style}" data-snowball-id="${escapeHtml(p.id)}" data-snowball-title="${escapeHtml(p.title || "(sem título)")}" title="${title}" aria-label="Snowballing">🔗</button>`;
+      })()}
             ${(() => {
-              if (p.reviewed === true || p.reviewed === "completed") {
-                return `<span class="paperPhaseBadge" style="background:var(--good); border-color:var(--good); color:white;" title="Snowballing / Revisão Concluída">✔ Revisado</span>`;
-              } else if (p.reviewed === "paused") {
-                return `<span class="paperPhaseBadge" style="background:var(--warn); border-color:var(--warn); color:white;" title="Snowballing Pausado">⏸ Pausado</span>`;
-              }
-              return '';
-            })()}
+        if (p.reviewed === true || p.reviewed === "completed") {
+          return `<span class="paperPhaseBadge" style="background:var(--good); border-color:var(--good); color:white;" title="Snowballing / Revisão Concluída">✔ Revisado</span>`;
+        } else if (p.reviewed === "paused") {
+          return `<span class="paperPhaseBadge" style="background:var(--warn); border-color:var(--warn); color:white;" title="Snowballing Pausado">⏸ Pausado</span>`;
+        }
+        return '';
+      })()}
           </div>
         </td>
       </tr>
@@ -2564,8 +2573,8 @@ async function renderPapersTable() {
             scopedPaper = scopedPapers.find(p => String(p.id) === String(parentId))
               || scopedPapers.find(p => normalizeUrl(p?.url || "") === normalizeUrl(renderedPaper?.url || ""))
               || null;
-          } catch (error) {}
-          
+          } catch (error) { }
+
           const paper = projectPaper || scopedPaper;
           if (paper) {
             const prev = paper.reviewed;
@@ -2918,11 +2927,11 @@ function createBulkClassifiedPaper(previousPaper, category, phaseLabel, classifi
   const tags = [...new Set([
     ...(Array.isArray(previousPaper?.tags)
       ? previousPaper.tags.filter((tag) => {
-          const normalizedTag = String(tag || "").trim().toLowerCase();
-          return normalizedTag
-            && !categoryReferences.has(normalizedTag)
-;
-        })
+        const normalizedTag = String(tag || "").trim().toLowerCase();
+        return normalizedTag
+          && !categoryReferences.has(normalizedTag)
+          ;
+      })
       : []),
     category.label,
   ])];
@@ -3116,10 +3125,10 @@ async function applyPaperBulkCategory(category, requestedOutcome) {
     const scopedProject = data?.svat_project && typeof data.svat_project === "object"
       ? { ...data.svat_project }
       : {
-          id: state?.project?.id,
-          title: state?.project?.name || state?.project?.title || "Projeto",
-          createdAt: state?.project?.createdAt || classifiedAt,
-        };
+        id: state?.project?.id,
+        title: state?.project?.name || state?.project?.title || "Projeto",
+        createdAt: state?.project?.createdAt || classifiedAt,
+      };
     scopedProject.activePhaseLabel = activePhase.label;
     scopedProject.currentIterationId = activePhase.label;
 
@@ -3316,7 +3325,7 @@ function bindEvents() {
   // Top actions
   const btnProjects = document.getElementById("btnProjects");
   if (btnProjects) btnProjects.addEventListener("click", () => {
-    
+
     // Go to the dedicated Projects page (ui/projects/projects.html).
     // Note: we intentionally *don't* open options/config aqui.
     try {
@@ -3328,7 +3337,7 @@ function bindEvents() {
   $("#btnOptions").addEventListener("click", () => chrome.runtime.openOptionsPage());
   // (btnClear removed) — replaced by "Projetos"
 
-  
+
   // History modal close
   const btnClose = document.getElementById("btnCloseHistory");
   if (btnClose) btnClose.addEventListener("click", () => document.getElementById("historyModal")?.classList.add("hidden"));
@@ -3905,6 +3914,12 @@ function bindEvents() {
   const btnSavePhase = document.getElementById('btnSavePhase');
   const phasesList = document.getElementById('phasesList');
 
+  // --- Inheritance Modal ---
+  const inheritanceReviewedModal = document.getElementById('inheritanceReviewedModal');
+  const btnCloseInheritanceModal = document.getElementById('btnCloseInheritanceModal');
+  const btnConfirmInheritanceModal = document.getElementById('btnConfirmInheritanceModal');
+  const inheritanceModalTableBody = document.querySelector('#inheritanceModalTable tbody');
+  const inheritanceCheckAll = document.getElementById('inheritanceCheckAll');
   const phaseTitleInput = document.getElementById('phaseTitle');
   const phaseDescInput = document.getElementById('phaseDesc');
   const phaseCriteriaInput = document.getElementById('phaseCriteria');
@@ -3967,15 +3982,15 @@ function bindEvents() {
       : 'Adicionar a primeira fase';
   }
 
-  function updateToggleButtonUI(){
-    if(!btnTogglePhaseStatus) return;
+  function updateToggleButtonUI() {
+    if (!btnTogglePhaseStatus) return;
     const s = phaseLabelStatus === 'done' ? 'done' : 'pending';
     btnTogglePhaseStatus.dataset.status = s;
     btnTogglePhaseStatus.textContent = s === 'done' ? 'Concluído' : 'Em análise';
     btnTogglePhaseStatus.classList.toggle('ghost', s === 'pending');
   }
 
-  if(btnTogglePhaseStatus){
+  if (btnTogglePhaseStatus) {
     btnTogglePhaseStatus.addEventListener('click', (e) => {
       e.preventDefault();
       if (!phaseEditingLabel || state?.project?.activePhaseLabel !== phaseEditingLabel) {
@@ -3996,8 +4011,8 @@ function bindEvents() {
   }
 
   // Render available categories as checkboxes inside the phase edit panel.
-  function renderPhaseCategories(selected = []){
-    if(!phaseCategoriesInput) return;
+  function renderPhaseCategories(selected = []) {
+    if (!phaseCategoriesInput) return;
     phaseCategoriesInput.innerHTML = '';
 
     // Primeiro tenta usar as categorias do projeto ativo; se não houver,
@@ -4017,7 +4032,7 @@ function bindEvents() {
             inferMetricTypeFromCategory(c || {})
           ),
         }))
-        .sort((a,b)=>(a.title || '').localeCompare(b.title || ''));
+        .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
 
       if (!cats.length) {
         const empty = document.createElement('div');
@@ -4027,7 +4042,7 @@ function bindEvents() {
         return;
       }
 
-      for (const cat of cats){
+      for (const cat of cats) {
         const value = cat.label || cat.title;
         const id = `phase_cat_${cssSafeId(value)}`;
         const wrap = document.createElement('label');
@@ -4037,7 +4052,7 @@ function bindEvents() {
         cb.value = value;
         cb.id = id;
         cb.dataset.metricType = cat.metricType;
-        if(Array.isArray(selected) && selected.includes(value)) cb.checked = true;
+        if (Array.isArray(selected) && selected.includes(value)) cb.checked = true;
         cb.addEventListener('change', () => {
           if (phaseCategoriesError && phaseCategoriesInput.querySelector('input[type=checkbox]:checked')) {
             phaseCategoriesError.classList.remove('visible');
@@ -4078,23 +4093,23 @@ function bindEvents() {
     }).catch(() => { /* ignore */ });
   }
 
-  function cssSafeId(s){
-    return String(s||'').replace(/[^a-z0-9_-]+/ig,'_');
+  function cssSafeId(s) {
+    return String(s || '').replace(/[^a-z0-9_-]+/ig, '_');
   }
 
-  function phaseCriteriaToText(criteria){
-    if(Array.isArray(criteria)) return criteria.join('\n');
+  function phaseCriteriaToText(criteria) {
+    if (Array.isArray(criteria)) return criteria.join('\n');
     return String(criteria || '');
   }
 
-  function phaseTextToCriteria(criteriaText){
+  function phaseTextToCriteria(criteriaText) {
     return String(criteriaText || '')
       .split(/\r?\n|,/)
       .map((c) => c.trim())
       .filter(Boolean);
   }
 
-  function getPhaseStats(phase = {}){
+  function getPhaseStats(phase = {}) {
     const papers = phase.papers || {};
     const dynamic = getDynamicPhaseStats(phase.label);
     const inheritedRefs = new Set(Array.isArray(papers.inherited) ? papers.inherited.map(String) : []);
@@ -4159,7 +4174,7 @@ function bindEvents() {
     }
 
     const safeTitle = escapeHtml(title || '(sem título)');
-    const s = stats || { inherited:0, pending:0, selected:0, removed:0, utilization:0 };
+    const s = stats || { inherited: 0, pending: 0, selected: 0, removed: 0, utilization: 0 };
 
     el.innerHTML = `
       <div class="phaseCardHeader">
@@ -4253,12 +4268,12 @@ function bindEvents() {
     });
 
     const btnEdit = el.querySelector('button[data-action="edit"]');
-    if(btnEdit) btnEdit.addEventListener('click', (ev) => {
+    if (btnEdit) btnEdit.addEventListener('click', (ev) => {
       ev.stopPropagation();
-      if(phaseTitleInput) phaseTitleInput.value = title || '';
-      if(phaseDescInput) phaseDescInput.value = desc || '';
-      if(phaseCriteriaInput) phaseCriteriaInput.value = criteria || '';
-      if(phaseCategoriesInput) renderPhaseCategories(categories || []);
+      if (phaseTitleInput) phaseTitleInput.value = title || '';
+      if (phaseDescInput) phaseDescInput.value = desc || '';
+      if (phaseCriteriaInput) phaseCriteriaInput.value = criteria || '';
+      if (phaseCategoriesInput) renderPhaseCategories(categories || []);
       phaseLabelStatus = el.dataset.labelStatus || labelStatus || 'pending';
       phaseEditingLabel = el.dataset.label || label;
       if (btnTogglePhaseStatus) {
@@ -4276,14 +4291,14 @@ function bindEvents() {
     });
 
     el.addEventListener('click', async (ev) => {
-      if(ev.target.closest('button')) return;
+      if (ev.target.closest('button')) return;
 
       if (isCompleted) {
         toggleCompletedPhaseArchive(label);
         return;
       }
 
-      if(!state?.project?.id){
+      if (!state?.project?.id) {
         alert('Abra um projeto antes de ativar uma fase.');
         return;
       }
@@ -4304,7 +4319,7 @@ function bindEvents() {
           renderOverview(),
         ]);
 
-        if(phasesList){
+        if (phasesList) {
           Array.from(phasesList.querySelectorAll('.phaseCard.active')).forEach(c => c.classList.remove('active'));
         }
         el.classList.add('active');
@@ -4317,8 +4332,8 @@ function bindEvents() {
     return el;
   }
 
-  function renderPhasesFromProject(){
-    if(!phasesList) return;
+  function renderPhasesFromProject() {
+    if (!phasesList) return;
     phasesList.innerHTML = '';
     const phases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
     const viewablePhaseLabels = new Set(
@@ -4365,11 +4380,11 @@ function bindEvents() {
   function prepareNewPhaseForm() {
     phaseEditingCard = null;
     phaseEditingLabel = null;
-    if(phaseTitleInput) phaseTitleInput.value = '';
-    if(phaseDescInput) phaseDescInput.value = '';
-    if(phaseCriteriaInput) phaseCriteriaInput.value = '';
-    if(phaseCategoriesInput) renderPhaseCategories([]);
-    if(phaseCategoriesError){ phaseCategoriesError.classList.remove('visible'); phaseCategoriesError.textContent = ''; }
+    if (phaseTitleInput) phaseTitleInput.value = '';
+    if (phaseDescInput) phaseDescInput.value = '';
+    if (phaseCriteriaInput) phaseCriteriaInput.value = '';
+    if (phaseCategoriesInput) renderPhaseCategories([]);
+    if (phaseCategoriesError) { phaseCategoriesError.classList.remove('visible'); phaseCategoriesError.textContent = ''; }
     phaseLabelStatus = 'pending';
     if (btnTogglePhaseStatus) {
       btnTogglePhaseStatus.disabled = true;
@@ -4386,12 +4401,12 @@ function bindEvents() {
     openPhasePanel(false);
   }
 
-  function openPhasePanel(isEditing){
+  function openPhasePanel(isEditing) {
     phasePanel.classList.add('open');
     phasePanel.setAttribute('aria-hidden', 'false');
     phasePanel.removeAttribute('inert');
-    if(sideOverlay) { sideOverlay.classList.add('open'); sideOverlay.setAttribute('aria-hidden','false'); }
-    if(sideOverlay) { sideOverlay.removeAttribute('inert'); }
+    if (sideOverlay) { sideOverlay.classList.add('open'); sideOverlay.setAttribute('aria-hidden', 'false'); }
+    if (sideOverlay) { sideOverlay.removeAttribute('inert'); }
     document.body.classList.add('no-scroll');
     // ensure custom resizers are present and wired
     enhanceSidePanelTextareas();
@@ -4401,7 +4416,7 @@ function bindEvents() {
         ? 'Editar fase'
         : (phaseCreationRequired ? 'Crie a primeira fase' : 'Nova fase');
     }
-    if(btnDeletePhase){
+    if (btnDeletePhase) {
       const canDelete = isEditing && canDeletePhaseLabel(phaseEditingLabel);
       btnDeletePhase.style.display = isEditing ? '' : 'none';
       btnDeletePhase.disabled = !canDelete;
@@ -4411,7 +4426,7 @@ function bindEvents() {
     }
     setTimeout(() => phaseTitleInput?.focus(), 60);
   }
-  function closePhasePanel(force = false){
+  function closePhasePanel(force = false) {
     if (phaseCreationRequired && !force) {
       phasePanel?.classList.add('phaseGateAttention');
       setTimeout(() => phasePanel?.classList.remove('phaseGateAttention'), 450);
@@ -4420,30 +4435,30 @@ function bindEvents() {
     }
 
     phasePanel.classList.remove('open');
-    phasePanel.setAttribute('aria-hidden','true');
+    phasePanel.setAttribute('aria-hidden', 'true');
     phasePanel.setAttribute('inert', '');
-    if(sideOverlay) { sideOverlay.classList.remove('open'); sideOverlay.setAttribute('aria-hidden','true'); }
-    if(sideOverlay) { sideOverlay.setAttribute('inert', ''); }
+    if (sideOverlay) { sideOverlay.classList.remove('open'); sideOverlay.setAttribute('aria-hidden', 'true'); }
+    if (sideOverlay) { sideOverlay.setAttribute('inert', ''); }
     document.body.classList.remove('no-scroll');
     // clear editing state and any inline errors when closing/cancelling
     phaseEditingCard = null;
     phaseEditingLabel = null;
-    if(phaseCategoriesInput) phaseCategoriesInput.innerHTML = '';
+    if (phaseCategoriesInput) phaseCategoriesInput.innerHTML = '';
     phaseLabelStatus = 'pending';
     updateToggleButtonUI();
-    if(phaseTitleError){ phaseTitleError.classList.remove('visible'); phaseTitleError.textContent=''; }
-    if(phaseDescError){ phaseDescError.classList.remove('visible'); phaseDescError.textContent=''; }
-    if(phaseCategoriesError){ phaseCategoriesError.classList.remove('visible'); phaseCategoriesError.textContent=''; }
-    if(btnDeletePhase) btnDeletePhase.style.display = 'none';
+    if (phaseTitleError) { phaseTitleError.classList.remove('visible'); phaseTitleError.textContent = ''; }
+    if (phaseDescError) { phaseDescError.classList.remove('visible'); phaseDescError.textContent = ''; }
+    if (phaseCategoriesError) { phaseCategoriesError.classList.remove('visible'); phaseCategoriesError.textContent = ''; }
+    if (btnDeletePhase) btnDeletePhase.style.display = 'none';
   }
 
   // Enhance side panel textareas: remove native resize UI and add a modern draggable resizer
-  function enhanceSidePanelTextareas(){
-    if(!phasePanel) return;
+  function enhanceSidePanelTextareas() {
+    if (!phasePanel) return;
     const textareas = phasePanel.querySelectorAll('textarea');
     textareas.forEach((t) => {
-      if(t.closest('.textarea-resizable')) return; // already enhanced
-      try{
+      if (t.closest('.textarea-resizable')) return; // already enhanced
+      try {
         t.style.resize = 'none';
         const wrapper = document.createElement('div');
         wrapper.className = 'textarea-resizable';
@@ -4457,13 +4472,13 @@ function bindEvents() {
         let startY = 0, startH = 0, dragging = false;
 
         const onMouseMove = (e) => {
-          if(!dragging) return;
+          if (!dragging) return;
           const dy = e.clientY - startY;
           const newH = Math.max(40, startH + dy);
           t.style.height = newH + 'px';
         };
         const onMouseUp = () => {
-          if(!dragging) return;
+          if (!dragging) return;
           dragging = false;
           document.removeEventListener('mousemove', onMouseMove);
           document.removeEventListener('mouseup', onMouseUp);
@@ -4482,7 +4497,7 @@ function bindEvents() {
 
         // touch support
         const onTouchMove = (e) => {
-          if(!dragging) return;
+          if (!dragging) return;
           e.preventDefault();
           const touch = e.touches[0];
           const dy = touch.clientY - startY;
@@ -4497,7 +4512,7 @@ function bindEvents() {
         };
         handle.addEventListener('touchstart', (e) => {
           const touch = e.touches[0];
-          if(!touch) return;
+          if (!touch) return;
           startY = touch.clientY;
           startH = t.offsetHeight;
           dragging = true;
@@ -4505,7 +4520,7 @@ function bindEvents() {
           document.addEventListener('touchend', onTouchEnd);
           document.body.style.userSelect = 'none';
         });
-      }catch(err){console.warn('enhanceSidePanelTextareas error', err)}
+      } catch (err) { console.warn('enhanceSidePanelTextareas error', err) }
     });
   }
 
@@ -4542,27 +4557,27 @@ function bindEvents() {
   });
 
   // Disable save until required fields are filled
-  function updateSaveState(){
+  function updateSaveState() {
     const ok = (phaseTitleInput?.value || '').trim() && (phaseDescInput?.value || '').trim();
-    if(btnSavePhase) {
-      if(ok) btnSavePhase.classList.add('ready'); else btnSavePhase.classList.remove('ready');
+    if (btnSavePhase) {
+      if (ok) btnSavePhase.classList.add('ready'); else btnSavePhase.classList.remove('ready');
     }
   }
   // Init
   // keep button enabled so user can attempt save and see validation messages
   updateSaveState();
   [phaseTitleInput, phaseDescInput].forEach(inp => {
-    if(!inp) return;
+    if (!inp) return;
     inp.addEventListener('input', (e) => {
       updateSaveState();
       // clear inline error for this field when user types
-      if(!e?.target) return;
+      if (!e?.target) return;
       const id = e.target.id;
-      if(id === 'phaseTitle' && phaseTitleError){ phaseTitleError.classList.remove('visible'); phaseTitleError.textContent=''; }
-      if(id === 'phaseDesc' && phaseDescError){ phaseDescError.classList.remove('visible'); phaseDescError.textContent=''; }
+      if (id === 'phaseTitle' && phaseTitleError) { phaseTitleError.classList.remove('visible'); phaseTitleError.textContent = ''; }
+      if (id === 'phaseDesc' && phaseDescError) { phaseDescError.classList.remove('visible'); phaseDescError.textContent = ''; }
     });
   });
-  async function reloadActiveProjectAfterPhaseChange(){
+  async function reloadActiveProjectAfterPhaseChange() {
     try {
       const fresh = await storage.getActiveProject();
       if (fresh) state.project = fresh;
@@ -4571,11 +4586,11 @@ function bindEvents() {
     }
   }
 
-  function clearPhaseForm(){
-    if(phaseTitleInput) phaseTitleInput.value = '';
-    if(phaseDescInput) phaseDescInput.value = '';
-    if(phaseCriteriaInput) phaseCriteriaInput.value = '';
-    if(phaseCategoriesInput) phaseCategoriesInput.innerHTML = '';
+  function clearPhaseForm() {
+    if (phaseTitleInput) phaseTitleInput.value = '';
+    if (phaseDescInput) phaseDescInput.value = '';
+    if (phaseCriteriaInput) phaseCriteriaInput.value = '';
+    if (phaseCategoriesInput) phaseCategoriesInput.innerHTML = '';
     phaseEditingCard = null;
     phaseEditingLabel = null;
     phaseLabelStatus = 'pending';
@@ -4588,28 +4603,28 @@ function bindEvents() {
     const completesRequiredFirstPhase = phaseCreationRequired && !phaseEditingLabel;
     const title = (phaseTitleInput?.value || '').trim();
     const desc = (phaseDescInput?.value || '').trim();
-    if(phaseTitleError){ phaseTitleError.classList.remove('visible'); phaseTitleError.textContent=''; }
-    if(phaseDescError){ phaseDescError.classList.remove('visible'); phaseDescError.textContent=''; }
-    if(phaseCategoriesError){ phaseCategoriesError.classList.remove('visible'); phaseCategoriesError.textContent=''; }
+    if (phaseTitleError) { phaseTitleError.classList.remove('visible'); phaseTitleError.textContent = ''; }
+    if (phaseDescError) { phaseDescError.classList.remove('visible'); phaseDescError.textContent = ''; }
+    if (phaseCategoriesError) { phaseCategoriesError.classList.remove('visible'); phaseCategoriesError.textContent = ''; }
 
     const emptyFields = [];
-    if(!title) emptyFields.push('title');
-    if(!desc) emptyFields.push('desc');
-    if(emptyFields.length){
-      if(emptyFields.includes('title') && phaseTitleError){ phaseTitleError.textContent = 'Preencha o título da fase.'; phaseTitleError.classList.add('visible'); }
-      if(emptyFields.includes('desc') && phaseDescError){ phaseDescError.textContent = 'Preencha a descrição da fase.'; phaseDescError.classList.add('visible'); }
-      if(emptyFields[0] === 'title') phaseTitleInput?.focus();
-      else if(emptyFields[0] === 'desc') phaseDescInput?.focus();
+    if (!title) emptyFields.push('title');
+    if (!desc) emptyFields.push('desc');
+    if (emptyFields.length) {
+      if (emptyFields.includes('title') && phaseTitleError) { phaseTitleError.textContent = 'Preencha o título da fase.'; phaseTitleError.classList.add('visible'); }
+      if (emptyFields.includes('desc') && phaseDescError) { phaseDescError.textContent = 'Preencha a descrição da fase.'; phaseDescError.classList.add('visible'); }
+      if (emptyFields[0] === 'title') phaseTitleInput?.focus();
+      else if (emptyFields[0] === 'desc') phaseDescInput?.focus();
       return;
     }
 
-    if(!state?.project?.id){
+    if (!state?.project?.id) {
       alert('Abra um projeto antes de salvar fases.');
       return;
     }
 
     let categories = [];
-    if(phaseCategoriesInput){
+    if (phaseCategoriesInput) {
       const checked = Array.from(phaseCategoriesInput.querySelectorAll('input[type=checkbox]:checked'));
       categories = checked.map(c => (c.value || '').trim()).filter(Boolean);
     }
@@ -4654,50 +4669,216 @@ function bindEvents() {
         : []
     };
 
-    try {
-      btnSavePhase.disabled = true;
+    const targetPhaseLabel = state?.project?.activePhaseLabel || getLatestPhase()?.label;
+    let eligiblePapers = [];
 
-      if(phaseEditingLabel){
-        console.log('🧭 Enviando update_phase para WS', { projectID: state.project.id, phaseLabel: phaseEditingLabel, data: phasePayload });
-        await storage.updatePhase(state.project.id, phaseEditingLabel, phasePayload);
-      } else {
-        console.log('🧭 Enviando save_phase para WS', { projectID: state.project.id, data: phasePayload });
-        await storage.savePhase(state.project.id, phasePayload);
+    if (!phaseEditingLabel && targetPhaseLabel) {
+      let allPapers = Array.isArray(state?.papers) ? state.papers : [];
+      try {
+        const persistedResponse = await storage.listPapers(state.project.id);
+        const persistedPapers = Array.isArray(persistedResponse)
+          ? persistedResponse
+          : (Array.isArray(persistedResponse?.data) ? persistedResponse.data : []);
+        const persistedById = new Map(
+          persistedPapers
+            .filter(paper => paper?.id || paper?.id === 0)
+            .map(paper => [String(paper.id), paper])
+        );
+        allPapers = allPapers.map(paper => mergeOverviewPaper(
+          paper,
+          persistedById.get(String(paper?.id)) || {}
+        ));
+        for (const paper of persistedPapers) {
+          if (!allPapers.some(item => String(item?.id) === String(paper?.id))) {
+            allPapers.push(paper);
+          }
+        }
+
+        const scopedResponse = await storage.get(["svat_papers"]);
+        const scopedPapers = Array.isArray(scopedResponse?.svat_papers)
+          ? scopedResponse.svat_papers
+          : [];
+        const papersById = new Map(
+          allPapers
+            .filter(paper => paper?.id || paper?.id === 0)
+            .map(paper => [String(paper.id), paper])
+        );
+        for (const scopedPaper of scopedPapers) {
+          const key = String(scopedPaper?.id);
+          const existing = papersById.get(key);
+          if (existing) {
+            const merged = mergeOverviewPaper(existing, scopedPaper);
+            papersById.set(key, merged);
+            const index = allPapers.indexOf(existing);
+            if (index >= 0) allPapers[index] = merged;
+          } else if (scopedPaper?.id || scopedPaper?.id === 0) {
+            allPapers.push(scopedPaper);
+            papersById.set(key, scopedPaper);
+          }
+        }
+      } catch (error) {
+        console.warn('Não foi possível atualizar os artigos antes da herança.', error);
       }
+      for (const paper of allPapers) {
+        const classification = getPaperClassificationForPhase(paper, targetPhaseLabel);
+        if (!classification) continue;
+        const outcome = normalizeMetricType(classification.outcome ?? paper.status, 'pending');
 
-      await reloadActiveProjectAfterPhaseChange();
-      renderPhasesFromProject();
-      renderHeader();
-      await Promise.allSettled([
-        renderOverview(),
-        loadHighlightedLinks(),
-        renderPapersTable(),
-        updateScholarCategoryMenu(),
-      ]);
-      const stillRequiresPhase = !projectHasPhases();
-      applyPhaseRequirementUI(stillRequiresPhase);
-      clearPhaseForm();
-      if (stillRequiresPhase) {
-        requireFirstPhase();
-      } else {
-        closePhasePanel(true);
-        setActiveView('phases');
-        phasesList?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        if (completesRequiredFirstPhase) {
-          scheduleCategoryTutorial(TUTORIAL_TRANSITION_DELAY);
+        if (outcome === 'included') {
+          const isCurrentlyReviewed = paper.reviewed === true || paper.reviewed === 'completed';
+          const inheritedInPreviousPhase = isInheritedPhaseClassification(classification) || paper.phaseLabel !== targetPhaseLabel;
+          if (inheritedInPreviousPhase || isCurrentlyReviewed) {
+            eligiblePapers.push(paper);
+          }
         }
       }
-    } catch (err) {
-      console.warn('savePhase failed', err);
-      alert(err?.message || err?.message || err?.payload?.message || 'Falha ao salvar fase. Veja o console.');
-    } finally {
-      btnSavePhase.disabled = false;
+    }
+
+    const finalizeSave = async (selectedReviewedIds = []) => {
+      try {
+        btnSavePhase.disabled = true;
+
+        if (phaseEditingLabel) {
+          console.log('🧭 Enviando update_phase para WS', { projectID: state.project.id, phaseLabel: phaseEditingLabel, data: phasePayload });
+          await storage.updatePhase(state.project.id, phaseEditingLabel, phasePayload);
+        } else {
+          console.log('🧭 Enviando save_phase para WS', { projectID: state.project.id, data: phasePayload });
+          await storage.savePhase(state.project.id, phasePayload);
+
+          if (eligiblePapers.length > 0) {
+            const updates = [];
+            for (const paper of eligiblePapers) {
+              const shouldBeReviewed = selectedReviewedIds.includes(String(paper.id));
+              const isCurrentlyReviewed = paper.reviewed === true || paper.reviewed === 'completed';
+              if (shouldBeReviewed !== isCurrentlyReviewed) {
+                const projectPaper = (Array.isArray(state?.papers) ? state.papers : []).find(p => String(p.id) === String(paper.id)) || paper;
+                const prev = projectPaper.reviewed;
+                const next = shouldBeReviewed ? true : false;
+                projectPaper.reviewed = next;
+                projectPaper.updatedAt = new Date().toISOString();
+                pushHistory(projectPaper, "update_field", { field: "reviewed", from: prev, to: next });
+                updates.push(storage.savePaper(projectPaper));
+              }
+            }
+            if (updates.length > 0) {
+              await Promise.allSettled(updates);
+            }
+          }
+        }
+
+        await reloadActiveProjectAfterPhaseChange();
+        renderPhasesFromProject();
+        renderHeader();
+        await Promise.allSettled([
+          renderOverview(),
+          loadHighlightedLinks(),
+          renderPapersTable(),
+          updateScholarCategoryMenu(),
+        ]);
+        const stillRequiresPhase = !projectHasPhases();
+        applyPhaseRequirementUI(stillRequiresPhase);
+        clearPhaseForm();
+        if (stillRequiresPhase) {
+          requireFirstPhase();
+        } else {
+          closePhasePanel(true);
+          setActiveView('phases');
+          phasesList?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          if (completesRequiredFirstPhase) {
+            scheduleCategoryTutorial(TUTORIAL_TRANSITION_DELAY);
+          }
+        }
+      } catch (err) {
+        console.warn('savePhase failed', err);
+        alert(err?.message || err?.message || err?.payload?.message || 'Falha ao salvar fase. Veja o console.');
+      } finally {
+        btnSavePhase.disabled = false;
+      }
+    };
+
+    if (eligiblePapers.length > 0) {
+      inheritanceModalTableBody.innerHTML = '';
+      eligiblePapers.forEach(p => {
+        const tr = document.createElement('tr');
+        const isCurrentlyReviewed = p.reviewed === true || p.reviewed === 'completed';
+        const phasesDisplay = getPaperPhaseDisplay(p);
+
+        tr.innerHTML = `
+          <td><input type="checkbox" class="inheritance-paper-check" value="${p.id}" ${isCurrentlyReviewed ? 'checked' : ''} /></td>
+          <td><div style="font-weight:600; line-height:1.2">${p.title || 'Sem título'}</div><div style="font-size:12px;color:var(--text-muted); margin-top:4px;">Fases: ${phasesDisplay}</div></td>
+          <td><span class="paperPhaseBadge" style="background:${isCurrentlyReviewed ? 'var(--good)' : '#e2e8f0'}; color:${isCurrentlyReviewed ? 'white' : '#475569'}; border:none; padding:4px 8px; border-radius: 4px; display: inline-block; font-size: 12px; font-weight: 500;">${isCurrentlyReviewed ? '✔ Revisado' : 'Sem status'}</span></td>
+        `;
+
+        const checkbox = tr.querySelector('.inheritance-paper-check');
+        const badge = tr.querySelector('.paperPhaseBadge');
+        checkbox.addEventListener('change', (e) => {
+          if (e.target.checked) {
+            badge.style.background = 'var(--good)';
+            badge.style.color = 'white';
+            badge.textContent = '✔ Revisado';
+          } else {
+            badge.style.background = '#e2e8f0';
+            badge.style.color = '#475569';
+            badge.textContent = 'Sem status';
+          }
+          const checkboxes = Array.from(inheritanceModalTableBody.querySelectorAll('.inheritance-paper-check'));
+          const allChecked = checkboxes.length > 0 && checkboxes.every(cb => cb.checked);
+          const someChecked = checkboxes.some(cb => cb.checked);
+          if (inheritanceCheckAll) {
+            inheritanceCheckAll.checked = allChecked;
+            inheritanceCheckAll.indeterminate = someChecked && !allChecked;
+          }
+        });
+        inheritanceModalTableBody.appendChild(tr);
+      });
+
+      const checkboxes = Array.from(inheritanceModalTableBody.querySelectorAll('.inheritance-paper-check'));
+      const allChecked = checkboxes.length > 0 && checkboxes.every(cb => cb.checked);
+      const someChecked = checkboxes.some(cb => cb.checked);
+      if (inheritanceCheckAll) {
+        inheritanceCheckAll.checked = allChecked;
+        inheritanceCheckAll.indeterminate = someChecked && !allChecked;
+      }
+
+      inheritanceReviewedModal.classList.remove('hidden');
+
+      const newConfirm = btnConfirmInheritanceModal.cloneNode(true);
+      btnConfirmInheritanceModal.replaceWith(newConfirm);
+      const newCancel = btnCloseInheritanceModal.cloneNode(true);
+      btnCloseInheritanceModal.replaceWith(newCancel);
+
+      const confirmBtn = document.getElementById('btnConfirmInheritanceModal');
+      const cancelBtn = document.getElementById('btnCloseInheritanceModal');
+
+      confirmBtn.addEventListener('click', () => {
+        const selectedIds = Array.from(inheritanceModalTableBody.querySelectorAll('.inheritance-paper-check:checked')).map(cb => cb.value);
+        inheritanceReviewedModal.classList.add('hidden');
+        finalizeSave(selectedIds);
+      });
+
+      cancelBtn.addEventListener('click', () => {
+        inheritanceReviewedModal.classList.add('hidden');
+      });
+    } else {
+      finalizeSave();
     }
   });
 
+  if (inheritanceCheckAll) {
+    inheritanceCheckAll.addEventListener('change', (e) => {
+      const isChecked = e.target.checked;
+      inheritanceModalTableBody.querySelectorAll('.inheritance-paper-check').forEach(cb => {
+        if (cb.checked !== isChecked) {
+          cb.checked = isChecked;
+          cb.dispatchEvent(new Event('change'));
+        }
+      });
+    });
+  }
+
   // Delete handler (persistido no project.json)
-  if(btnDeletePhase) btnDeletePhase.addEventListener('click', async () => {
-    if(!phaseEditingLabel) return;
+  if (btnDeletePhase) btnDeletePhase.addEventListener('click', async () => {
+    if (!phaseEditingLabel) return;
     const phases = getProjectPhases();
     if (phases.length <= 1) {
       alert('O projeto deve manter pelo menos uma fase. A primeira fase não pode ser excluída.');
@@ -4707,8 +4888,8 @@ function bindEvents() {
       alert('Somente a fase ativa ou fases planejadas depois dela podem ser excluídas. O histórico anterior fica protegido.');
       return;
     }
-    if(!confirm('Excluir esta fase? Se for a fase ativa, o sistema irá promover automaticamente a próxima fase disponível.')) return;
-    if(!state?.project?.id){
+    if (!confirm('Excluir esta fase? Se for a fase ativa, o sistema irá promover automaticamente a próxima fase disponível.')) return;
+    if (!state?.project?.id) {
       alert('Abra um projeto antes de excluir fases.');
       return;
     }
@@ -4774,7 +4955,7 @@ async function updateSnowballBanner() {
   const data = await storage.get(["svat_current_snowball_parent"]);
   const previousId = currentSnowballParentId;
   currentSnowballParentId = data.svat_current_snowball_parent || null;
-  
+
   if (currentSnowballParentId) {
     banner.classList.remove("hidden");
     banner.style.display = "flex";
@@ -4782,7 +4963,7 @@ async function updateSnowballBanner() {
     banner.classList.add("hidden");
     banner.style.display = "none";
   }
-  
+
   if (previousId !== currentSnowballParentId) {
     renderPapersTable();
   }
@@ -4804,7 +4985,7 @@ async function init() {
   loadCategories();
   loadHighlightedLinks();
   setActiveView(dashboardIntroRequired ? 'overview' : (phaseCreationRequired ? 'phases' : (categoryCreationRequired ? 'categories' : 'overview')));
-  
+
   updateSnowballBanner();
 }
 
