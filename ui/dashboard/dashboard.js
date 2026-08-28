@@ -2443,7 +2443,7 @@ async function renderPapersTable() {
     .filter(paper => paper?.visited !== false);
   const rows = allRows
     .filter(paper => paperMatchesFilters(paper, f, hl))
-    .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
+    .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
   renderedPapersById = new Map(rows.map(paper => [String(paper.id), paper]));
 
   // build HTML in memory
