@@ -11,6 +11,7 @@ import {
 import { storage, ICIPO_DATA_REVISION_KEY } from '../../infrastructure/storage.mjs';
 
 let state = null;
+let currentSnowballParentId = null;
 let dashboardAccessState = 'loading'; // loading | ready | project-required | offline
 let phaseCreationRequired = false;
 let dashboardIntroRequired = false;
@@ -2279,6 +2280,49 @@ function showHistory(paperId) {
 
   if (title) title.textContent = `Histórico: ${(paper.title || paper.url || paper.id).slice(0, 90)}`;
   if (tbody) renderHistoryTable(tbody, paper.history);
+  
+  const btnParent = document.getElementById("btnViewParentPaper");
+  const btnChild = document.getElementById("btnViewChildPapers");
+  
+  if (btnParent) {
+    if (paper.parentPaperId) {
+      btnParent.style.display = "";
+      btnParent.onclick = () => {
+        modal.classList.add("hidden");
+        const searchInput = document.getElementById("search");
+        if (searchInput) {
+          searchInput.value = "id:" + paper.parentPaperId;
+          searchInput.dispatchEvent(new Event("input"));
+        }
+      };
+    } else {
+      btnParent.style.display = "none";
+    }
+  }
+  
+  if (btnChild) {
+    const activePhase = state?.project?.activePhaseLabel || "";
+    const children = state?.papers?.filter(p => {
+      if (p.parentPaperId !== String(paper.id)) return false;
+      if (!paperBelongsToPhase(p, activePhase)) return false;
+      return true;
+    }) || [];
+    if (children.length > 0) {
+      btnChild.style.display = "";
+      btnChild.textContent = `Ver artigos filhos (${children.length})`;
+      btnChild.onclick = () => {
+        modal.classList.add("hidden");
+        const searchInput = document.getElementById("search");
+        if (searchInput) {
+          searchInput.value = "parent:" + paper.id;
+          searchInput.dispatchEvent(new Event("input"));
+        }
+      };
+    } else {
+      btnChild.style.display = "none";
+    }
+  }
+
   if (modal) modal.classList.remove("hidden");
 }
 
@@ -2293,13 +2337,27 @@ function getFilters() {
 }
 
 function paperMatchesFilters(paper, filters, highlightedLinks = {}) {
+  // 1. Verifica a fase (se não pertence à fase, não deve aparecer de jeito nenhum)
+  if (filters.phase && filters.phase !== "all" && !paperBelongsToPhase(paper, filters.phase)) return false;
+
+  // 2. Buscas exatas (id e parent) ignoram os demais filtros para garantir que sejam encontrados
+  if (filters.q) {
+    if (filters.q.startsWith("id:")) {
+      const targetId = filters.q.replace("id:", "").trim();
+      return String(paper.id) === targetId;
+    }
+    if (filters.q.startsWith("parent:")) {
+      const targetId = filters.q.replace("parent:", "").trim();
+      return String(paper.parentPaperId) === targetId;
+    }
+  }
+
+  // 3. Filtros normais (métrica e categoria)
   const category = getPaperCategoryForPhase(paper, filters.phase, highlightedLinks);
 
   if (filters.metric && filters.metric !== "all") {
     if (getPaperMetricTypeForPhase(paper, filters.phase, highlightedLinks) !== filters.metric) return false;
   }
-
-  if (filters.phase && filters.phase !== "all" && !paperBelongsToPhase(paper, filters.phase)) return false;
 
   if (filters.category && filters.category !== "all") {
     const categoryKey = getPaperCategoryKey(category) || "uncategorized";
@@ -2307,6 +2365,7 @@ function paperMatchesFilters(paper, filters, highlightedLinks = {}) {
   }
 
   if (!filters.q) return true;
+
   const categoryText = category ? `${category.title || ""} ${category.label || ""}` : "sem categoria";
   const metricText = getPaperMetricLabel(getPaperMetricTypeForPhase(paper, filters.phase, highlightedLinks));
   const phaseText = getPaperPhaseDisplay(paper);
@@ -2432,7 +2491,17 @@ async function renderPapersTable() {
           </span>
         </td>
         <td><input class="cellInput" data-field="tags" data-id="${escapeHtml(p.id)}" value="${escapeHtml(tags)}" placeholder="ex: vis;ml" /></td>
-        <td><a class="link" href="${escapeHtml(p.url)}" target="_blank" rel="noreferrer">Abrir</a></td>
+        <td>
+          <div style="display:flex;gap:4px;align-items:center;">
+            <a class="link" href="${escapeHtml(p.url)}" target="_blank" rel="noreferrer">Abrir</a>
+            ${(() => {
+              const isActive = currentSnowballParentId === String(p.id);
+              const style = isActive ? 'background:var(--accent);color:white;border-color:var(--accent);' : '';
+              const title = isActive ? 'Snowballing ativo (clique em Parar no aviso para cancelar)' : 'Iniciar Snowballing a partir deste artigo';
+              return `<button type="button" class="btn ghost small snowballBtn ${isActive ? 'active' : ''}" style="${style}" data-snowball-id="${escapeHtml(p.id)}" data-snowball-title="${escapeHtml(p.title || "(sem título)")}" title="${title}" aria-label="Snowballing">🔗</button>`;
+            })()}
+          </div>
+        </td>
       </tr>
     `;
   }
@@ -2451,6 +2520,18 @@ async function renderPapersTable() {
   });
   tbody.querySelectorAll(".rowCheck").forEach(check => {
     check.addEventListener("change", updatePaperBulkActionState);
+  });
+  tbody.querySelectorAll(".snowballBtn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const parentId = btn.getAttribute("data-snowball-id");
+      const parentTitle = btn.getAttribute("data-snowball-title");
+      if (currentSnowballParentId === parentId) {
+        await storage.set({ svat_current_snowball_parent: null, svat_current_snowball_title: null });
+      } else {
+        await storage.set({ svat_current_snowball_parent: parentId, svat_current_snowball_title: parentTitle });
+      }
+      updateSnowballBanner();
+    });
   });
   const checkAll = $("#checkAll");
   if (checkAll) {
@@ -4630,6 +4711,27 @@ function bindEvents() {
   }
 }
 
+async function updateSnowballBanner() {
+  const banner = document.getElementById("snowballContextBanner");
+  if (!banner) return;
+
+  const data = await storage.get(["svat_current_snowball_parent"]);
+  const previousId = currentSnowballParentId;
+  currentSnowballParentId = data.svat_current_snowball_parent || null;
+  
+  if (currentSnowballParentId) {
+    banner.classList.remove("hidden");
+    banner.style.display = "flex";
+  } else {
+    banner.classList.add("hidden");
+    banner.style.display = "none";
+  }
+  
+  if (previousId !== currentSnowballParentId) {
+    renderPapersTable();
+  }
+}
+
 async function init() {
   await loadState();
 
@@ -4646,6 +4748,8 @@ async function init() {
   loadCategories();
   loadHighlightedLinks();
   setActiveView(dashboardIntroRequired ? 'overview' : (phaseCreationRequired ? 'phases' : (categoryCreationRequired ? 'categories' : 'overview')));
+  
+  updateSnowballBanner();
 }
 
 init();

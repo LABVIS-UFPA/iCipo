@@ -201,7 +201,7 @@
         </section>
 
         <!-- PAPERS -->
-        <section class="view hidden u-flex-fill-col" id="view_papers">
+        <section class="view hidden u-flex-fill-col" id="view_papers" style="position: relative;">
           <div class="paperFiltersPanel" aria-label="Filtros dos artigos">
             <label class="paperCurrentPhaseToggle">
               <input id="filterCurrentPhase" type="checkbox" checked />
@@ -220,6 +220,9 @@
               <option value="all">Todas as categorias</option>
             </select>
             <button id="btnResetPaperViewFilters" type="button" class="btn">Limpar filtros</button>
+            <div id="snowballContextBanner" class="hidden" style="margin-left: auto; display: none; align-items: center; color: var(--accent); font-weight: bold; font-size: 13px;">
+              <span style="display: inline-block; width: 8px; height: 8px; background-color: #22C55E; border-radius: 50%; margin-right: 6px; box-shadow: 0 0 4px #22C55E;"></span>Snowballing ativo
+            </div>
           </div>
 
           <div class="toolbar papersToolbar">
@@ -250,7 +253,7 @@
                   <th style="width:190px">Fases</th>
                   <th style="width:230px">Categoria</th>
                   <th style="width:150px">Tags</th>
-                  <th style="width:90px">Link</th>
+                  <th style="width:120px">Links / Origem</th>
                 </tr>
               </thead>
               <tbody>
@@ -313,6 +316,10 @@
             <div class="row" style="justify-content:space-between;align-items:center">
               <div style="font-weight:900" id="historyModalTitle">Histórico</div>
               <button id="btnCloseHistory" class="btn">Fechar</button>
+            </div>
+            <div id="historySnowballingSection" style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+              <button id="btnViewParentPaper" class="btn small" style="display: none;">Ver artigo pai</button>
+              <button id="btnViewChildPapers" class="btn small" style="display: none;">Ver artigos filhos (0)</button>
             </div>
             <div class="tableWrap" style="margin-top:10px">
               <table class="table" id="historyModalTable">
