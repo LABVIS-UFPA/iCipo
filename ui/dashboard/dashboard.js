@@ -5003,6 +5003,7 @@ function openEditPaperModal(paperId) {
   document.getElementById("editPaperAuthors").value = authorsRaw;
   document.getElementById("editPaperYear").value = paper.year || "";
   document.getElementById("editPaperPublication").value = paper.publication || "";
+  document.getElementById("editPaperDoi").value = paper.doi || "";
   document.getElementById("editPaperSnippet").value = paper.snippet || "";
   document.getElementById("editPaperCitations").value = paper.citationsCount || "";
 
@@ -5043,6 +5044,7 @@ async function savePaperEdit() {
   paper.year = yearText ? Number(yearText) : null;
 
   paper.publication = document.getElementById("editPaperPublication").value;
+  paper.doi = document.getElementById("editPaperDoi").value;
   paper.snippet = document.getElementById("editPaperSnippet").value;
 
   const citesText = document.getElementById("editPaperCitations").value;

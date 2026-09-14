@@ -484,6 +484,7 @@ class Paper {
     this.snippet = data.snippet || "";
     this.citationsCount = data.citationsCount || null;
     this.pdfLink = data.pdfLink || "";
+    this.doi = data.doi || "";
     this.origin = data.origin || null;
     this.status = normalizeMetricType(data.status, "pending");
     this.categoryLabel = data.categoryLabel || data.categoryId || null;
@@ -586,6 +587,7 @@ class Paper {
       snippet: this.snippet,
       citationsCount: this.citationsCount,
       pdfLink: this.pdfLink,
+      doi: this.doi,
       origin: this.origin,
       status: this.status,
       categoryLabel: this.categoryLabel,

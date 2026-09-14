@@ -629,6 +629,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       authors: Array.isArray(previousPaper.authors) ? previousPaper.authors : [],
       authorsRaw: meta.authorsRaw || previousPaper.authorsRaw || "",
       year: meta.year || previousPaper.year || null,
+      doi: meta.doi || previousPaper.doi || "",
       origin: inferred.origin,
       status,
       categoryLabel,

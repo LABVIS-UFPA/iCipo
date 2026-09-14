@@ -154,6 +154,35 @@ chrome.runtime.onMessage.addListener((msg) => {
   }
 });
 
+// Extract DOI from a URL string if embedded.
+function extractDoiFromUrl(url) {
+  if (!url) return null;
+  // Match a standard DOI pattern anywhere in the URL
+  const match = String(url).match(/\b(10\.\d{4,9}\/[-._;()\/:A-Z0-9]+)/i);
+  return match ? match[1].replace(/[.)]+$/, '') : null;
+}
+
+// Async: try CrossRef API to find a DOI by title + year.
+async function fetchDoiFromCrossRef(title, year) {
+  if (!title || title.length < 10) return null;
+  try {
+    const q = encodeURIComponent(title);
+    const url = `https://api.crossref.org/works?query.title=${q}&rows=1&select=DOI,title,published-print,published-online`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const item = json?.message?.items?.[0];
+    if (!item?.DOI) return null;
+    // Sanity check: title should be roughly similar
+    const foundTitle = (item.title?.[0] || '').toLowerCase();
+    const queryTitle = title.toLowerCase();
+    if (foundTitle.length > 0 && !foundTitle.includes(queryTitle.slice(0, 20).trim())) return null;
+    return item.DOI;
+  } catch {
+    return null;
+  }
+}
+
 // Extract best-effort metadata for a given linkUrl on the current page.
 // This focuses on Google Scholar's common DOM structure, but degrades gracefully.
 function extractMetadataForLink(linkUrl) {
@@ -219,17 +248,28 @@ function extractMetadataForLink(linkUrl) {
     if (citeMatch) citationsCount = Number(citeMatch[0]);
   }
 
-  return { title, authorsRaw, year, publication, publisher, snippet, citationsCount, pdfLink };
+  // Try to extract DOI from the article URL itself
+  const doi = extractDoiFromUrl(linkUrl) || extractDoiFromUrl(pdfLink);
+
+  return { title, authorsRaw, year, publication, publisher, snippet, citationsCount, pdfLink, doi };
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type === 'SVAT_EXTRACT_METADATA' && msg.linkUrl) {
-    try {
-      const meta = extractMetadataForLink(msg.linkUrl);
-      sendResponse({ ok: true, meta });
-    } catch (e) {
-      sendResponse({ ok: false, error: String(e) });
-    }
-    return true;
+    // extractMetadataForLink is synchronous; DOI from CrossRef is async.
+    // We extract what we can synchronously, then enrich with CrossRef.
+    (async () => {
+      try {
+        const meta = extractMetadataForLink(msg.linkUrl);
+        // If DOI was not in the URL, try CrossRef
+        if (!meta.doi && meta.title && meta.title !== msg.linkUrl) {
+          meta.doi = await fetchDoiFromCrossRef(meta.title, meta.year);
+        }
+        sendResponse({ ok: true, meta });
+      } catch (e) {
+        sendResponse({ ok: false, error: String(e) });
+      }
+    })();
+    return true; // keep channel open for async sendResponse
   }
 });
