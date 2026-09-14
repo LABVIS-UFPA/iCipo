@@ -358,14 +358,18 @@
                 </div>
               </div>
 
-              <label for="editPaperPublication" style="font-weight: bold; margin-bottom: 4px; display: block;">Base de Dados / Indexador (ex: IEEE, ACM, Springer)</label>
-              <input id="editPaperPublication" class="input" style="width: 100%; margin-bottom: 12px;" />
-
               <label for="editPaperDoi" style="font-weight: bold; margin-bottom: 4px; display: block;">DOI</label>
-              <input id="editPaperDoi" class="input" style="width: 100%; margin-bottom: 12px;" placeholder="ex: 10.1109/TPAMI.2022.123456" />
+              <div style="display: flex; gap: 8px; align-items: flex-end; margin-bottom: 12px;">
+                <input id="editPaperDoi" class="input" style="flex: 1;" placeholder="ex: 10.1109/TPAMI.2022.123456" />
+                <button id="btnEnrichPaperMetadata" type="button" class="btn" style="padding: 6px 12px; white-space: nowrap; font-size: 13px;" title="Buscar informações precisas via DOI (OpenAlex, Semantic Scholar, CrossRef)">🔄 Atualizar</button>
+              </div>
 
-              <label for="editPaperSnippet" style="font-weight: bold; margin-bottom: 4px; display: block;">Resumo (Snippet)</label>
-              <textarea id="editPaperSnippet" class="input" style="width: 100%; min-height: 80px; margin-bottom: 12px; resize: vertical;"></textarea>
+              <label for="editPaperSnippet" style="font-weight: bold; margin-bottom: 4px; display: block;">Resumo</label>
+              <textarea id="editPaperSnippet" class="input" style="width: 100%; min-height: 60px; margin-bottom: 12px; resize: vertical;"></textarea>
+
+              <div id="enrichmentSourceBadge" style="margin-bottom: 12px; padding: 8px 12px; background-color: #f0f0f0; border-radius: 4px; font-size: 12px; color: #666; display: none;">
+                <strong>Fonte de Enriquecimento:</strong> <span id="enrichmentSourceText">-</span>
+              </div>
 
               <label for="editPaperCategory" style="font-weight: bold; margin-bottom: 4px; display: block;">Categoria</label>
               <select id="editPaperCategory" class="input" style="width: 100%; margin-bottom: 12px;">

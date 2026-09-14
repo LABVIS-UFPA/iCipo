@@ -5002,10 +5002,24 @@ function openEditPaperModal(paperId) {
   }
   document.getElementById("editPaperAuthors").value = authorsRaw;
   document.getElementById("editPaperYear").value = paper.year || "";
-  document.getElementById("editPaperPublication").value = paper.publication || "";
   document.getElementById("editPaperDoi").value = paper.doi || "";
   document.getElementById("editPaperSnippet").value = paper.snippet || "";
   document.getElementById("editPaperCitations").value = paper.citationsCount || "";
+
+  // Show enrichment source badge if available
+  const enrichmentSourceBadge = document.getElementById("enrichmentSourceBadge");
+  const enrichmentSourceText = document.getElementById("enrichmentSourceText");
+  if (enrichmentSourceBadge && enrichmentSourceText) {
+    if (paper.enrichmentSource) {
+      enrichmentSourceBadge.style.display = "block";
+      enrichmentSourceText.textContent = paper.enrichmentSource === 'openalex' ? 'OpenAlex' 
+                                         : paper.enrichmentSource === 'semanticscholar' ? 'Semantic Scholar'
+                                         : paper.enrichmentSource === 'crossref' ? 'CrossRef'
+                                         : paper.enrichmentSource;
+    } else {
+      enrichmentSourceBadge.style.display = "none";
+    }
+  }
 
   const categorySelect = document.getElementById("editPaperCategory");
   const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
@@ -5043,7 +5057,6 @@ async function savePaperEdit() {
   const yearText = document.getElementById("editPaperYear").value;
   paper.year = yearText ? Number(yearText) : null;
 
-  paper.publication = document.getElementById("editPaperPublication").value;
   paper.doi = document.getElementById("editPaperDoi").value;
   paper.snippet = document.getElementById("editPaperSnippet").value;
 
@@ -5074,12 +5087,68 @@ async function savePaperEdit() {
   }
 }
 
+async function enrichPaperMetadataFromDoi() {
+  const doiInput = document.getElementById("editPaperDoi");
+  const doi = doiInput?.value?.trim();
+  if (!doi) {
+    alert("Por favor, insira um DOI válido primeiro.");
+    return;
+  }
+
+  const btn = document.getElementById("btnEnrichPaperMetadata");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "⏳ Atualizando...";
+  }
+
+  try {
+    // Gather fallback data from current form
+    const title = document.getElementById("editPaperTitle")?.value?.trim();
+    const year = document.getElementById("editPaperYear")?.value?.trim();
+
+    const response = await chrome.runtime.sendMessage({
+      type: "ENRICH_PAPER_METADATA_WITH_DOI",
+      doi: doi,
+      title: title || undefined,
+      year: year ? parseInt(year) : undefined,
+    });
+
+    if (response?.ok && response.enriched) {
+      const enriched = response.enriched;
+      const source = enriched.source ? `(${enriched.source})` : '';
+      
+      // Atualizar campos com dados mais precisos, mantendo dados originais se API não retornar
+      if (enriched.title) document.getElementById("editPaperTitle").value = enriched.title;
+      if (enriched.authorsRaw) document.getElementById("editPaperAuthors").value = enriched.authorsRaw;
+      if (enriched.year) document.getElementById("editPaperYear").value = enriched.year;
+      if (enriched.citationsCount) document.getElementById("editPaperCitations").value = enriched.citationsCount;
+      
+      alert(`✅ Metadados atualizados com sucesso ${source}!`);
+    } else if (response?.error === "Limite de requisições atingido. Tente novamente em alguns minutos.") {
+      alert("⚠️ Limite de requisições atingido pelas APIs. Tente novamente em alguns minutos.");
+    } else {
+      alert("⚠️ Não foi possível buscar dados para este DOI. Verifique se o DOI está correto.");
+    }
+  } catch (err) {
+    console.error("Erro ao enriquecer metadados:", err);
+    alert("Erro ao atualizar metadados: " + (err?.message || String(err)));
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "🔄 Atualizar";
+    }
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const btnCloseEdit = document.getElementById("btnClosePaperEdit");
   if (btnCloseEdit) btnCloseEdit.addEventListener("click", closeEditPaperModal);
   
   const btnSaveEdit = document.getElementById("btnSavePaperEdit");
   if (btnSaveEdit) btnSaveEdit.addEventListener("click", savePaperEdit);
+
+  const btnEnrich = document.getElementById("btnEnrichPaperMetadata");
+  if (btnEnrich) btnEnrich.addEventListener("click", enrichPaperMetadataFromDoi);
 });
 
 async function updateSnowballBanner() {

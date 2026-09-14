@@ -503,6 +503,8 @@ class Paper {
     this.updatedAt = data.updatedAt || new Date().toISOString();
     this.history = checkArray(data.history);
     this.parentPaperId = data.parentPaperId || null;
+    this.abstract = data.abstract || "";
+    this.enrichmentSource = data.enrichmentSource || null;
   }
 
 
