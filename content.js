@@ -169,19 +169,57 @@ function extractMetadataForLink(linkUrl) {
   let title = "";
   let authorsRaw = "";
   let year = null;
+  let publication = "";
+  let publisher = "";
+  let snippet = "";
+  let citationsCount = null;
+  let pdfLink = "";
+
+  const gsR = container.closest('.gs_r') || container;
+  const pdfEl = gsR.querySelector('.gs_or_ggsm a');
+  if (pdfEl) pdfLink = pdfEl.href;
 
   // Scholar title is often within .gs_rt
   const tEl = container?.querySelector?.('.gs_rt') || a;
   title = (tEl?.innerText || a.textContent || linkUrl).trim();
+  // Clean common tags
+  title = title.replace(/^\[(?:PDF|HTML|LIVRO|CITAÇÃO|BOOK|CITATION)\]\s*/i, '').trim();
 
   const aEl = container?.querySelector?.('.gs_a');
-  if (aEl) authorsRaw = (aEl.innerText || "").trim();
+  if (aEl) {
+    const metaText = (aEl.innerText || "").trim();
+    // Typical format: "Authors - Publication, Year - Publisher"
+    const parts = metaText.split(/\s+-\s+/);
+    if (parts.length > 0) authorsRaw = parts[0].trim();
+    if (parts.length > 1) {
+      const pubYearStr = parts[1].trim();
+      const yearMatch = pubYearStr.match(/\b(19\d{2}|20\d{2})\b/);
+      if (yearMatch) {
+        year = Number(yearMatch[1]);
+        publication = pubYearStr.replace(yearMatch[1], '').replace(/,\s*$/, '').trim();
+      } else {
+        publication = pubYearStr;
+      }
+    }
+    if (parts.length > 2) publisher = parts[2].trim();
+  }
 
-  // crude year parse: first 4-digit year
-  const m = (authorsRaw || container?.innerText || "").match(/\b(19\d{2}|20\d{2})\b/);
-  if (m) year = Number(m[1]);
+  // crude year parse fallback: first 4-digit year
+  if (!year) {
+    const m = (authorsRaw || container?.innerText || "").match(/\b(19\d{2}|20\d{2})\b/);
+    if (m) year = Number(m[1]);
+  }
 
-  return { title, authorsRaw, year };
+  const snippetEl = container?.querySelector?.('.gs_rs');
+  if (snippetEl) snippet = (snippetEl.innerText || "").trim();
+
+  const citesEl = Array.from(container?.querySelectorAll?.('.gs_fl a') || []).find(el => el.href.includes('cites='));
+  if (citesEl) {
+    const citeMatch = citesEl.innerText.match(/\d+/);
+    if (citeMatch) citationsCount = Number(citeMatch[0]);
+  }
+
+  return { title, authorsRaw, year, publication, publisher, snippet, citationsCount, pdfLink };
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {

@@ -331,6 +331,55 @@
           </div>
         </div>
 
+        <!-- EDIT PAPER MODAL -->
+        <div id="paperEditModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="paperEditModalTitle" aria-hidden="true" style="z-index: 1000">
+          <div class="modalCard" style="max-width: 500px; display: flex; flex-direction: column; max-height: 85vh;">
+            <div class="row" style="justify-content:space-between;align-items:center; flex-shrink: 0; margin-bottom: 16px;">
+              <div style="font-weight:900; font-size: 16px;" id="paperEditModalTitle">Editar Artigo</div>
+              <button id="btnClosePaperEdit" class="btn" type="button">Cancelar</button>
+            </div>
+            <div class="u-scroll-y" style="flex-grow: 1; margin-bottom: 16px; padding-right: 8px;">
+              <input type="hidden" id="editPaperId" />
+              
+              <label for="editPaperTitle" style="font-weight: bold; margin-bottom: 4px; display: block;">Título</label>
+              <input id="editPaperTitle" class="input" style="width: 100%; margin-bottom: 12px;" />
+              
+              <label for="editPaperAuthors" style="font-weight: bold; margin-bottom: 4px; display: block;">Autores (separados por vírgula)</label>
+              <input id="editPaperAuthors" class="input" style="width: 100%; margin-bottom: 12px;" />
+
+              <div style="display: flex; gap: 12px; margin-bottom: 12px;">
+                <div style="flex: 1;">
+                  <label for="editPaperYear" style="font-weight: bold; margin-bottom: 4px; display: block;">Ano</label>
+                  <input id="editPaperYear" type="number" class="input" style="width: 100%;" />
+                </div>
+                <div style="flex: 1;">
+                  <label for="editPaperCitations" style="font-weight: bold; margin-bottom: 4px; display: block;">Citações</label>
+                  <input id="editPaperCitations" type="number" class="input" style="width: 100%;" />
+                </div>
+              </div>
+
+              <label for="editPaperPublication" style="font-weight: bold; margin-bottom: 4px; display: block;">Base de Dados / Indexador (ex: IEEE, ACM, Springer)</label>
+              <input id="editPaperPublication" class="input" style="width: 100%; margin-bottom: 12px;" />
+
+              <label for="editPaperSnippet" style="font-weight: bold; margin-bottom: 4px; display: block;">Resumo (Snippet)</label>
+              <textarea id="editPaperSnippet" class="input" style="width: 100%; min-height: 80px; margin-bottom: 12px; resize: vertical;"></textarea>
+
+              <label for="editPaperCategory" style="font-weight: bold; margin-bottom: 4px; display: block;">Categoria</label>
+              <select id="editPaperCategory" class="input" style="width: 100%; margin-bottom: 12px;">
+                <option value="">Sem categoria (Herdar ou Automático)</option>
+              </select>
+
+              <details style="margin-bottom: 12px; font-size: 13px;">
+                <summary style="cursor: pointer; font-weight: bold; color: #666;">Ver todos os dados internos (Avançado)</summary>
+                <textarea id="editPaperRawJson" class="input" readonly style="width: 100%; min-height: 150px; margin-top: 8px; font-family: monospace; font-size: 11px; background-color: #f9f9f9; resize: vertical;"></textarea>
+              </details>
+            </div>
+            <div style="display: flex; gap: 8px; justify-content: flex-end; flex-shrink: 0;">
+              <button id="btnSavePaperEdit" class="btn" style="background:var(--good); border-color:var(--good); color:white; box-shadow: 0 2px 4px rgba(0,0,0,0.1)">Salvar Alterações</button>
+            </div>
+          </div>
+        </div>
+
         <!-- BULK CATEGORY CHOOSER -->
         <div id="paperBulkCategoryModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="paperBulkCategoryModalTitle" aria-describedby="paperBulkCategoryModalDescription" aria-hidden="true">
           <div class="modalCard paperBulkCategoryModalCard">

@@ -2483,10 +2483,11 @@ async function renderPapersTable() {
       <tr class="${rowClass}" ${rowStyle}>
         <td><input type="checkbox" class="rowCheck" data-id="${escapeHtml(p.id)}" ${rowCheckDisabled} /></td>
         <td>
-          <div class="paperTitleWrap">
-            <button class="linkBtn" data-show-history="${escapeHtml(p.id)}" title="Ver histórico">${escapeHtml(p.title || "(sem título)")}</button>
+          <div class="paperTitleWrap" style="display: flex; gap: 6px; align-items: flex-start;">
+            <button type="button" class="btn ghost small editPaperBtn" data-edit-id="${escapeHtml(p.id)}" title="Editar artigo" style="padding: 0 4px; margin-top: -2px; flex-shrink: 0;">✏️</button>
+            <button class="linkBtn" data-show-history="${escapeHtml(p.id)}" title="Ver histórico" style="text-align: left;">${escapeHtml(p.title || "(sem título)")}</button>
           </div>
-          <div style="color:#666;font-size:11px;margin-top:4px">${escapeHtml(p.authorsRaw || "")} • ${escapeHtml(fmtDate(p.createdAt))}</div>
+          <div style="color:#666;font-size:11px;margin-top:4px;margin-left:28px;">${escapeHtml(p.authorsRaw || "")} • ${escapeHtml(fmtDate(p.createdAt))}</div>
         </td>
         <td><input class="cellInput" data-field="year" data-id="${escapeHtml(p.id)}" value="${escapeHtml(p.year ?? "")}" placeholder="—" style="width:64px" /></td>
         <td><span class="paperPhaseBadge" title="${escapeHtml(phaseDisplay)}">${escapeHtml(phaseDisplay)}</span></td>
@@ -2539,6 +2540,9 @@ async function renderPapersTable() {
   });
   tbody.querySelectorAll(".rowCheck").forEach(check => {
     check.addEventListener("change", updatePaperBulkActionState);
+  });
+  tbody.querySelectorAll(".editPaperBtn").forEach(btn => {
+    btn.addEventListener("click", () => openEditPaperModal(btn.getAttribute("data-edit-id")));
   });
   tbody.querySelectorAll(".snowballBtn").forEach(btn => {
     btn.addEventListener("click", async () => {
@@ -4979,6 +4983,102 @@ function bindEvents() {
     }
   }
 }
+
+function openEditPaperModal(paperId) {
+  const paper = state?.papers?.find(item => String(item.id) === String(paperId)) || renderedPapersById.get(String(paperId));
+  if (!paper) return;
+
+  const modal = document.getElementById("paperEditModal");
+  if (!modal) return;
+
+  document.getElementById("editPaperId").value = paper.id;
+  document.getElementById("editPaperTitle").value = paper.title || "";
+  
+  let authorsRaw = "";
+  if (Array.isArray(paper.authors) && paper.authors.length > 0) {
+    authorsRaw = paper.authors.map(a => typeof a === "string" ? a : (a?.name || "")).filter(Boolean).join(", ");
+  } else {
+    authorsRaw = paper.authorsRaw || "";
+  }
+  document.getElementById("editPaperAuthors").value = authorsRaw;
+  document.getElementById("editPaperYear").value = paper.year || "";
+  document.getElementById("editPaperPublication").value = paper.publication || "";
+  document.getElementById("editPaperSnippet").value = paper.snippet || "";
+  document.getElementById("editPaperCitations").value = paper.citationsCount || "";
+
+  const categorySelect = document.getElementById("editPaperCategory");
+  const categories = Array.isArray(state?.project?.categories) ? state.project.categories : [];
+  categorySelect.innerHTML = '<option value="">Sem categoria (Herdar ou Automático)</option>' + categories.map(category => {
+    const key = getPaperCategoryKey(category);
+    return `<option value="${escapeHtml(key)}">${escapeHtml(category.title || category.label || key)}</option>`;
+  }).join("");
+  categorySelect.value = paper.categoryLabel || "";
+
+  const rawJsonTextArea = document.getElementById("editPaperRawJson");
+  if (rawJsonTextArea) {
+    const cleanPaperObj = typeof paper.toJSON === 'function' ? paper.toJSON() : { ...paper };
+    rawJsonTextArea.value = JSON.stringify(cleanPaperObj, null, 2);
+  }
+
+  modal.classList.remove("hidden");
+}
+
+function closeEditPaperModal() {
+  const modal = document.getElementById("paperEditModal");
+  if (modal) modal.classList.add("hidden");
+}
+
+async function savePaperEdit() {
+  const paperId = document.getElementById("editPaperId").value;
+  const paper = state?.papers?.find(item => String(item.id) === String(paperId)) || renderedPapersById.get(String(paperId));
+  if (!paper) return;
+
+  paper.title = document.getElementById("editPaperTitle").value;
+  
+  const authorsText = document.getElementById("editPaperAuthors").value;
+  paper.authors = authorsText.split(",").map(a => a.trim()).filter(Boolean);
+  paper.authorsRaw = authorsText;
+  
+  const yearText = document.getElementById("editPaperYear").value;
+  paper.year = yearText ? Number(yearText) : null;
+
+  paper.publication = document.getElementById("editPaperPublication").value;
+  paper.snippet = document.getElementById("editPaperSnippet").value;
+
+  const citesText = document.getElementById("editPaperCitations").value;
+  paper.citationsCount = citesText ? Number(citesText) : null;
+  
+  const categoryLabel = document.getElementById("editPaperCategory").value;
+  if (categoryLabel) {
+    const category = state?.project?.categories?.find(c => getPaperCategoryKey(c) === categoryLabel);
+    if (category) {
+      applyCategoryMetricToPaper(paper, category);
+    }
+  } else {
+    paper.categoryLabel = null;
+  }
+  
+  paper.updatedAt = new Date().toISOString();
+  pushHistory(paper, "edit_paper", { source: "manual_edit" });
+
+  closeEditPaperModal();
+
+  try {
+    await storage.savePaper(paper);
+    renderAll();
+  } catch (err) {
+    console.warn("Falha ao salvar edição de artigo", err);
+    alert(err?.message || "Erro ao salvar a edição.");
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const btnCloseEdit = document.getElementById("btnClosePaperEdit");
+  if (btnCloseEdit) btnCloseEdit.addEventListener("click", closeEditPaperModal);
+  
+  const btnSaveEdit = document.getElementById("btnSavePaperEdit");
+  if (btnSaveEdit) btnSaveEdit.addEventListener("click", savePaperEdit);
+});
 
 async function updateSnowballBanner() {
   const banner = document.getElementById("snowballContextBanner");

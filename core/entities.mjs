@@ -479,6 +479,11 @@ class Paper {
     this.authors = checkArray(data.authors);
     this.authorsRaw = data.authorsRaw || "";
     this.year = data.year || null;
+    this.publication = data.publication || "";
+    this.publisher = data.publisher || "";
+    this.snippet = data.snippet || "";
+    this.citationsCount = data.citationsCount || null;
+    this.pdfLink = data.pdfLink || "";
     this.origin = data.origin || null;
     this.status = normalizeMetricType(data.status, "pending");
     this.categoryLabel = data.categoryLabel || data.categoryId || null;
@@ -576,6 +581,11 @@ class Paper {
       authors: this.authors,
       authorsRaw: this.authorsRaw,
       year: this.year,
+      publication: this.publication,
+      publisher: this.publisher,
+      snippet: this.snippet,
+      citationsCount: this.citationsCount,
+      pdfLink: this.pdfLink,
       origin: this.origin,
       status: this.status,
       categoryLabel: this.categoryLabel,
