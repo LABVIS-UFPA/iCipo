@@ -4,27 +4,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title> iCipó </title>
-    <link rel="stylesheet" href="popup.css">
+    <link rel="icon" type="image/png" href="/img/favicon-96x96.png" sizes="96x96" />
+    <link rel="stylesheet" href="./dist/popup.css" />
+    <script type="module" src="./dist/popup.js"></script>
   </head>
   <body>
-    <header>
-      <h1> iCipó </h1>
-      <p id="proj">Projeto: —</p>
-      <div class="kpis">
-        <div class="kpi"><div class="n" id="k_total">0</div><div class="l">Total</div></div>
-        <div class="kpi"><div class="n" id="k_inc">0</div><div class="l">Incl.</div></div>
-        <div class="kpi"><div class="n" id="k_exc">0</div><div class="l">Excl.</div></div>
-        <div class="kpi"><div class="n" id="k_pen">0</div><div class="l">Pend.</div></div>
-      </div>
-    </header>
-    <div class="wrap">
-      <button id="openDashboard">📊 Abrir Dashboard</button>
-      <button id="openProjects">📁 Meus projetos</button>
-      <div class="row">
-        <button id="openOptions">⚙️ Configurações</button>
-      </div>
-      <div class="muted">Dica: marque um artigo com botão direito → “Marcar link” → categoria.</div>
-    </div>
-    <script src="popup.js"></script>
+    <div id="app"></div>
   </body>
 </html>

@@ -7,8 +7,8 @@ import {
   inferMetricTypeFromCategory,
   inferFromCategory,
   hashId,
-} from '../../core/utils.mjs';
-import { storage, ICIPO_DATA_REVISION_KEY } from '../../infrastructure/storage.mjs';
+} from '../../../core/utils.mjs';
+import { storage, ICIPO_DATA_REVISION_KEY } from '../../../infrastructure/storage.mjs';
 
 let state = null;
 let currentSnowballParentId = null;
@@ -4752,4 +4752,13 @@ async function init() {
   updateSnowballBanner();
 }
 
-init();
+export async function initDashboard() {
+  await init();
+}
+
+export function destroyDashboard() {
+  clearTutorialTransitionTimer();
+  if (overviewResizeTimer) clearTimeout(overviewResizeTimer);
+  if (paperBulkStatusTimer) clearTimeout(paperBulkStatusTimer);
+  if (dashboardRefreshTimer) clearTimeout(dashboardRefreshTimer);
+}
