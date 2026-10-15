@@ -199,6 +199,15 @@
     }
   }
 
+  function navigateToProjects() {
+    if (typeof chrome !== 'undefined' && chrome.runtime?.getURL) {
+      window.location.href = chrome.runtime.getURL('ui/projects/projects.html');
+    } else {
+      window.location.href = '../projects/projects.html';
+    }
+  }
+
+
   let storageListener;
   let onVisibilityChange;
   let onFocus;
@@ -312,10 +321,16 @@
         </label>
       </div>
 
-      <button class="sidebarBack dashboardReturnButton" type="button" on:click={navigateToDashboard}>
-        <span class="dashboardReturnIcon" aria-hidden="true">⌂</span>
-        <span>Voltar ao dashboard</span>
-      </button>
+      <div class="sidebarNavActions">
+        <button class="sidebarBack dashboardReturnButton" type="button" on:click={navigateToDashboard}>
+          <span class="dashboardReturnIcon" aria-hidden="true">⌂</span>
+          <span>Voltar ao dashboard</span>
+        </button>
+        <button class="sidebarBack projectsReturnButton" type="button" on:click={navigateToProjects}>
+          <span class="dashboardReturnIcon" aria-hidden="true">📁</span>
+          <span>Meus projetos</span>
+        </button>
+      </div>
     </div>
   </aside>
 

@@ -1,5 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
+  import '../../tokens.css';
   import '../dashboard.css';
   import { initDashboard, destroyDashboard } from './dashboardLogic.js';
 
@@ -117,7 +118,7 @@
             <button class="paperMetricCard paperMetricCard--total" type="button" data-paper-metric="all" aria-label="Ver todos os artigos">
               <span class="paperMetricIcon" aria-hidden="true">▤</span>
               <span class="paperMetricContent">
-                <span class="paperMetricLabel">Total de artigos</span>
+                <span class="paperMetricLabel">Total</span>
                 <strong id="paperMetricTotal">0</strong>
                 <small id="paperMetricTotalDetail">Nenhum artigo registrado</small>
               </span>

@@ -1,19 +1,23 @@
+@import "../tokens.css";
+
 :root{
-  --bg: #0b0f17;
-  --surface: rgba(255,255,255,0.06);
-  --surface2: rgba(255,255,255,0.09);
-  --card: rgba(255,255,255,0.08);
-  --text: #eaf0ff;
-  --muted: rgba(234,240,255,0.70);
-  --border: rgba(234,240,255,0.12);
-  --shadow: 0 18px 40px rgba(0,0,0,0.38);
-  --shadow2: 0 10px 25px rgba(0,0,0,0.25);
-  --accent: #6ea8ff;
-  --accent2: #aa6eff;
-  --good: #3be19b;
-  --warn: #ffd166;
-  --bad: #ff6b6b;
-  --radius: 18px;
+  --bg: #f5f7fa;
+  --workspace: #f5f7fa;
+  --surface: #ffffff;
+  --surface2: #f8fafc;
+  --card: #ffffff;
+  --text: #172033;
+  --muted: #69758a;
+  --border: #e1e6ed;
+  --border-strong: #d5dce6;
+  --shadow: 0 2px 8px rgba(16,24,40,.04);
+  --shadow2: 0 6px 18px rgba(16,24,40,.06);
+  --accent: #2eae6c;
+  --accent2: #2878e8;
+  --good: #2eae6c;
+  --warn: #f0a426;
+  --bad: #e5484d;
+  --radius: 10px;
 }
 
 *{box-sizing:border-box}
@@ -23,16 +27,13 @@ html,body{
 }
 body{
   margin: 0;
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  font-family: var(--font-sans, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, sans-serif);
   color: var(--text);
-  background:
-    radial-gradient(1200px 600px at 10% 8%, rgba(110,168,255,0.26), transparent 56%),
-    radial-gradient(900px 520px at 90% 16%, rgba(170,110,255,0.22), transparent 60%),
-    radial-gradient(1100px 700px at 50% 100%, rgba(59,225,155,0.10), transparent 60%),
-    var(--bg);
+  background: var(--workspace);
 }
 
-.app{display:grid;grid-template-columns:290px 1fr;height: 100%;}
+.app{display:grid;grid-template-columns:224px minmax(0,1fr);height: 100%;background:var(--workspace);}
+
 
 /* Sidebar */
 .sidebar{
@@ -275,10 +276,12 @@ body{
 
 .tableWrap{
   border:1px solid var(--border);
-  border-radius: 16px;
-  background: rgba(255,255,255,0.03);
-  /* Contêiner visual para tabelas: aplica borda, raio e fundo */
-  /* Não é responsável por limitar altura ou controlar scroll; isso deve ser feito pelo layout externo */
+  border-radius: 12px;
+  background: var(--surface);
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .table{
@@ -840,23 +843,24 @@ button:disabled{
 .phaseLabelStatus.pending{background: rgba(255,209,102,0.08);color: var(--warn);border:1px solid rgba(255,209,102,0.10)}
 
 
-/* Side panel sliding from right (used by phases add/edit) */
+/* Side panel sliding from right (used by phases/categories/papers add/edit) */
 .sidePanel{
   position:fixed;
   right:0;
   top:0;
   height:100%;
-  width:420px;
+  width:440px;
   max-width:96vw;
-  background: rgba(11,15,23,0.96);
+  background:#ffffff;
+  color:var(--text);
   border-left:1px solid var(--border);
-  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  box-shadow:-18px 0 48px rgba(5,17,29,0.20);
   transform: translateX(110%);
-  transition: transform .28s ease;
+  transition: transform .28s cubic-bezier(0.4, 0, 0.2, 1);
   z-index:60;
   display:flex;
   flex-direction:column;
-  padding:16px;
+  padding:20px;
 }
 .sidePanel.open{transform: translateX(0)}
 .sidePanelHeader{display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -1099,13 +1103,18 @@ body{
 }
 
 .brandModern{
-  min-height:62px;
-  padding:14px 18px;
+  width:100%;
+  box-sizing:border-box;
+  margin:0;
+  min-height:76px;
+  padding:24px 20px 18px 25px;
   border-bottom:1px solid rgba(255,255,255,.08);
+  display:flex;
+  align-items:center;
   justify-content:flex-start;
 }
-.brandPicture{display:block;width:92px;height:34px}
-.brandModern .brandLogo{width:100%;height:100%;object-fit:contain;object-position:left center}
+.brandPicture{display:block;width:92px;height:34px;max-width:100%}
+.brandModern .brandLogo{width:100%;height:100%;object-fit:contain;object-position:left center;display:block}
 .brandFallback{display:none;font-size:22px;font-weight:900;letter-spacing:-.04em}
 
 .nav{
@@ -1521,29 +1530,53 @@ body{
 .main .phaseLabelStatus.pending{background:#fff7e8;color:#b76e00;border-color:#f7dfae}
 .main .phaseLabelStatus.done{background:#ecf9f1;color:#208952;border-color:#c8ecd7}
 
-/* Keep drawers and overlays in their original dark visual language. */
-.main .sidePanel,.main .modalCard{
-  --text:#eaf0ff;
-  --muted:rgba(234,240,255,.70);
-  --border:rgba(234,240,255,.12);
-  --accent:#6ea8ff;
-  --accent2:#aa6eff;
-  --good:#3be19b;
-  --warn:#ffd166;
-  --bad:#ff6b6b;
+/* Standardized side panels, drawers, and modal cards */
+.main .sidePanel,
+.main .modalCard{
+  --text:#172033;
+  --muted:#69758a;
+  --border:#e1e6ed;
+  --accent:#2eae6c;
+  --accent2:#2878e8;
+  --good:#2eae6c;
+  --warn:#f0a426;
+  --bad:#e5484d;
   color:var(--text);
-  background:rgba(11,15,23,.98);
-}
-.main .sidePanel .input,.main .sidePanel .select{
-  background:rgba(255,255,255,.06);
-  color:var(--text);
+  background:#ffffff;
   border-color:var(--border);
-  box-shadow:none;
+  box-shadow:-18px 0 48px rgba(5,17,29,.18);
 }
-.main .sidePanel .input::placeholder{color:rgba(234,240,255,.55)}
-.main .sidePanel .btn{background:rgba(255,255,255,.06);color:var(--text);border-color:var(--border);box-shadow:none}
-.main .sidePanel .btn:hover{background:rgba(255,255,255,.10)}
-.main .sidePanel .phaseCategoryItem,.main .sidePanel .categoryCriterionItem{background:rgba(255,255,255,.025);border-color:rgba(255,255,255,.05);color:var(--text)}
+.main .sidePanel .input,
+.main .sidePanel .select,
+.main .sidePanel textarea{
+  background:#ffffff;
+  color:#172033;
+  border:1px solid #d5dce6;
+  border-radius:8px;
+  box-shadow:0 1px 2px rgba(16,24,40,.025);
+}
+.main .sidePanel .input:focus,
+.main .sidePanel .select:focus,
+.main .sidePanel textarea:focus{
+  border-color:#2eae6c;
+  box-shadow:0 0 0 3px rgba(46,174,108,.15);
+}
+.main .sidePanel .input::placeholder,
+.main .sidePanel textarea::placeholder{color:#98a2b3}
+.main .sidePanel .btn{
+  background:#ffffff;
+  color:#273142;
+  border:1px solid #d5dce6;
+  border-radius:8px;
+  box-shadow:0 1px 2px rgba(16,24,40,.03);
+}
+.main .sidePanel .btn:hover{background:#f7f9fc;border-color:#cbd3de}
+.main .sidePanel .phaseCategoryItem,
+.main .sidePanel .categoryCriterionItem{
+  background:#f8fafc;
+  border:1px solid #e2e7ee;
+  color:#273142;
+}
 
 @media (max-width:1200px){
   .overviewLayoutTop{grid-template-columns:1fr}
@@ -1551,26 +1584,29 @@ body{
 }
 
 @media (max-width:980px){
-  .app{grid-template-columns:190px minmax(0,1fr)}
+  .app{grid-template-columns:200px minmax(0,1fr)}
   .sidebar{position:relative;top:auto;z-index:auto}
   .main > .view{padding:20px}
   .topbar{padding-inline:20px}
   .sidebarProjectSummary{display:none}
 }
 
-@media (max-width:760px){
+@media (max-width:768px){
   html,body{overflow:auto}
   .app{display:block;height:auto;min-height:100%}
   .sidebar{position:relative;min-height:auto}
-  .brandModern{min-height:56px}
-  .nav{display:grid;grid-template-columns:repeat(4,1fr);overflow:visible}
-  .navBtn{justify-content:center;padding:8px 5px;font-size:11px}
-  .navIcon{display:none}
-  .sideFooterModern{display:none}
-  .main{height:auto;min-height:calc(100vh - 110px)}
-  .topbar{min-height:58px}
-  .currentProjectPill{max-width:72vw}
-  .main > .view{padding:18px 14px 24px}
+  .brandModern{min-height:58px;padding:12px 16px}
+  .nav{display:grid;grid-template-columns:repeat(4,1fr);padding:8px 10px;gap:6px;overflow:visible}
+  .navBtn{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 4px;font-size:11px;min-height:46px;gap:4px;text-align:center}
+  .navIcon{display:grid;width:18px;height:18px;font-size:16px}
+  .sideFooterModern{display:flex;padding:0 12px 12px;gap:8px}
+  .sidebarProjectSummary{display:none}
+  .sidebarFooterActions{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .sidebarFooterActions .ghost{min-height:38px;padding:8px;font-size:12px;justify-content:center}
+  .main{height:auto;min-height:calc(100vh - 120px)}
+  .topbar{min-height:58px;padding:10px 16px}
+  .currentProjectPill{max-width:100%}
+  .main > .view{padding:18px 14px 28px}
   #view_overview{overflow:visible}
   .overviewHeading{align-items:flex-start;flex-direction:column;gap:7px}
   .overviewUpdated{white-space:normal}
@@ -1811,7 +1847,7 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
   font-weight:900;
 }
 .paperMetricContent{display:flex;min-width:0;flex-direction:column;align-items:flex-start}
-.paperMetricLabel{color:#667085;font-size:10.5px;font-weight:750;line-height:1.25}
+.paperMetricLabel{color:#667085;font-size:10.5px;font-weight:750;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .paperMetricContent strong{margin-top:3px;color:#101828;font-size:25px;line-height:1;font-variant-numeric:tabular-nums}
 .paperMetricContent small{
   display:block;
@@ -1896,18 +1932,21 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
 .categoryMetricBadge--excluded::before{background:#c2414a}
 .categoryMetricBadge--pending::before{background:#7b8799}
 
-@media (max-width:1320px){
-  .paperMetricsGrid{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:1100px){
+  .paperMetricsGrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 }
-@media (max-width:860px){
-  .paperMetricsGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
-}
-@media (max-width:620px){
-  .paperMetricsGrid{grid-template-columns:1fr}
-  .paperMetricCard{min-height:96px}
+@media (max-width:640px){
+  .paperMetricsGrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .paperMetricCard{min-height:80px;padding:10px 11px}
+  .paperMetricIcon{width:32px;height:32px;font-size:15px}
+  .paperMetricContent strong{font-size:20px}
   .paperFilterBar{align-items:flex-start;flex-direction:column}
   .paperFilterBar .btn{width:100%}
 }
+@media (max-width:360px){
+  .paperMetricsGrid{grid-template-columns:1fr}
+}
+
 
 
 /* Relação auditável entre uma duplicata e o artigo original preservado. */
@@ -2480,10 +2519,20 @@ a.phaseArchiveArticleTitle:hover{color:#146fd1;text-decoration:underline}
 }
 
 @media (max-width:640px){
-  .phaseArchivePanel{width:100vw;padding:16px}
+  .sidePanel,
+  .main .sidePanel,
+  .phaseArchivePanel{
+    width:100vw!important;
+    max-width:100vw!important;
+    left:0!important;
+    right:0!important;
+    padding:16px!important;
+    border-radius:0!important;
+  }
   .phaseArchiveHeader{align-items:flex-start}
   .main .phaseArchiveClose{align-self:flex-start}
 }
+
 
 
 /* Painel de criar/editar fases: tema claro. */
@@ -2637,3 +2686,13 @@ a.phaseArchiveArticleTitle:hover{color:#146fd1;text-decoration:underline}
 .defaultCategoriesButton{width:100%;justify-content:center}
 .categoryManualDivider{display:flex;align-items:center;gap:9px;margin:1px 0 6px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:800}
 .categoryManualDivider::before,.categoryManualDivider::after{content:"";height:1px;flex:1;background:var(--border)}
+
+/* Ultrawide and fluid screen adaptation */
+@media (min-width: 1540px) {
+  .main > .view {
+    max-width: 1540px;
+    margin-inline: auto;
+    width: 100%;
+  }
+}
+

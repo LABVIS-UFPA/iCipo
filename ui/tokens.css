@@ -1,0 +1,206 @@
+/**
+ * iCipó Unified Design System Tokens & Base Utilities
+ * Padronização visual e de responsividade para todos os frontends:
+ * Dashboard, Projetos, Configurações e Popup.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Cores estruturais - Barra lateral e cabeçalhos escuros */
+  --sidebar-bg: #071827;
+  --sidebar-bg-2: #0b2032;
+  --sidebar-bg-3: #0a1b2a;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-border-subtle: rgba(255, 255, 255, 0.05);
+  --sidebar-text: #f5f8fc;
+  --sidebar-text-muted: rgba(225, 235, 245, 0.65);
+  --sidebar-active-bg: linear-gradient(90deg, rgba(46, 174, 108, 0.42), rgba(35, 141, 87, 0.32));
+  --sidebar-active-border: rgba(80, 205, 153, 0.16);
+
+  /* Workspace e Superfícies claras */
+  --workspace: #f5f7fa;
+  --workspace-subtle: #f0f3f7;
+  --surface: #ffffff;
+  --surface-hover: #fbfcfd;
+  --surface-soft: #f8fafc;
+  --surface-muted: #f1f4f8;
+
+  /* Tipografia */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --text-primary: #101828;
+  --text-secondary: #172033;
+  --text-muted: #69758a;
+  --text-subtle: #8a95a5;
+
+  /* Bordas */
+  --border-light: #edf1f6;
+  --border: #e1e6ed;
+  --border-strong: #d5dce6;
+  --border-dark: #b8c4d4;
+
+  /* Cores de Marca / Ação */
+  --green: #2eae6c;
+  --green-dark: #238d57;
+  --green-light: rgba(46, 174, 108, 0.12);
+  --green-glow: rgba(46, 174, 108, 0.25);
+  --primary: var(--green);
+  --primary-dark: var(--green-dark);
+
+  --blue: #2878e8;
+  --blue-dark: #1b65cb;
+  --blue-light: #f0f6fe;
+  --blue-border: #cbdcf3;
+
+  --purple: #7458e8;
+  --purple-light: #f5f3ff;
+
+  --orange: #f0a426;
+  --orange-dark: #b76e00;
+  --orange-light: #fff7e8;
+  --orange-border: #f7dfae;
+
+  --red: #e5484d;
+  --red-dark: #b42318;
+  --red-light: #fff0f1;
+  --red-border: #efc8ce;
+
+  /* Status Semânticos */
+  --status-included: var(--green);
+  --status-included-bg: #eaf8f0;
+  --status-included-border: #bfe4ce;
+  --status-included-text: #16784a;
+
+  --status-excluded: var(--red);
+  --status-excluded-bg: #fff0f1;
+  --status-excluded-border: #efc8ce;
+  --status-excluded-text: #b43d47;
+
+  --status-pending: var(--orange);
+  --status-pending-bg: #fff7e8;
+  --status-pending-border: #f7dfae;
+  --status-pending-text: #b76e00;
+
+  /* Bordas arredondadas padronizadas */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 9px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* Sombras */
+  --shadow-subtle: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow: 0 2px 8px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 6px 18px rgba(16, 24, 40, 0.06);
+  --shadow-raised: 0 14px 38px rgba(16, 24, 40, 0.09);
+  --shadow-drawer: -18px 0 48px rgba(5, 17, 29, 0.20);
+  --shadow-modal: 0 24px 64px rgba(5, 17, 29, 0.28);
+
+  /* Transições suaves */
+  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Reset Global Padronizado */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  font-family: var(--font-sans);
+  background: var(--workspace);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Barra de rolagem estilizada e elegante */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd3de;
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a9b5c4;
+}
+
+/* Utilitários Comuns de Botão */
+.btn-icipo-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 18px;
+  border: 1px solid var(--green);
+  border-radius: var(--radius-md);
+  background: var(--green);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(35, 141, 87, 0.25);
+  transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+.btn-icipo-primary:hover {
+  background: var(--green-dark);
+  border-color: var(--green-dark);
+  box-shadow: 0 4px 12px var(--green-glow);
+  transform: translateY(-1px);
+}
+.btn-icipo-primary:active {
+  transform: translateY(0);
+}
+
+.btn-icipo-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.btn-icipo-secondary:hover {
+  background: var(--surface-soft);
+  border-color: var(--border-strong);
+}
+
+/* Utilitário de Inputs */
+.input-icipo {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.input-icipo:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(46, 174, 108, 0.16);
+}

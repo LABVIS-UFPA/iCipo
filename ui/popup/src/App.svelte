@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { storage } from '../../../infrastructure/storage.mjs';
+  import '../../tokens.css';
 
   let projectName = 'Carregando...';
   let activePhase = '';
@@ -83,171 +84,342 @@
 </script>
 
 <div class="popup-container">
-  <header>
+  <header class="popup-header">
     <div class="header-top">
-      <h1>iCipó</h1>
+      <div class="brand-row">
+        <picture class="brandPicture">
+          <source srcset="/img/icipo_logo[dark].png" media="(prefers-color-scheme: dark)">
+          <img class="brandLogo" src="/img/icipo_logo[dark].png" alt="iCipó" />
+        </picture>
+        <span class="brandFallback">iCipó</span>
+      </div>
       <span class="badge">v1.0</span>
     </div>
-    <p class="proj-title">Projeto: <strong>{projectName}</strong></p>
-    {#if activePhase}
-      <p class="proj-phase">Fase: <span>{activePhase}</span></p>
-    {/if}
-    <div class="kpis">
-      <div class="kpi"><div class="n">{kpis.total}</div><div class="l">Total</div></div>
-      <div class="kpi"><div class="n inc">{kpis.included}</div><div class="l">Incl.</div></div>
-      <div class="kpi"><div class="n exc">{kpis.excluded}</div><div class="l">Excl.</div></div>
-      <div class="kpi"><div class="n pen">{kpis.pending}</div><div class="l">Pend.</div></div>
+
+    <div class="project-info-card">
+      <div class="proj-title-row">
+        <span class="status-pulse" aria-hidden="true"></span>
+        <span class="proj-title" title={projectName}>{projectName}</span>
+      </div>
+      {#if activePhase}
+        <div class="proj-phase">Fase ativa: <span>{activePhase}</span></div>
+      {/if}
+    </div>
+
+    <div class="kpis" aria-label="Métricas de triagem">
+      <div class="kpi kpi-total">
+        <div class="n">{kpis.total}</div>
+        <div class="l">Total</div>
+      </div>
+      <div class="kpi kpi-inc">
+        <div class="n inc">{kpis.included}</div>
+        <div class="l">Incluídos</div>
+      </div>
+      <div class="kpi kpi-exc">
+        <div class="n exc">{kpis.excluded}</div>
+        <div class="l">Excluídos</div>
+      </div>
+      <div class="kpi kpi-pen">
+        <div class="n pen">{kpis.pending}</div>
+        <div class="l">Pendentes</div>
+      </div>
     </div>
   </header>
-  <div class="wrap">
+
+  <main class="popup-body">
     <button class="action-btn primary" on:click={openDashboard}>
-      <span>📊</span> <span>Abrir Dashboard</span>
+      <span class="btn-icon">📊</span>
+      <span>Abrir Dashboard</span>
+      <span class="btn-arrow">→</span>
     </button>
-    <button class="action-btn" on:click={openProjects}>
-      <span>📁</span> <span>Meus projetos</span>
-    </button>
-    <div class="row">
+
+    <div class="action-row">
+      <button class="action-btn secondary" on:click={openProjects}>
+        <span class="btn-icon">📁</span>
+        <span>Projetos</span>
+      </button>
       <button class="action-btn secondary" on:click={openOptions}>
-        <span>⚙️</span> <span>Configurações</span>
+        <span class="btn-icon">⚙️</span>
+        <span>Configurações</span>
       </button>
     </div>
-    <div class="muted">
-      💡 Dica: marque um artigo com botão direito → “Marcar link” → categoria.
+
+    <div class="tip-card">
+      <span class="tip-icon">💡</span>
+      <span class="tip-text">No Google Scholar, clique com o botão direito para marcar links e acelerar seu snowballing.</span>
     </div>
-  </div>
+  </main>
 </div>
 
 <style>
   :global(body) {
     margin: 0;
     padding: 0;
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif;
-    background: #ffffff;
-    color: #111827;
+    font-family: var(--font-sans, ui-sans-serif, system-ui, -apple-system, sans-serif);
+    background: #071827;
+    color: #172033;
+    overflow-x: hidden;
   }
+
   .popup-container {
-    width: 320px;
-    box-sizing: border-box;
+    width: 350px;
+    max-width: 100vw;
+    margin: 0 auto;
+    background: #ffffff;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+    display: flex;
+    flex-direction: column;
   }
-  header {
-    padding: 14px 14px 10px;
-    border-bottom: 1px solid #f3f4f6;
-    background: #fafafa;
+
+  .popup-header {
+    background: linear-gradient(180deg, #071827 0%, #0b2032 60%, #0c2438 100%);
+    padding: 16px 16px 14px;
+    color: #ffffff;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   }
+
   .header-top {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    margin-bottom: 12px;
   }
-  header h1 {
-    font-size: 15px;
-    font-weight: 700;
-    margin: 0;
-    color: #0f172a;
-    letter-spacing: -0.02em;
-  }
-  .badge {
-    font-size: 10px;
-    font-weight: 600;
-    background: #e2e8f0;
-    color: #475569;
-    padding: 2px 6px;
-    border-radius: 999px;
-  }
-  .proj-title {
-    font-size: 12px;
-    margin: 6px 0 2px;
-    color: #4b5563;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .proj-phase {
-    font-size: 11px;
-    margin: 0 0 6px;
-    color: #6b7280;
-  }
-  .proj-phase span {
-    font-weight: 600;
-    color: #2563eb;
-  }
-  .wrap {
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .action-btn {
-    appearance: none;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    background: #ffffff;
-    padding: 9px 12px;
-    font-size: 13px;
-    font-weight: 500;
+
+  .brand-row {
     display: flex;
     align-items: center;
     gap: 8px;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    color: #1f2937;
+  }
+
+  .brandPicture {
+    display: block;
+    width: 86px;
+    height: 28px;
+  }
+
+  .brandLogo {
+    display: block;
     width: 100%;
-    box-sizing: border-box;
+    height: 100%;
+    object-fit: contain;
+    object-position: left center;
   }
-  .action-btn:hover {
-    background: #f9fafb;
-    border-color: #d1d5db;
-  }
-  .action-btn.primary {
-    background: #0284c7;
+
+  .brandFallback {
+    display: none;
+    font-size: 17px;
+    font-weight: 800;
     color: #ffffff;
-    border-color: #0284c7;
+    letter-spacing: -0.02em;
   }
-  .action-btn.primary:hover {
-    background: #0369a1;
-    border-color: #0369a1;
+
+  .badge {
+    font-size: 9.5px;
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.10);
+    color: rgba(235, 244, 255, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 2px 7px;
+    border-radius: 999px;
+    letter-spacing: 0.04em;
   }
-  .action-btn.secondary {
-    background: #f8fafc;
-  }
-  .row {
+
+  .project-info-card {
+    background: rgba(255, 255, 255, 0.055);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    padding: 9px 12px;
+    margin-bottom: 12px;
     display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .proj-title-row {
+    display: flex;
+    align-items: center;
     gap: 8px;
+    min-width: 0;
   }
-  .muted {
+
+  .status-pulse {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #31c878;
+    box-shadow: 0 0 0 3px rgba(49, 200, 120, 0.22);
+    flex-shrink: 0;
+  }
+
+  .proj-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+
+  .proj-phase {
     font-size: 11px;
-    color: #6b7280;
-    margin-top: 4px;
-    line-height: 1.4;
-    padding: 6px 8px;
-    background: #f8fafc;
-    border-radius: 6px;
-    border: 1px dashed #e2e8f0;
+    color: rgba(225, 235, 245, 0.70);
+    margin: 0;
   }
+
+  .proj-phase span {
+    font-weight: 600;
+    color: #5eead4;
+  }
+
   .kpis {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 6px;
-    margin-top: 8px;
+    gap: 7px;
   }
+
   .kpi {
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    padding: 6px 4px;
-    background: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 9px;
+    padding: 8px 4px;
+    background: rgba(255, 255, 255, 0.04);
     text-align: center;
+    transition: background 0.15s ease;
   }
+  .kpi:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
   .kpi .n {
-    font-weight: 700;
-    font-size: 14px;
-    color: #111827;
+    font-weight: 800;
+    font-size: 15px;
+    color: #ffffff;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
   }
-  .kpi .n.inc { color: #16a34a; }
-  .kpi .n.exc { color: #dc2626; }
-  .kpi .n.pen { color: #ea580c; }
+  .kpi .n.inc { color: #4ade80; }
+  .kpi .n.exc { color: #f87171; }
+  .kpi .n.pen { color: #fbbf24; }
+
   .kpi .l {
-    font-size: 10px;
-    color: #6b7280;
+    font-size: 9.5px;
+    font-weight: 600;
+    color: rgba(225, 235, 245, 0.65);
+    margin-top: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+
+  .popup-body {
+    padding: 14px 14px 16px;
+    background: #f8fafc;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  .action-btn {
+    appearance: none;
+    border: 1px solid #d5dce6;
+    border-radius: 9px;
+    background: #ffffff;
+    padding: 10px 14px;
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 650;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    cursor: pointer;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    color: #172033;
+    width: 100%;
+    box-sizing: border-box;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04);
+  }
+
+  .action-btn:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(16, 24, 40, 0.08);
+  }
+
+  .action-btn:active {
+    transform: translateY(0);
+  }
+
+  .action-btn.primary {
+    background: #2eae6c;
+    color: #ffffff;
+    border-color: #2eae6c;
+    box-shadow: 0 2px 6px rgba(46, 174, 108, 0.32);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .action-btn.primary:hover {
+    background: #238d57;
+    border-color: #238d57;
+    box-shadow: 0 4px 12px rgba(46, 174, 108, 0.42);
+  }
+
+  .action-btn.primary .btn-arrow {
+    margin-left: auto;
+    font-size: 15px;
+    transition: transform 0.15s ease;
+  }
+
+  .action-btn.primary:hover .btn-arrow {
+    transform: translateX(3px);
+  }
+
+  .action-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .action-btn.secondary {
+    justify-content: center;
+    padding: 9px 10px;
+    font-size: 12px;
+  }
+
+  .btn-icon {
+    font-size: 15px;
+    line-height: 1;
+  }
+
+  .tip-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 9px 11px;
+    border-radius: 8px;
+    background: #ffffff;
+    border: 1px dashed #d5dce6;
     margin-top: 2px;
+  }
+
+  .tip-icon {
+    font-size: 14px;
+    line-height: 1.2;
+    flex-shrink: 0;
+  }
+
+  .tip-text {
+    font-size: 10.5px;
+    color: #64748b;
+    line-height: 1.45;
+  }
+
+  @media (max-width: 340px) {
+    .popup-container {
+      width: 100vw;
+    }
+    .kpis {
+      grid-template-columns: repeat(2, 1fr);
+    }
   }
 </style>
