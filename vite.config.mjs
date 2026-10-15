@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import path from 'node:path';
 
-function pageConfig(name, input, outDir) {
+export function pageConfig(name, input, outDir) {
   return {
     plugins: [svelte()],
     base: './',
@@ -28,16 +28,36 @@ function pageConfig(name, input, outDir) {
   };
 }
 
-export default defineConfig(() => {
-  const target = process.env.UI_TARGET;
+export const targets = {
+  projects: {
+    name: 'projects',
+    input: path.resolve('ui/projects/src/main.js'),
+    outDir: path.resolve('ui/projects/dist')
+  },
+  popup: {
+    name: 'popup',
+    input: path.resolve('ui/popup/src/main.js'),
+    outDir: path.resolve('ui/popup/dist')
+  },
+  options: {
+    name: 'options',
+    input: path.resolve('ui/options/src/main.js'),
+    outDir: path.resolve('ui/options/dist')
+  },
+  dashboard: {
+    name: 'dashboard',
+    input: path.resolve('ui/dashboard/src/main.js'),
+    outDir: path.resolve('ui/dashboard/dist')
+  }
+};
 
-  if (target !== 'projects') {
-    throw new Error('Defina UI_TARGET como projects.');
+export default defineConfig(({ mode }) => {
+  const target = process.env.UI_TARGET || (targets[mode] ? mode : 'projects');
+  const cfg = targets[target];
+
+  if (!cfg) {
+    throw new Error(`Target inválido: "${target}". Escolha entre: ${Object.keys(targets).join(', ')}`);
   }
 
-  return pageConfig(
-    'projects',
-    path.resolve('ui/projects/src/main.js'),
-    path.resolve('ui/projects/dist')
-  );
+  return pageConfig(cfg.name, cfg.input, cfg.outDir);
 });
