@@ -3,8 +3,15 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import path from 'node:path';
 
 export function pageConfig(name, input, outDir) {
+  const sveltePlugin = svelte();
   return {
-    plugins: [svelte()],
+    plugins: [
+      sveltePlugin,
+      {
+        name: 'vite-plugin-svelte:config',
+        api: sveltePlugin[0]?.api
+      }
+    ],
     base: './',
     build: {
       outDir,
