@@ -27,7 +27,6 @@
     toggleSnowballParentAction,
     clearSnowballParent,
     openHistoryModal,
-    openPhasePanel,
     phaseArticlesViewModeStore,
     setPhaseArticlesViewMode,
     classifySinglePaperAction,
@@ -148,9 +147,7 @@
   // Ações Diretas em Artigo Único (Incluir, Excluir, Pendente, Remover Marcado)
   function handleSinglePaperOutcome(paper, outcome) {
     if (isCompleted) {
-      if (confirm("Esta fase está marcada como concluída. Deseja abrir a edição para reabrir a fase e continuar a triagem?")) {
-        handleOpenEditPhase();
-      }
+      alert("Esta fase está marcada como concluída. Reabra a fase em 'Editar' para alterar a triagem.");
       return;
     }
     classifySinglePaperAction(paper, outcome, activePhaseObj.label);
@@ -158,16 +155,10 @@
 
   function handleSinglePaperUnmark(paper) {
     if (isCompleted) {
-      if (confirm("Esta fase está marcada como concluída. Deseja abrir a edição para reabrir a fase e continuar a triagem?")) {
-        handleOpenEditPhase();
-      }
+      alert("Esta fase está marcada como concluída. Reabra a fase em 'Editar' para alterar a triagem.");
       return;
     }
     unmarkSinglePaperAction(paper, activePhaseObj.label);
-  }
-
-  function handleOpenEditPhase() {
-    openPhasePanel(activePhaseObj);
   }
 
   function handleClose() {
@@ -268,57 +259,16 @@
       </p>
     </div>
 
-    <div class="phaseArchiveHeaderActions">
-      <button
-        class="btn small phaseArchiveEditBtn"
-        type="button"
-        on:click={handleOpenEditPhase}
-        title="Editar configurações, critérios e ciclo desta fase"
-        aria-label="Editar configurações da fase"
-      >
-        <svg
-          class="phaseEditIcon"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-        </svg>
-        <span>Editar Fase</span>
-      </button>
-
-      <button
-        class="btn phaseArchiveCloseBtn"
-        type="button"
-        on:click={handleClose}
-        title="Fechar artigos da fase (Esc)"
-        aria-label="Fechar"
-      >
-        ✕
-      </button>
-    </div>
+    <button
+      class="btn phaseArchiveCloseBtn"
+      type="button"
+      on:click={handleClose}
+      title="Fechar artigos da fase (Esc)"
+      aria-label="Fechar"
+    >
+      ✕
+    </button>
   </div>
-
-  {#if isCompleted}
-    <div class="phaseArchiveCompletedNotice" role="note">
-      <div class="phaseCompletedNoticeText">
-        <span>🔒</span>
-        <span>Esta fase está concluída e com triagem protegida.</span>
-      </div>
-      <button
-        type="button"
-        class="phaseCompletedNoticeBtn"
-        on:click={handleOpenEditPhase}
-      >
-        Editar / Reabrir fase →
-      </button>
-    </div>
-  {/if}
 
   <!-- Banner de Snowballing Ativo (se houver) -->
   {#if $currentSnowballParentIdStore}
