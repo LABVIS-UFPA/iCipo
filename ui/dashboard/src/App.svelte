@@ -8,7 +8,6 @@
   import OverviewView from "./views/OverviewView.svelte";
   import PhasesView from "./views/PhasesView.svelte";
   import CategoriesView from "./views/CategoriesView.svelte";
-  import PapersView from "./views/PapersView.svelte";
   import PaperHistoryModal from "./components/PaperHistoryModal.svelte";
   import PaperBulkCategoryModal from "./components/PaperBulkCategoryModal.svelte";
   import ArticleTutorialPanel from "./components/ArticleTutorialPanel.svelte";
@@ -58,9 +57,6 @@
       <OverviewView />
     </div>
 
-    <div class="viewContainer" class:hidden={$activeViewStore !== 'papers'}>
-      <PapersView />
-    </div>
 
     <div class="viewContainer" class:hidden={$activeViewStore !== 'categories'}>
       <CategoriesView />

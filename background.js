@@ -422,13 +422,18 @@ async function getHighlightsSnapshotFromWs() {
 }
 
 async function broadcastHighlightsRefresh() {
-  if (typeof chrome === 'undefined' || !chrome.tabs) return;
+  if (typeof chrome === 'undefined') return;
   try {
-    const tabs = await chrome.tabs.query({});
-    await Promise.all(tabs.map((targetTab) => {
-      if (!targetTab?.id) return Promise.resolve();
-      return chrome.tabs.sendMessage(targetTab.id, { action: 'refreshHighlights' }).catch(() => undefined);
-    }));
+    if (chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({ action: 'refreshHighlights' }).catch(() => undefined);
+    }
+    if (chrome.tabs) {
+      const tabs = await chrome.tabs.query({});
+      await Promise.all(tabs.map((targetTab) => {
+        if (!targetTab?.id) return Promise.resolve();
+        return chrome.tabs.sendMessage(targetTab.id, { action: 'refreshHighlights' }).catch(() => undefined);
+      }));
+    }
   } catch (error) {
     // Páginas internas do navegador ou uma aba sendo fechada não devem fazer
     // a troca de estado da extensão falhar para o usuário.

@@ -1242,6 +1242,8 @@ class NodeFsStrategy {
       project.activePhaseLabel = isCompletingNow
         ? (nextPhase?.label || null)
         : phase.label;
+    } else if (isReopening) {
+      project.activePhaseLabel = phase.label;
     }
     project.updatedAt = new Date().toISOString();
 

@@ -53,10 +53,9 @@ O iCipó é organizado em quatro camadas bem delimitadas, garantindo desacoplame
 
 ### 1. Camada de Apresentação (`ui/`)
 - **`ui/dashboard/`**: Centro de comando analítico e operacional da RSL. Organizado em visões modulares:
-  - `OverviewView.svelte`: KPIs analíticos, gráfico Donut de categorias, progresso de fases e artigos recentes.
-  - `PhasesView.svelte`: Linha do tempo de fases, reordenação Drag & Drop, conclusão de etapas e painel expansivo de arquivo histórico de decisões.
+  - `OverviewView.svelte`: KPIs analíticos, gráfico Donut de categorias, progresso de fases e artigos recentes com navegação contextual direta.
+  - `PhasesView.svelte`: Esteira contínua de fases com setas de progressão, reordenação Drag & Drop, conclusão de etapas e painel integrado de artigos (`PhaseArchivePanel.svelte` / "Ver artigos"): reúne todas as funcionalidades de triagem em lote (*Bulk Actions*), atribuição de desfechos com modal de categorias, desmarcação, modo Snowballing ativo, linha do tempo genealógica de auditoria, busca sintática (`id:`, `parent:`), edição inline de Ano/Tags e alternância entre visualização em Cartões e Tabela analítica.
   - `CategoriesView.svelte`: Gestão de categorias semânticas, critérios de inclusão/exclusão e seletor de cores com contraste WCAG dinâmico.
-  - `PapersView.svelte`: Tabela analítica de triagem com filtros avançados, busca por sintaxe (`id:`, `parent:`), edição inline (Ano/Tags), ações em lote (*Bulk Actions*), linha do tempo de auditoria genealógica e ativação do modo Snowballing.
 - **`ui/projects/`**: Painel de gerenciamento de estudos RSL. Permite criar novos projetos com geração automática de identificador canônico (*slug*), alternar entre projetos ativos, editar metadados e arquivar pesquisas concluídas.
 - **`ui/options/`**: Página de opções com chave geral da extensão, importação/exportação de backups integrais em JSON e console com monitoramento de status e mensagens do servidor WebSocket em tempo real.
 - **`ui/popup/`**: Menu de acesso rápido na barra de extensões, exibindo o projeto ativo, fase corrente, contadores rápidos (Total, Incluídos, Excluídos, Pendentes) e botões de atalho.
@@ -214,15 +213,14 @@ iCipo/
 │   │       ├── dashboardHelpers.js  # Utilitários puros de métricas, filtros e unificação
 │   │       ├── views/         # Visões principais:
 │   │       │   ├── OverviewView.svelte    # KPIs, gráficos e artigos recentes
-│   │       │   ├── PhasesView.svelte      # Linha do tempo e arquivo de fases
-│   │       │   ├── CategoriesView.svelte  # Gestão de categorias e critérios
-│   │       │   └── PapersView.svelte      # Tabela analítica e triagem
+│   │       │   ├── PhasesView.svelte      # Linha do tempo, esteira e gestão de fases
+│   │       │   └── CategoriesView.svelte  # Gestão de categorias e critérios
 │   │       └── components/    # Componentes reutilizáveis:
 │   │           ├── Sidebar.svelte
 │   │           ├── Topbar.svelte
 │   │           ├── PhaseCard.svelte
 │   │           ├── PhasePanel.svelte
-│   │           ├── PhaseArchivePanel.svelte
+│   │           ├── PhaseArchivePanel.svelte # Espaço unificado de triagem e visualização ("Ver artigos")
 │   │           ├── CategoryItem.svelte
 │   │           ├── CategoryPanel.svelte
 │   │           ├── PaperHistoryModal.svelte

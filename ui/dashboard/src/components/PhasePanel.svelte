@@ -111,7 +111,7 @@
   }
 
   function handleSetStatus(newStatus) {
-    if (!isActivePhase) return;
+    if (!isActivePhase && !isCompleted) return;
     if (newStatus === 'done' && pendingCount > 0) {
       alert(`Você possui ${pendingCount} artigo(s) pendente(s) nesta etapa. Conclua a classificação de todos os artigos antes de finalizar a fase.`);
       return;
@@ -485,10 +485,48 @@
             <div class="phaseLifecycleBox completedCycle">
               <div class="lifecycleBoxHeader">
                 <span class="lifecycleBadge completedBadge">✓ Fase Concluída</span>
+                <span class="lifecycleHint">Fase protegida</span>
               </div>
               <p class="lifecycleDesc">
-                Esta fase foi finalizada com êxito. Seus artigos aprovados foram herdados pela fase seguinte. O histórico de triagem permanece arquivado e protegido para garantir a integridade da revisão.
+                Esta fase foi finalizada com êxito. Seus artigos aprovados foram herdados pela fase seguinte. Para alterar a triagem de artigos ou os critérios, você pode reabri-la a qualquer momento.
               </p>
+
+              <div class="statusSelectorRow">
+                <button
+                  type="button"
+                  class="statusOptionBtn"
+                  class:selected={status === 'done'}
+                  on:click={() => handleSetStatus('done')}
+                >
+                  <div class="statusOptionRadio" class:checked={status === 'done'}></div>
+                  <div class="statusOptionText">
+                    <strong>Manter Concluída</strong>
+                    <span>Fase finalizada e protegida</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  class="statusOptionBtn"
+                  class:selected={status === 'pending'}
+                  on:click={() => handleSetStatus('pending')}
+                >
+                  <div class="statusOptionRadio" class:checked={status === 'pending'}></div>
+                  <div class="statusOptionText">
+                    <strong>Reabrir Fase</strong>
+                    <span>Torna esta fase ativa novamente para triagem</span>
+                  </div>
+                </button>
+              </div>
+
+              {#if status === 'pending'}
+                <div class="lifecyclePendingWarning" style="background:#f0fdf4;border-color:#86efac;color:#15803d">
+                  <span class="warningIcon">🟢</span>
+                  <span>
+                    Ao salvar, esta fase será <strong>reaberta como fase ativa</strong> e a triagem de artigos poderá ser continuada normalmente.
+                  </span>
+                </div>
+              {/if}
             </div>
           {:else if isPlannedPhase}
             <div class="phaseLifecycleBox plannedCycle">

@@ -42,49 +42,53 @@
         <div>
           <div
             id="paperBulkCategoryModalEyebrow"
-            class="paperBulkCategoryModalEyebrow"
+            class="paperBulkCategoryModalEyebrow paperBulkCategoryModalEyebrow--{outcome}"
           >
-            Classificação em lote · {copy.result}
+            {selectedCount === 1 ? 'Classificação de Artigo' : 'Classificação em Lote'} · {copy.result}
           </div>
-          <div
+          <h3
             id="paperBulkCategoryModalTitle"
             class="paperBulkCategoryModalTitle"
           >
             Escolha a categoria que será aplicada
-          </div>
+          </h3>
         </div>
         <button
-          class="btn"
+          class="paperBulkCategoryCloseBtn"
           type="button"
           on:click={closePaperBulkCategoryModal}
+          title="Fechar janela (Esc)"
         >
-          Fechar
+          ✕ Fechar
         </button>
       </div>
 
-      <p
+      <div
         id="paperBulkCategoryModalDescription"
         class="paperBulkCategoryModalDescription"
       >
-        {selectedCount} artigo{selectedCount === 1 ? "" : "s"}
-        será{selectedCount === 1 ? "" : "ão"}
-        classificado{selectedCount === 1 ? "" : "s"} como
-        {copy.result.toLowerCase()}. A categoria escolhida será gravada na fase
-        ativa e alimentará a respectiva contagem.
-      </p>
+        {#if selectedCount === 1}
+          <strong>1 artigo</strong> será classificado como <strong>{copy.result.toLowerCase()}</strong>.
+        {:else}
+          <strong>{selectedCount} artigos</strong> serão classificados como <strong>{copy.result.toLowerCase()}</strong>.
+        {/if}
+        A categoria escolhida será gravada na fase ativa e alimentará a contagem e relatórios do estudo.
+      </div>
 
       <div
         class="paperBulkCategoryOptions"
       >
         {#each categories as category (category.label)}
+          {@const catColor = normalizeHexColor(category.color, '#2563eb')}
           <button
             type="button"
             class="paperBulkCategoryOption"
-            on:click={() => applyPaperBulkCategoryAction(category, outcome)}
+            style="--option-color: {catColor};"
+            on:click={() => applyPaperBulkCategoryAction(category, outcome, data?.targetPhaseLabel)}
           >
             <i
               class="paperBulkCategoryOptionColor"
-              style="background-color: {normalizeHexColor(category.color, '#A5ADBA')};"
+              style="background-color: {catColor};"
             ></i>
             <span class="paperBulkCategoryOptionText">
               <strong>{category.title || category.label}</strong>
@@ -95,7 +99,9 @@
             <span
               class="paperBulkCategoryOptionOutcome paperBulkCategoryOptionOutcome--{outcome}"
             >
-              {copy.result}
+              {#if outcome === 'included'}✓ {copy.result}
+              {:else if outcome === 'excluded'}× {copy.result}
+              {:else}⏳ {copy.result}{/if}
             </span>
           </button>
         {/each}

@@ -88,19 +88,6 @@
       <span class="navIcon">□</span>
       <span>Categorias</span>
     </button>
-
-    <button
-      class="navBtn"
-      class:active={$activeViewStore === 'papers'}
-      class:tutorialLocked={isLocked('papers')}
-      class:phaseLocked={isLocked('papers')}
-      aria-disabled={isLocked('papers')}
-      data-view="papers"
-      on:click={() => handleNav('papers')}
-    >
-      <span class="navIcon">▤</span>
-      <span>Artigos</span>
-    </button>
   </nav>
 
   <div class="sideFooter sideFooterModern">

@@ -67,7 +67,7 @@ export const papersStore = writable([]);
 export const highlightedLinksStore = writable({});
 export const accessStateStore = writable('loading'); // 'loading' | 'ready' | 'project-required' | 'offline'
 
-export const DASHBOARD_VIEWS = ['overview', 'phases', 'categories', 'papers'];
+export const DASHBOARD_VIEWS = ['overview', 'phases', 'categories'];
 
 export function getSavedDashboardView() {
   if (typeof window !== 'undefined' && window.location.hash) {
@@ -99,7 +99,7 @@ export function persistDashboardView(view) {
   } catch {}
 }
 
-export const activeViewStore = writable(getSavedDashboardView()); // 'overview' | 'phases' | 'categories' | 'papers'
+export const activeViewStore = writable(getSavedDashboardView()); // 'overview' | 'phases' | 'categories'
 export const phaseCreationRequiredStore = writable(false);
 export const dashboardIntroRequiredStore = writable(false);
 export const categoryCreationRequiredStore = writable(false);
@@ -321,7 +321,7 @@ export async function loadDashboardState() {
     } else if (catReq) {
       targetView = 'categories';
     } else if (artReq) {
-      targetView = 'papers';
+      targetView = 'phases';
     } else if (!DASHBOARD_VIEWS.includes(targetView)) {
       targetView = 'overview';
     }
@@ -347,6 +347,8 @@ export function scheduleDashboardRefresh(reason = "storage_change", delayMs = 22
   }, delayMs);
 }
 
+let runtimeMessageListener = null;
+
 export function bindStorageSync() {
   if (liveSyncBound) return;
   liveSyncBound = true;
@@ -355,18 +357,30 @@ export function bindStorageSync() {
     storageChangeListener = (changes, areaName) => {
       if (areaName !== "local") return;
 
+      // Atualização automática imediata ao marcar link ou alterar dados no storage
+      if (
+        changes.highlightedLinks ||
+        changes.svat_papers ||
+        changes.svat_project ||
+        changes.papers ||
+        changes.projects ||
+        changes[ICIPO_DATA_REVISION_KEY]
+      ) {
+        scheduleDashboardRefresh("storage_data_change", 40);
+      }
+
       const revision = changes[ICIPO_DATA_REVISION_KEY]?.newValue;
       if (revision) {
         const revisionId = String(revision.id || revision.at || "");
         if (!revisionId || revisionId !== lastDataRevisionId) {
           lastDataRevisionId = revisionId;
-          scheduleDashboardRefresh(revision.reason || "data_revision");
+          scheduleDashboardRefresh(revision.reason || "data_revision", 40);
         }
       }
 
       if (changes.server_status?.newValue === "Conectado") {
         serverStatusStore.set('Conectado');
-        scheduleDashboardRefresh("server_reconnected", 80);
+        scheduleDashboardRefresh("server_reconnected", 60);
       } else if (changes.server_status?.newValue) {
         serverStatusStore.set(changes.server_status.newValue);
       }
@@ -381,14 +395,33 @@ export function bindStorageSync() {
     chrome.storage.onChanged.addListener(storageChangeListener);
   }
 
-  window.addEventListener("focus", () => scheduleDashboardRefresh("window_focus", 60));
-  window.addEventListener("pageshow", () => scheduleDashboardRefresh("page_show", 60));
+  // Listener para mensagens de broadcast disparadas quando um artigo é marcado no Google Scholar
+  if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {
+    runtimeMessageListener = (message) => {
+      if (
+        message?.action === 'refreshHighlights' ||
+        message?.type === 'ARTICLE_MARKED' ||
+        message?.type === 'DATA_UPDATED' ||
+        message?.action === 'paper_marked'
+      ) {
+        scheduleDashboardRefresh("runtime_broadcast", 40);
+      }
+    };
+    chrome.runtime.onMessage.addListener(runtimeMessageListener);
+  }
+
+  window.addEventListener("focus", () => scheduleDashboardRefresh("window_focus", 40));
+  window.addEventListener("pageshow", () => scheduleDashboardRefresh("page_show", 40));
 }
 
 export function unbindStorageSync() {
   if (storageChangeListener && typeof chrome !== "undefined" && chrome.storage?.onChanged) {
     chrome.storage.onChanged.removeListener(storageChangeListener);
     storageChangeListener = null;
+  }
+  if (runtimeMessageListener && typeof chrome !== "undefined" && chrome.runtime?.onMessage) {
+    chrome.runtime.onMessage.removeListener(runtimeMessageListener);
+    runtimeMessageListener = null;
   }
   if (refreshDebounceTimer) {
     clearTimeout(refreshDebounceTimer);
@@ -417,12 +450,25 @@ export function setOverviewMetricScope(scope) {
 }
 
 export function openPapersWithFilter({ metric = 'all', category = 'all', phase = 'active' } = {}) {
+  const project = get(projectStore);
+  const phases = Array.isArray(project?.phases) ? project.phases : [];
+  const activePhase = get(activePhaseLabelStore);
+
+  let targetPhase = phase;
+  if (!targetPhase || targetPhase === 'active' || targetPhase === 'all') {
+    targetPhase = activePhase || (phases[0]?.label || null);
+  }
+
   paperMetricFilterStore.set(metric);
   paperCategoryFilterStore.set(category);
-  paperPhaseFilterStore.set(phase);
-  paperCurrentPhaseToggleStore.set(phase === 'active');
-  persistDashboardView('papers');
-  activeViewStore.set('papers');
+  paperPhaseFilterStore.set(targetPhase || 'all');
+  paperCurrentPhaseToggleStore.set(targetPhase === activePhase);
+
+  // Redireciona diretamente para a visão de fases e abre a gaveta de artigos da fase
+  setActiveView('phases');
+  if (targetPhase) {
+    expandedCompletedPhaseStore.set(targetPhase);
+  }
 }
 
 export function resetPaperFilters() {
@@ -557,7 +603,7 @@ export function closePaperBulkCategoryModal() {
   bulkCategoryModalStore.set(null);
 }
 
-export function requestPaperBulkOutcomeAction(outcome) {
+export function requestPaperBulkOutcomeAction(outcome, targetPhaseLabel = null) {
   const normalizedOutcome = normalizeCategoryMetricType(outcome, "pending");
   const selectedIds = get(selectedPaperIdsStore);
   if (!selectedIds.size) {
@@ -567,52 +613,53 @@ export function requestPaperBulkOutcomeAction(outcome) {
 
   const project = get(projectStore);
   const phases = Array.isArray(project.phases) ? project.phases : [];
-  const activePhase = phases.find(p => p.label === project.activePhaseLabel && !p.completed)
-    || phases.find(p => !p.completed)
-    || null;
+  const targetPhase = targetPhaseLabel
+    ? (phases.find(p => p.label === targetPhaseLabel) || null)
+    : (phases.find(p => p.label === project.activePhaseLabel && !p.completed) || phases.find(p => !p.completed) || null);
 
-  if (!activePhase) {
+  if (!targetPhase) {
     alert("Crie uma fase antes de classificar artigos.");
     return;
   }
-  if (isPhaseCompleted(activePhase)) {
-    alert("A fase ativa está concluída. Crie a próxima fase ou reabra a atual antes de alterar a triagem.");
+  if (isPhaseCompleted(targetPhase)) {
+    alert("A fase está concluída. Reabra a fase em 'Editar' antes de alterar a triagem.");
     return;
   }
 
-  const allowedLabels = new Set(Array.isArray(activePhase.categories) ? activePhase.categories : []);
+  const allowedLabels = new Set(Array.isArray(targetPhase.categories) ? targetPhase.categories : []);
   const matchingCategories = (Array.isArray(project.categories) ? project.categories : [])
     .filter(cat => allowedLabels.has(cat.label))
     .filter(cat => normalizeCategoryMetricType(cat.metricType, inferMetricTypeFromCategory(cat)) === normalizedOutcome);
 
   const copy = PAPER_BULK_ACTION_COPY[normalizedOutcome] || PAPER_BULK_ACTION_COPY.pending;
   if (!matchingCategories.length) {
-    alert(`A fase ativa não possui uma categoria relacionada a “${copy.result}”. Edite a fase e marque pelo menos uma categoria com esse impacto antes de usar esta ação.`);
+    alert(`A fase “${targetPhase.title || targetPhase.label}” não possui uma categoria vinculada a “${copy.result}”. Edite a fase e adicione pelo menos uma categoria com esse impacto antes de classificar.`);
     return;
   }
 
   if (matchingCategories.length === 1) {
-    applyPaperBulkCategoryAction(matchingCategories[0], normalizedOutcome);
+    applyPaperBulkCategoryAction(matchingCategories[0], normalizedOutcome, targetPhase.label);
     return;
   }
 
   bulkCategoryModalStore.set({
     outcome: normalizedOutcome,
     categories: matchingCategories,
-    selectedCount: selectedIds.size
+    selectedCount: selectedIds.size,
+    targetPhaseLabel: targetPhase.label
   });
   isBulkCategoryModalOpenStore.set(true);
 }
 
-export async function applyPaperBulkCategoryAction(category, requestedOutcome) {
+export async function applyPaperBulkCategoryAction(category, requestedOutcome, targetPhaseLabel = null) {
   const project = get(projectStore);
   const phases = Array.isArray(project.phases) ? project.phases : [];
-  const activePhase = phases.find(p => p.label === project.activePhaseLabel && !p.completed)
-    || phases.find(p => !p.completed)
-    || null;
+  const targetPhase = targetPhaseLabel
+    ? (phases.find(p => p.label === targetPhaseLabel) || null)
+    : (phases.find(p => p.label === project.activePhaseLabel && !p.completed) || phases.find(p => !p.completed) || null);
 
-  if (!activePhase || isPhaseCompleted(activePhase)) {
-    alert("A fase ativa não está disponível para classificação.");
+  if (!targetPhase || isPhaseCompleted(targetPhase)) {
+    alert("A fase não está disponível para classificação.");
     return;
   }
 
@@ -622,11 +669,6 @@ export async function applyPaperBulkCategoryAction(category, requestedOutcome) {
 
   if (!selectedPapers.length) {
     alert("Selecione pelo menos 1 artigo.");
-    return;
-  }
-
-  if (selectedPapers.some(p => isPaperLockedInActivePhase(p, activePhase.label))) {
-    alert("Artigos herdados da fase anterior ficam travados nesta fase e não podem mudar de categoria.");
     return;
   }
 
@@ -650,7 +692,7 @@ export async function applyPaperBulkCategoryAction(category, requestedOutcome) {
       const nextPaper = createBulkClassifiedPaper(
         previousPaper,
         category,
-        activePhase.label,
+        targetPhase.label,
         classifiedAt,
         project.categories
       );
@@ -663,7 +705,7 @@ export async function applyPaperBulkCategoryAction(category, requestedOutcome) {
       else scopedPapers.push(nextPaper);
 
       const canonicalUrl = normalizeUrl(nextPaper.url || "");
-      if (canonicalUrl) {
+      if (canonicalUrl && targetPhase.label === project.activePhaseLabel) {
         for (const storedUrl of Object.keys(highlightedLinks)) {
           if (normalizeUrl(storedUrl) === canonicalUrl) delete highlightedLinks[storedUrl];
         }
@@ -672,7 +714,7 @@ export async function applyPaperBulkCategoryAction(category, requestedOutcome) {
     }
 
     if (!changedPapers.length) {
-      throw new Error("Nenhum dos artigos selecionados pode ser reclassificado.");
+      throw new Error("Nenhum dos artigos selecionados pôde ser reclassificado.");
     }
 
     const saveResults = await Promise.all(
@@ -683,23 +725,26 @@ export async function applyPaperBulkCategoryAction(category, requestedOutcome) {
       throw new Error(failedSave.message || "Não foi possível salvar um dos artigos.");
     }
 
-    const scopedProject = data?.svat_project && typeof data.svat_project === "object"
-      ? { ...data.svat_project }
-      : {
-          id: project.id,
-          title: project.name || project.title || "Projeto",
-          createdAt: project.createdAt || classifiedAt,
-        };
-    scopedProject.activePhaseLabel = activePhase.label;
-    scopedProject.currentIterationId = activePhase.label;
+    if (targetPhase.label === project.activePhaseLabel) {
+      const scopedProject = data?.svat_project && typeof data.svat_project === "object"
+        ? { ...data.svat_project }
+        : {
+            id: project.id,
+            title: project.name || project.title || "Projeto",
+            createdAt: project.createdAt || classifiedAt,
+          };
+      scopedProject.activePhaseLabel = targetPhase.label;
+      scopedProject.currentIterationId = targetPhase.label;
 
-    await storage.set({
-      highlightedLinks,
-      svat_papers: scopedPapers,
-      svat_project: scopedProject,
-    });
+      await storage.set({
+        highlightedLinks,
+        svat_papers: scopedPapers,
+        svat_project: scopedProject,
+      });
 
-    await updateScholarContextMenu();
+      await updateScholarContextMenu();
+    }
+
     await loadDashboardState();
 
     selectedPaperIdsStore.set(new Set());
@@ -721,21 +766,23 @@ export async function applyPaperBulkCategoryAction(category, requestedOutcome) {
   }
 }
 
-export async function bulkDeleteMarkedSelectedAction() {
+export async function bulkDeleteMarkedSelectedAction(targetPhaseLabel = null) {
   const selectedIds = get(selectedPaperIdsStore);
   if (!selectedIds.size) {
     alert("Selecione pelo menos 1 artigo.");
     return;
   }
 
-  if (!confirm(`Retirar ${selectedIds.size} artigo(s) selecionado(s) da fase ativa? Essa ação remove a marcação; para classificar como excluído, use o botão “Remover”.`)) return;
-
   const project = get(projectStore);
-  const activePhaseLabel = project?.activePhaseLabel;
-  if (!activePhaseLabel) {
-    alert("Nenhuma fase ativa disponível.");
+  const targetLabel = targetPhaseLabel || project?.activePhaseLabel;
+  if (!targetLabel) {
+    alert("Nenhuma fase disponível.");
     return;
   }
+  const phases = Array.isArray(project.phases) ? project.phases : [];
+  const targetPhase = phases.find(p => p.label === targetLabel) || { label: targetLabel, title: targetLabel };
+
+  if (!confirm(`Retirar ${selectedIds.size} artigo(s) selecionado(s) da fase “${targetPhase.title || targetPhase.label}”? Essa ação remove a marcação desta fase.`)) return;
 
   const papers = get(papersStore);
   const selectedPapers = papers.filter(p => selectedIds.has(String(p.id)));
@@ -743,26 +790,28 @@ export async function bulkDeleteMarkedSelectedAction() {
     selectedPapers.map(p => p.url).filter(Boolean).map(normalizeUrl)
   );
 
-  setBulkStatus("Retirando as marcações da fase ativa…", "loading", false);
+  setBulkStatus(`Retirando marcações da fase “${targetPhase.title || targetPhase.label}”…`, "loading", false);
 
   try {
-    const data = await storage.get(["highlightedLinks", "svat_papers"]);
-    const highlightedLinks = data?.highlightedLinks && typeof data.highlightedLinks === "object"
-      ? { ...data.highlightedLinks }
-      : {};
-    for (const storedUrl of Object.keys(highlightedLinks)) {
-      if (selectedUrls.has(normalizeUrl(storedUrl))) delete highlightedLinks[storedUrl];
+    if (targetLabel === project.activePhaseLabel) {
+      const data = await storage.get(["highlightedLinks", "svat_papers"]);
+      const highlightedLinks = data?.highlightedLinks && typeof data.highlightedLinks === "object"
+        ? { ...data.highlightedLinks }
+        : {};
+      for (const storedUrl of Object.keys(highlightedLinks)) {
+        if (selectedUrls.has(normalizeUrl(storedUrl))) delete highlightedLinks[storedUrl];
+      }
+
+      const scopedPapers = Array.isArray(data?.svat_papers) ? data.svat_papers : [];
+      const remainingScopedPapers = scopedPapers.filter(p => !selectedUrls.has(normalizeUrl(p?.url)));
+
+      await storage.set({ highlightedLinks, svat_papers: remainingScopedPapers });
     }
-
-    const scopedPapers = Array.isArray(data?.svat_papers) ? data.svat_papers : [];
-    const remainingScopedPapers = scopedPapers.filter(p => !selectedUrls.has(normalizeUrl(p?.url)));
-
-    await storage.set({ highlightedLinks, svat_papers: remainingScopedPapers });
 
     for (const paper of selectedPapers) {
       const nextPaper = removePaperClassificationFromActivePhase(
         paper,
-        activePhaseLabel,
+        targetLabel,
         project.categories,
         project.phases
       );
@@ -774,15 +823,27 @@ export async function bulkDeleteMarkedSelectedAction() {
     await loadDashboardState();
     selectedPaperIdsStore.set(new Set());
     setBulkStatus(
-      `${selectedPapers.length} artigo${selectedPapers.length === 1 ? " foi retirado" : "s foram retirados"} da fase ativa.`,
+      `${selectedPapers.length} artigo${selectedPapers.length === 1 ? " foi retirado" : "s foram retirados"} da fase “${targetPhase.title || targetPhase.label}”.`,
       "success"
     );
   } catch (error) {
     console.warn("bulkDeleteMarkedSelectedAction failed", error);
-    const message = error?.message || "Não foi possível remover os artigos da fase ativa.";
+    const message = error?.message || "Não foi possível remover os artigos da fase.";
     setBulkStatus(message, "error");
     alert(message);
   }
+}
+
+export function classifySinglePaperAction(paper, outcome, targetPhaseLabel = null) {
+  if (!paper || (!paper.id && paper.id !== 0)) return;
+  selectedPaperIdsStore.set(new Set([String(paper.id)]));
+  requestPaperBulkOutcomeAction(outcome, targetPhaseLabel);
+}
+
+export async function unmarkSinglePaperAction(paper, targetPhaseLabel = null) {
+  if (!paper || (!paper.id && paper.id !== 0)) return;
+  selectedPaperIdsStore.set(new Set([String(paper.id)]));
+  await bulkDeleteMarkedSelectedAction(targetPhaseLabel);
 }
 
 export function dismissIntroModal() {

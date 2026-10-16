@@ -359,6 +359,7 @@ class Project {
     }
 
     const isCompletingNow = !previousPhase.completed && nextPhase.completed;
+    const isReopening = previousPhase.completed && !nextPhase.completed;
     if (isCompletingNow && this.activePhaseLabel !== previousPhase.label) {
       throw new Error("Somente a fase ativa pode ser concluída.");
     }
@@ -367,6 +368,8 @@ class Project {
       this.activePhaseLabel = isCompletingNow
         ? (this.phases[phaseIndex + 1]?.label || null)
         : nextPhase.label;
+    } else if (isReopening) {
+      this.activePhaseLabel = nextPhase.label;
     }
     this._touch();
     return nextPhase;

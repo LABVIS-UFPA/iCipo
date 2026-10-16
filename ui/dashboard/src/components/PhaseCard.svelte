@@ -5,8 +5,8 @@
     papersStore,
     activePhaseLabelStore,
     expandedCompletedPhaseStore,
-    openPhasePanel,
-    openPapersWithFilter
+    paperMetricFilterStore,
+    openPhasePanel
   } from '../dashboardStore.js';
   import {
     getPhaseStats,
@@ -54,9 +54,10 @@
     openPhasePanel(phase);
   }
 
-  function handleOpenPapers(ev) {
+  function handleMetricBoxClick(ev, metric) {
     ev.stopPropagation();
-    openPapersWithFilter({ phase: label });
+    paperMetricFilterStore.set(metric);
+    expandedCompletedPhaseStore.set(label);
   }
 
   function handleCardClick(ev) {
@@ -176,7 +177,11 @@
     <div class="triageMetricsGrid">
       <div
         class="triageMetricBox metricInherited"
-        title="Artigos selecionados na fase anterior e recebidos como herança"
+        role="button"
+        tabindex="0"
+        title="Ver artigos herdados da fase anterior"
+        on:click={(ev) => handleMetricBoxClick(ev, 'inherited')}
+        on:keydown={(ev) => ev.key === 'Enter' && handleMetricBoxClick(ev, 'inherited')}
       >
         <div class="metricBoxHeader">
           <span class="metricIcon">📥</span>
@@ -188,7 +193,11 @@
 
       <div
         class="triageMetricBox metricPending"
-        title="Artigos novos ou pendentes aguardando decisão nesta fase"
+        role="button"
+        tabindex="0"
+        title="Ver artigos pendentes de avaliação nesta fase"
+        on:click={(ev) => handleMetricBoxClick(ev, 'pending')}
+        on:keydown={(ev) => ev.key === 'Enter' && handleMetricBoxClick(ev, 'pending')}
       >
         <div class="metricBoxHeader">
           <span class="metricIcon">⏳</span>
@@ -200,7 +209,11 @@
 
       <div
         class="triageMetricBox metricSelected"
-        title="Artigos aprovados nesta fase que avançam para a próxima etapa"
+        role="button"
+        tabindex="0"
+        title="Ver artigos aprovados que avançam para a próxima etapa"
+        on:click={(ev) => handleMetricBoxClick(ev, 'included')}
+        on:keydown={(ev) => ev.key === 'Enter' && handleMetricBoxClick(ev, 'included')}
       >
         <div class="metricBoxHeader">
           <span class="metricIcon">✅</span>
@@ -212,7 +225,11 @@
 
       <div
         class="triageMetricBox metricRemoved"
-        title="Artigos excluídos ou duplicados removidos nesta fase"
+        role="button"
+        tabindex="0"
+        title="Ver artigos excluídos ou duplicados removidos nesta fase"
+        on:click={(ev) => handleMetricBoxClick(ev, 'excluded')}
+        on:keydown={(ev) => ev.key === 'Enter' && handleMetricBoxClick(ev, 'excluded')}
       >
         <div class="metricBoxHeader">
           <span class="metricIcon">❌</span>
@@ -246,32 +263,21 @@
     <!-- Card Footer Actions -->
     <div class="phaseCardFooter">
       <div class="phaseFooterLeft">
-        {#if isCompleted || isActivePhase}
-          <button
-            class="btn small phaseArchiveBtn"
-            class:active={isExpanded}
-            type="button"
-            on:click={handleToggleArchive}
-            aria-expanded={isExpanded}
-            title={isExpanded ? 'Recolher gaveta de artigos' : 'Visualizar artigos avaliados nesta fase'}
-          >
-            <span>{isExpanded ? 'Ocultar artigos' : 'Ver artigos'}</span>
-            <span class="archiveChevron" class:expanded={isExpanded} aria-hidden="true">▾</span>
-          </button>
-        {/if}
+        <button
+          class="btn small phaseArchiveBtn"
+          class:active={isExpanded}
+          type="button"
+          on:click={handleToggleArchive}
+          aria-expanded={isExpanded}
+          title={isExpanded ? 'Recolher gaveta de artigos' : 'Ver e triar artigos desta fase'}
+        >
+          <span class="phaseArchiveBtnIcon">▤</span>
+          <span>{isExpanded ? 'Ocultar artigos' : 'Ver artigos'}</span>
+          <span class="archiveChevron" class:expanded={isExpanded} aria-hidden="true">▾</span>
+        </button>
       </div>
 
       <div class="phaseFooterRight">
-        <button
-          class="btn small phaseFilterBtn"
-          type="button"
-          on:click={handleOpenPapers}
-          title="Abrir tabela de artigos filtrada nesta fase"
-        >
-          <span>Triar artigos</span>
-          <span aria-hidden="true">→</span>
-        </button>
-
         <button
           class="btn small phaseEditBtn"
           type="button"
@@ -300,7 +306,7 @@
 
   {#if isExpanded}
     <PhaseArchivePanel
-      {phase}
+      phase={phases.find(p => p.label === phase.label) || phase}
       {index}
       {totalPhases}
       {isActivePhase}
