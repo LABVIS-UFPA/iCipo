@@ -141,7 +141,7 @@
     </div>
 
     <!-- OVERVIEW -->
-    <section class="view overviewView u-flex-fill-col" id="view_overview">
+    <section class="view overviewView" id="view_overview">
       <div class="overviewHeading">
         <div>
           <h2>Visão Geral</h2>
@@ -309,7 +309,7 @@
 
     <!-- PAPERS -->
     <section
-      class="view hidden u-flex-fill-col"
+      class="view hidden"
       id="view_papers"
       style="position: relative;"
     >
@@ -429,7 +429,7 @@
         >
       </div>
 
-      <div class="tableWrap u-flex-fill-col u-scroll-y">
+      <div class="tableWrap papersTableWrap">
         <table class="table" id="papersTable">
           <thead>
             <tr>
@@ -449,7 +449,7 @@
     </section>
 
     <!-- CATEGORIES (moved from options) -->
-    <section class="view hidden u-flex-fill-col" id="view_categories">
+    <section class="view hidden" id="view_categories">
       <div class="panelHeader">
         <h2>Categorias</h2>
         <p>
@@ -467,24 +467,24 @@
         </div>
       </div>
 
-      <div class="card u-flex-fill-col" style="margin-top:12px">
+      <div class="card card--categories" style="margin-top:12px">
         <div class="cardTitle">Lista de categorias</div>
         <div class="muted" style="margin-bottom:8px">
           Use <b>Editar</b> para ajustar a finalidade da categoria ou
           <b>Excluir</b> para removê-la.
         </div>
 
-        <div class="tableWrap u-flex-fill-col" style="margin-top:8px">
+        <div class="tableWrap" style="margin-top:8px">
           <ul
             id="categoryList"
-            class="categoryList u-flex-fill-col u-scroll-y"
+            class="categoryList"
           ></ul>
         </div>
       </div>
     </section>
 
     <!-- PHASES -->
-    <section class="view hidden u-flex-fill-col" id="view_phases">
+    <section class="view hidden" id="view_phases">
       <div class="panelHeader">
         <h2>Fases</h2>
         <p>
@@ -504,12 +504,12 @@
         </div>
       </div>
 
-      <div class="card u-flex-fill-col" style="margin-top:12px">
+      <div class="card card--phases" style="margin-top:12px">
         <div class="cardTitle">Progressão de fases</div>
         <div class="phasesRow">
           <div
             id="phasesList"
-            class="phasesList u-scroll-y"
+            class="phasesList"
             aria-live="polite"
           ></div>
         </div>

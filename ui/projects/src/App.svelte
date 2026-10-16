@@ -462,13 +462,21 @@
     --red:var(--red, #e5484d);
     display:grid;
     grid-template-columns:224px minmax(0,1fr);
+    grid-template-rows:100vh;
     width:100%;
-    height:100%;
+    height:100vh;
+    max-height:100vh;
+    overflow:hidden;
     background:var(--workspace);
   }
 
   /* Barra lateral */
   .sidebar{
+    height:100vh;
+    max-height:100vh;
+    position:sticky;
+    top:0;
+    bottom:0;
     min-width:0;
     min-height:0;
     display:flex;
@@ -477,6 +485,8 @@
     background:linear-gradient(180deg, var(--sidebar) 0%, var(--sidebar2) 58%, #0a1b2a 100%);
     border-right:1px solid rgba(255,255,255,.08);
     box-shadow:10px 0 34px rgba(8,24,39,.08);
+    overflow-y:auto;
+    overflow-x:hidden;
     z-index:20;
   }
   .brand{
@@ -561,18 +571,23 @@
 
   /* Conteúdo Principal */
   .main{
+    height:100vh;
+    max-height:100vh;
     min-width:0;
     min-height:0;
     display:flex;
+    flex-direction:column;
     position:relative;
+    overflow:hidden;
     background:var(--workspace);
   }
   .workarea{
     min-width:0;
     min-height:0;
-    flex:1;
+    flex:1 1 auto;
     overflow-y:auto;
-    padding:28px 32px 40px;
+    overflow-x:hidden;
+    padding:28px 32px 56px;
     max-width:1400px;
     width:100%;
     margin:0 auto;

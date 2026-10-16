@@ -32,14 +32,35 @@ body{
   background: var(--workspace);
 }
 
-.app{display:grid;grid-template-columns:224px minmax(0,1fr);height: 100%;background:var(--workspace);}
+.app{
+  display:grid;
+  grid-template-columns:224px minmax(0,1fr);
+  grid-template-rows:100vh;
+  height:100vh;
+  max-height:100vh;
+  width:100%;
+  overflow:hidden;
+  background:var(--workspace);
+}
 
 
 /* Sidebar */
 .sidebar{
-  background: rgba(11,15,23,0.65);
-  backdrop-filter: blur(10px);
-  border-right: 1px solid var(--border);
+  height:100vh;
+  max-height:100vh;
+  position:sticky;
+  top:0;
+  bottom:0;
+  display:flex;
+  flex-direction:column;
+  background:linear-gradient(180deg, var(--sidebar-bg, #071827) 0%, var(--sidebar-bg-2, #0b2032) 58%, #0a1b2a 100%);
+  backdrop-filter:blur(10px);
+  border-right:1px solid rgba(255,255,255,0.08);
+  box-shadow:10px 0 34px rgba(8,24,39,0.08);
+  overflow-y:auto;
+  overflow-x:hidden;
+  box-sizing:border-box;
+  z-index:30;
 }
 
 .brand{
@@ -1231,12 +1252,20 @@ body{
   --good:#2eae6c;
   --warn:#f0a426;
   --bad:#e5484d;
+  height:100vh;
+  max-height:100vh;
+  display:flex;
+  flex-flow:column;
+  min-height:0;
+  min-width:0;
+  overflow:hidden;
   padding:0;
   background:#f5f7fa;
   color:var(--text);
 }
 
 .topbar{
+  flex-shrink:0;
   position:relative;
   top:auto;
   z-index:20;
@@ -1288,16 +1317,55 @@ body{
 .projectStatus i{width:6px;height:6px;border-radius:50%;background:#31c878;box-shadow:0 0 0 3px rgba(49,200,120,.09)}
 
 .main > .view{
-  padding:22px 28px 30px;
-}
-#view_overview{
+  flex:1 1 auto;
+  min-height:0;
   overflow-y:auto;
   overflow-x:hidden;
+  padding:20px 28px 56px;
   scrollbar-width:thin;
   scrollbar-color:#c8d0db transparent;
 }
-#view_overview::-webkit-scrollbar{width:8px}
-#view_overview::-webkit-scrollbar-thumb{background:#c8d0db;border-radius:999px}
+.main > .view::-webkit-scrollbar{width:8px}
+.main > .view::-webkit-scrollbar-thumb{background:#c8d0db;border-radius:999px}
+
+#view_overview{
+  overflow-y:auto;
+  overflow-x:hidden;
+}
+
+.card--phases{
+  height:auto;
+  min-height:280px;
+}
+.card--phases .phasesRow{
+  display:block;
+  overflow:visible;
+  padding:4px 0;
+}
+.card--phases .phasesList{
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));
+  gap:16px;
+  width:100%;
+  height:auto;
+  overflow:visible;
+  padding:8px 0;
+}
+
+.card--categories{
+  height:auto;
+  min-height:200px;
+}
+.card--categories .categoryList{
+  height:auto;
+  overflow:visible;
+}
+
+.papersTableWrap{
+  min-height:360px;
+  max-height:calc(100vh - 230px);
+  overflow-y:auto;
+}
 
 .overviewHeading{
   display:flex;
