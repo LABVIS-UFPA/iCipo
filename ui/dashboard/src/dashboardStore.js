@@ -26,7 +26,7 @@ import {
 
 
 // Tutorial & Intro storage helpers
-export function tutorialStorageKey(projectID) {
+function tutorialStorageKey(projectID) {
   return projectID ? `icipo:tutorial:${projectID}` : '';
 }
 
@@ -45,7 +45,7 @@ export function setTutorialStage(stage, projectID) {
   } catch {}
 }
 
-export function dashboardIntroStorageKey(projectID) {
+function dashboardIntroStorageKey(projectID) {
   return projectID ? `icipo:dashboard-intro:${projectID}` : '';
 }
 
@@ -344,14 +344,6 @@ export function unbindStorageSync() {
   liveSyncBound = false;
 }
 
-let viewBridge = null;
-let filterBridge = null;
-
-export function registerLegacyBridge(bridge) {
-  viewBridge = bridge?.switchToView || null;
-  filterBridge = bridge?.applyPapersFilterFromOverview || null;
-}
-
 export function setActiveView(view) {
   const introReq = get(dashboardIntroRequiredStore);
   const phaseReq = get(phaseCreationRequiredStore);
@@ -364,9 +356,6 @@ export function setActiveView(view) {
       : (catReq ? 'categories' : view));
 
   activeViewStore.set(allowedView);
-  if (viewBridge) {
-    try { viewBridge(allowedView); } catch {}
-  }
 }
 
 export function setOverviewMetricScope(scope) {
@@ -379,11 +368,6 @@ export function openPapersWithFilter({ metric = 'all', category = 'all', phase =
   paperPhaseFilterStore.set(phase);
   paperCurrentPhaseToggleStore.set(phase === 'active');
   activeViewStore.set('papers');
-  if (filterBridge) {
-    try { filterBridge(category, '', metric); } catch {}
-  } else if (viewBridge) {
-    try { viewBridge('papers'); } catch {}
-  }
 }
 
 export function resetPaperFilters() {

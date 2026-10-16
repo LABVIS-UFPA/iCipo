@@ -72,15 +72,6 @@ wsManager.addOnOpenListener(async () => {
   }
 });
 
-// const DEFAULT_SNOWBALLING_CATEGORIES = {
-//   "Seed": "#4CAF50",
-//   "Backward": "#2196F3",
-//   "Forward": "#9C27B0",
-//   "Included": "#2E7D32",
-//   "Excluded": "#D32F2F",
-//   "Pending": "#FBC02D",
-// };
-
 async function createContextMenu() {
   // Remove existing menus and recreate safely (ignore duplicate-id race warnings)
   await new Promise((resolve) => {
@@ -734,8 +725,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   
   
   } else if (info.menuItemId === "activateProjectFromMenu") {
-    // Abre a página ui/projects.html para ativar um projeto, já que não foi possível carregar projetos ativos para o menu
-    chrome.tabs.create({ url: chrome.runtime.getURL("ui/projects.html") });
+    // Abre a página ui/projects/projects.html para ativar um projeto, já que não foi possível carregar projetos ativos para o menu
+    chrome.tabs.create({ url: chrome.runtime.getURL("ui/projects/projects.html") });
   }
 });
 

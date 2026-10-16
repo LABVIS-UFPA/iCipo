@@ -1,14 +1,3 @@
-export {
-  fmtDate,
-  normalizeStr,
-  normalizeMetricType,
-  normalizeCategoryMetricType,
-  normalizeArticleUrl,
-  inferMetricTypeFromCategory,
-  inferFromCategory,
-  hashId,
-} from '../../../core/utils.mjs';
-
 import {
   fmtDate,
   normalizeStr,
@@ -19,6 +8,17 @@ import {
   inferFromCategory,
   hashId,
 } from '../../../core/utils.mjs';
+
+export {
+  fmtDate,
+  normalizeStr,
+  normalizeMetricType,
+  normalizeCategoryMetricType,
+  normalizeArticleUrl,
+  inferMetricTypeFromCategory,
+  inferFromCategory,
+  hashId,
+};
 
 
 export const PAPER_METRIC_LABELS = Object.freeze({
