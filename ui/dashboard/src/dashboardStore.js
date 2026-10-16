@@ -108,6 +108,29 @@ export const paperSearchQueryStore = writable('');
 export const paperMetricFilterStore = writable('all');
 export const paperCategoryFilterStore = writable('all');
 export const paperPhaseFilterStore = writable('active');
+export const phaseArticlesViewModeStore = writable(getSavedPhaseViewMode());
+
+export function getSavedPhaseViewMode() {
+  try {
+    const saved = localStorage.getItem('icipo_phase_articles_view_mode');
+    if (saved === 'table' || saved === 'cards') return saved;
+  } catch {}
+  return 'cards';
+}
+
+export function persistPhaseViewMode(mode) {
+  if (mode !== 'table' && mode !== 'cards') return;
+  try {
+    localStorage.setItem('icipo_phase_articles_view_mode', mode);
+  } catch {}
+}
+
+export function setPhaseArticlesViewMode(mode) {
+  if (mode !== 'table' && mode !== 'cards') return;
+  phaseArticlesViewModeStore.set(mode);
+  persistPhaseViewMode(mode);
+}
+
 export const paperCurrentPhaseToggleStore = writable(true);
 export const selectedPaperIdsStore = writable(new Set());
 export const paperBulkStatusStore = writable({ message: '', tone: '' });

@@ -28,6 +28,8 @@
     clearSnowballParent,
     openHistoryModal,
     openPhasePanel,
+    phaseArticlesViewModeStore,
+    setPhaseArticlesViewMode,
     classifySinglePaperAction,
     unmarkSinglePaperAction
   } from '../dashboardStore.js';
@@ -57,7 +59,7 @@
   let activeFilter = $paperMetricFilterStore || 'all'; // 'all' | 'inherited' | 'pending' | 'included' | 'excluded'
   let searchQuery = $paperSearchQueryStore || '';
   let selectedCategoryFilter = $paperCategoryFilterStore || 'all';
-  let viewMode = 'cards'; // 'cards' | 'table'
+  $: viewMode = $phaseArticlesViewModeStore || 'cards'; // 'cards' | 'table' persistido
   let copiedId = null;
 
   // Mantém sincronização caso um filtro externo mude
@@ -438,7 +440,7 @@
           type="button"
           class="viewToggleBtn"
           class:active={viewMode === 'cards'}
-          on:click={() => viewMode = 'cards'}
+          on:click={() => setPhaseArticlesViewMode('cards')}
           title="Visualizar em cartões com detalhes completos"
         >
           ▤ Cartões
@@ -447,7 +449,7 @@
           type="button"
           class="viewToggleBtn"
           class:active={viewMode === 'table'}
-          on:click={() => viewMode = 'table'}
+          on:click={() => setPhaseArticlesViewMode('table')}
           title="Visualizar em tabela analítica compacta"
         >
           ▦ Tabela
