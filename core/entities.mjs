@@ -87,7 +87,7 @@ class Project {
     if (persistedActive) return;
 
     const firstPending = this.phases.find(phase => !phase.completed) || null;
-    this.activePhaseLabel = firstPending?.label || null;
+    this.activePhaseLabel = firstPending?.label || this.phases.at(-1)?.label || null;
   }
 
   // --- Category management ---
@@ -365,7 +365,7 @@ class Project {
     this.phases[phaseIndex] = nextPhase;
     if (this.activePhaseLabel === previousPhase.label) {
       this.activePhaseLabel = isCompletingNow
-        ? (this.phases[phaseIndex + 1]?.label || null)
+        ? (this.phases[phaseIndex + 1]?.label || nextPhase.label)
         : nextPhase.label;
     }
     this._touch();
@@ -479,6 +479,12 @@ class Paper {
     this.authors = checkArray(data.authors);
     this.authorsRaw = data.authorsRaw || "";
     this.year = data.year || null;
+    this.publication = data.publication || "";
+    this.publisher = data.publisher || "";
+    this.snippet = data.snippet || "";
+    this.citationsCount = data.citationsCount || null;
+    this.pdfLink = data.pdfLink || "";
+    this.doi = data.doi || "";
     this.origin = data.origin || null;
     this.status = normalizeMetricType(data.status, "pending");
     this.categoryLabel = data.categoryLabel || data.categoryId || null;
@@ -497,6 +503,8 @@ class Paper {
     this.updatedAt = data.updatedAt || new Date().toISOString();
     this.history = checkArray(data.history);
     this.parentPaperId = data.parentPaperId || null;
+    this.abstract = data.abstract || "";
+    this.enrichmentSource = data.enrichmentSource || null;
   }
 
 
@@ -576,6 +584,12 @@ class Paper {
       authors: this.authors,
       authorsRaw: this.authorsRaw,
       year: this.year,
+      publication: this.publication,
+      publisher: this.publisher,
+      snippet: this.snippet,
+      citationsCount: this.citationsCount,
+      pdfLink: this.pdfLink,
+      doi: this.doi,
       origin: this.origin,
       status: this.status,
       categoryLabel: this.categoryLabel,

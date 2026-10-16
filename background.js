@@ -310,6 +310,52 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     }
     return true;
   }
+  if (msg?.type === "ENRICH_PAPER_METADATA_WITH_DOI" && msg.doi) {
+    (async () => {
+      try {
+        // Try to get a tab to access content script for multi-provider enrichment
+        const tabs = await chrome.tabs.query({});
+        let enriched = null;
+
+        // If we have a tab, try to use content script's multi-provider version
+        if (tabs.length > 0) {
+          try {
+            const response = await chrome.tabs.sendMessage(tabs[0].id, {
+              type: "ENRICH_METADATA_MULTIPROVIDER",
+              doi: msg.doi,
+              title: msg.title,
+              year: msg.year
+            }).catch(() => null);
+
+            if (response?.enriched) {
+              enriched = response.enriched;
+            }
+          } catch (e) {
+            console.debug('Could not use content script enrichment, falling back to direct API');
+          }
+        }
+
+        // Fallback to direct API call if content script unavailable
+        if (!enriched) {
+          enriched = await enrichPaperMetadataWithDoiDirect(msg.doi, msg.title, msg.year);
+        }
+
+        if (enriched) {
+          sendResponse({ ok: true, enriched });
+        } else {
+          sendResponse({ ok: false, error: "Não foi possível buscar dados para este DOI" });
+        }
+      } catch (e) {
+        // If rate limited, still report but indicate retry needed
+        if (e.message === 'rate_limit') {
+          sendResponse({ ok: false, error: "Limite de requisições atingido. Tente novamente em alguns minutos." });
+        } else {
+          sendResponse({ ok: false, error: String(e) });
+        }
+      }
+    })();
+    return true;
+  }
 });
 
 
@@ -410,6 +456,62 @@ function removePaperFromPhase(paper, phaseLabel, project = null) {
   };
 }
 
+
+// Async: Enrich paper metadata using CrossRef API when DOI is available.
+// Returns an object with enriched metadata (title, authors, year, publication, etc.)
+// Fallback direct enrichment via CrossRef only (for use when content script is unavailable)
+async function enrichPaperMetadataWithDoiDirect(doi, fallbackTitle = null, fallbackYear = null) {
+  if (!doi || typeof doi !== 'string') return null;
+  try {
+    const url = `https://api.crossref.org/works/${encodeURIComponent(doi)}`;
+    const res = await fetch(url, { 
+      signal: AbortSignal.timeout(5000),
+      headers: { 
+        'User-Agent': 'Marcalink-Extension/1.0 (Systematic Literature Review Tool)' 
+      }
+    });
+    
+    if (res.status === 429) throw new Error('rate_limit');
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    
+    const json = await res.json();
+    const work = json?.message;
+    if (!work) return null;
+
+    // Extract structured data from CrossRef
+    const title = work.title?.[0] || '';
+    const authorsRaw = work.author?.map(a => {
+      const name = [a.given, a.family].filter(Boolean).join(' ');
+      return name || '';
+    }).filter(Boolean).join(', ') || '';
+    
+    const published = work['published-print'] || work['published-online'];
+    const year = published ? new Date(published['date-parts'][0].join('-')).getFullYear() : null;
+    
+    const publication = work['container-title']?.[0] || work['short-container-title']?.[0] || '';
+    const publisher = work.publisher || '';
+    const citationsCount = work['is-referenced-by-count'] || null;
+
+    return {
+      title: title || null,
+      authorsRaw: authorsRaw || null,
+      year: year || null,
+      publication: publication || null,
+      publisher: publisher || null,
+      citationsCount: citationsCount || null,
+      abstract: work.abstract || null,
+      doi: work.DOI || null,
+      source: 'crossref'
+    };
+  } catch (e) {
+    if (e.message === 'rate_limit') {
+      throw e; // Re-throw to signal rate limit
+    }
+    console.error('CrossRef enrichment failed:', e);
+    return null;
+  }
+}
 
 async function getHighlightsSnapshotFromWs() {
   const active = await getExtensionActive();
@@ -629,6 +731,14 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       authors: Array.isArray(previousPaper.authors) ? previousPaper.authors : [],
       authorsRaw: meta.authorsRaw || previousPaper.authorsRaw || "",
       year: meta.year || previousPaper.year || null,
+      publication: meta.publication || previousPaper.publication || "",
+      publisher: meta.publisher || previousPaper.publisher || "",
+      snippet: meta.abstract || meta.snippet || previousPaper.snippet || "",
+      citationsCount: meta.citationsCount || previousPaper.citationsCount || null,
+      pdfLink: meta.pdfLink || previousPaper.pdfLink || "",
+      doi: meta.doi || previousPaper.doi || "",
+      abstract: meta.abstract || previousPaper.abstract || "",
+      enrichmentSource: meta.enrichmentSource || previousPaper.enrichmentSource || null,
       origin: inferred.origin,
       status,
       categoryLabel,
