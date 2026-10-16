@@ -1316,19 +1316,63 @@ body{
 }
 .projectStatus i{width:6px;height:6px;border-radius:50%;background:#31c878;box-shadow:0 0 0 3px rgba(49,200,120,.09)}
 
-.main > .view{
+.viewContainer{
   flex:1 1 auto;
   min-height:0;
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  height:100%;
+}
+.viewContainer.hidden{
+  display:none!important;
+}
+
+.main > .view,
+.viewContainer > .view,
+.view{
+  flex:1 1 auto;
+  min-height:0;
+  min-width:0;
   overflow-y:auto;
   overflow-x:hidden;
   padding:20px 28px 56px;
   scrollbar-width:thin;
   scrollbar-color:#c8d0db transparent;
+  overscroll-behavior:contain;
 }
-.main > .view::-webkit-scrollbar{width:8px}
-.main > .view::-webkit-scrollbar-thumb{background:#c8d0db;border-radius:999px}
+.main > .view::-webkit-scrollbar,
+.viewContainer > .view::-webkit-scrollbar,
+.view::-webkit-scrollbar{
+  width:8px;
+  height:8px;
+}
+.main > .view::-webkit-scrollbar-track,
+.viewContainer > .view::-webkit-scrollbar-track,
+.view::-webkit-scrollbar-track{
+  background:transparent;
+}
+.main > .view::-webkit-scrollbar-thumb,
+.viewContainer > .view::-webkit-scrollbar-thumb,
+.view::-webkit-scrollbar-thumb{
+  background:#c8d0db;
+  border-radius:999px;
+}
+.main > .view::-webkit-scrollbar-thumb:hover,
+.viewContainer > .view::-webkit-scrollbar-thumb:hover,
+.view::-webkit-scrollbar-thumb:hover{
+  background:#98a5b5;
+}
 
-#view_overview{
+#view_overview,
+#view_phases,
+#view_categories,
+#view_papers,
+.overviewView,
+.phasesView,
+.categoriesView,
+.papersView{
   overflow-y:auto;
   overflow-x:hidden;
 }
@@ -1365,6 +1409,23 @@ body{
   min-height:360px;
   max-height:calc(100vh - 230px);
   overflow-y:auto;
+  overflow-x:auto;
+  scrollbar-width:thin;
+  scrollbar-color:#c8d0db transparent;
+}
+.papersTableWrap::-webkit-scrollbar{
+  width:8px;
+  height:8px;
+}
+.papersTableWrap::-webkit-scrollbar-track{
+  background:transparent;
+}
+.papersTableWrap::-webkit-scrollbar-thumb{
+  background:#c8d0db;
+  border-radius:999px;
+}
+.papersTableWrap::-webkit-scrollbar-thumb:hover{
+  background:#98a5b5;
 }
 
 .overviewHeading{
@@ -1654,7 +1715,7 @@ body{
 @media (max-width:980px){
   .app{grid-template-columns:200px minmax(0,1fr)}
   .sidebar{position:relative;top:auto;z-index:auto}
-  .main > .view{padding:20px}
+  .main > .view, .viewContainer > .view, .view{padding:20px}
   .topbar{padding-inline:20px}
   .sidebarProjectSummary{display:none}
 }
@@ -1674,7 +1735,7 @@ body{
   .main{height:auto;min-height:calc(100vh - 120px)}
   .topbar{min-height:58px;padding:10px 16px}
   .currentProjectPill{max-width:100%}
-  .main > .view{padding:18px 14px 28px}
+  .main > .view, .viewContainer > .view, .view{padding:18px 14px 28px}
   #view_overview{overflow:visible}
   .overviewHeading{align-items:flex-start;flex-direction:column;gap:7px}
   .overviewUpdated{white-space:normal}
@@ -2757,7 +2818,9 @@ a.phaseArchiveArticleTitle:hover{color:#146fd1;text-decoration:underline}
 
 /* Ultrawide and fluid screen adaptation */
 @media (min-width: 1540px) {
-  .main > .view {
+  .main > .view,
+  .viewContainer > .view,
+  .view {
     max-width: 1540px;
     margin-inline: auto;
     width: 100%;

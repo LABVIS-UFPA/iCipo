@@ -103,7 +103,7 @@
     !$paperCurrentPhaseToggleStore;
 </script>
 
-<section class="view" id="view_papers" style="position: relative;">
+<section class="view papersView" id="view_papers" style="position: relative;">
   <!-- Filters panel -->
   <div class="paperFiltersPanel" aria-label="Filtros dos artigos">
     <label class="paperCurrentPhaseToggle">

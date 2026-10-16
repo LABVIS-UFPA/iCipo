@@ -38,19 +38,19 @@
 
     <IntroModal />
 
-    <div class:hidden={$activeViewStore !== 'overview'}>
+    <div class="viewContainer" class:hidden={$activeViewStore !== 'overview'}>
       <OverviewView />
     </div>
 
-    <div class:hidden={$activeViewStore !== 'papers'}>
+    <div class="viewContainer" class:hidden={$activeViewStore !== 'papers'}>
       <PapersView />
     </div>
 
-    <div class:hidden={$activeViewStore !== 'categories'}>
+    <div class="viewContainer" class:hidden={$activeViewStore !== 'categories'}>
       <CategoriesView />
     </div>
 
-    <div class:hidden={$activeViewStore !== 'phases'}>
+    <div class="viewContainer" class:hidden={$activeViewStore !== 'phases'}>
       <PhasesView />
     </div>
 
@@ -91,3 +91,19 @@
     </div>
   </div>
 </div>
+
+<style>
+  .viewContainer {
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    height: 100%;
+  }
+
+  .viewContainer.hidden {
+    display: none !important;
+  }
+</style>
