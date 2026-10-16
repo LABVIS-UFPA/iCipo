@@ -13,7 +13,8 @@
   import {
     canDeletePhaseLabel,
     getPhaseStats,
-    normalizeCategoryMetricType
+    normalizeCategoryMetricType,
+    isPhaseCompleted
   } from '../dashboardHelpers.js';
 
   let title = '';
@@ -35,16 +36,21 @@
   $: activePhaseLabel = $activePhaseLabelStore;
 
   $: isEditing = Boolean(editingPhase && editingPhase.label);
-  $: canDelete = isEditing && canDeletePhaseLabel(editingPhase.label, phases, activePhaseLabel);
+  $: phaseIndex = isEditing ? phases.findIndex(p => p.label === editingPhase?.label) : -1;
   $: isActivePhase = isEditing && editingPhase.label === activePhaseLabel;
+  $: isCompleted = isEditing && isPhaseCompleted(editingPhase);
+  $: isPlannedPhase = isEditing && !isCompleted && !isActivePhase;
+  $: canDelete = isEditing && canDeletePhaseLabel(editingPhase.label, phases, activePhaseLabel);
+  $: stats = isEditing && editingPhase ? getPhaseStats(editingPhase, $papersStore) : null;
+  $: pendingCount = stats ? stats.pending : 0;
 
-  // Sync form when editingPhase changes or panel opens
+  // Sincroniza formulário quando editingPhase muda ou o painel abre
   $: if (isOpen) {
     if (editingPhase) {
       title = editingPhase.title || '';
       description = editingPhase.desc ?? editingPhase.description ?? '';
       selectedCategories = Array.isArray(editingPhase.categories) ? [...editingPhase.categories] : [];
-      status = editingPhase.completed || editingPhase.labelStatus === 'done' ? 'done' : 'pending';
+      status = isPhaseCompleted(editingPhase) ? 'done' : 'pending';
     } else {
       title = '';
       description = '';
@@ -55,12 +61,34 @@
     descError = '';
     categoriesError = '';
   }
-
   function handleClose() {
     if (phaseCreationRequired) {
       window.location.href = '../projects/projects.html';
       return;
     }
+    closePhasePanel();
+  }
+
+  async function handleCloseWithAutoSave() {
+    if (phaseCreationRequired) {
+      window.location.href = '../projects/projects.html';
+      return;
+    }
+
+    const cleanTitle = title.trim();
+    const cleanDesc = description.trim();
+
+    // Se os campos obrigatórios estiverem preenchidos, salva automaticamente ao clicar fora
+    if (cleanTitle && cleanDesc) {
+      try {
+        await handleSave();
+        return;
+      } catch (err) {
+        console.warn('Falha no auto-save ao fechar:', err);
+      }
+    }
+
+    // Se campos estiverem vazios ou não permitirem salvar, fecha diretamente
     closePhasePanel();
   }
 
@@ -73,9 +101,32 @@
     if (selectedCategories.length > 0) categoriesError = '';
   }
 
-  function toggleStatus() {
+  function selectAllCategories() {
+    selectedCategories = projectCategories.map(c => c.label);
+    categoriesError = '';
+  }
+
+  function deselectAllCategories() {
+    selectedCategories = [];
+  }
+
+  function handleSetStatus(newStatus) {
     if (!isActivePhase) return;
-    status = status === 'done' ? 'pending' : 'done';
+    if (newStatus === 'done' && pendingCount > 0) {
+      alert(`Você possui ${pendingCount} artigo(s) pendente(s) nesta etapa. Conclua a classificação de todos os artigos antes de finalizar a fase.`);
+      return;
+    }
+    status = newStatus;
+  }
+
+  async function handleKeydown(event) {
+    if (!isOpen) return;
+    if (event.key === 'Escape' && !phaseCreationRequired) {
+      await handleCloseWithAutoSave();
+    } else if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+      event.preventDefault();
+      await handleSave();
+    }
   }
 
   async function handleSave() {
@@ -100,12 +151,12 @@
     }
 
     if (isEditing && status === 'done') {
-      const stats = getPhaseStats(editingPhase, $papersStore);
-      if (stats.pending > 0) {
-        alert(`Classifique os ${stats.pending} artigo(s) pendente(s) antes de concluir esta fase.`);
+      const currentStats = getPhaseStats(editingPhase, $papersStore);
+      if (currentStats.pending > 0) {
+        alert(`Classifique os ${currentStats.pending} artigo(s) pendente(s) antes de concluir esta fase.`);
         return;
       }
-      if (!isActivePhase) {
+      if (!isActivePhase && !isCompleted) {
         alert('Somente a fase ativa pode ser concluída. As fases futuras permanecem planejadas.');
         return;
       }
@@ -161,31 +212,65 @@
   }
 </script>
 
+<svelte:window on:keydown={handleKeydown} />
+
 {#if isOpen}
   <div
-    class="sideOverlay"
-    on:click={handleClose}
+    class="sideOverlay open"
+    on:click={handleCloseWithAutoSave}
     aria-hidden="true"
   ></div>
 
   <div
     id="phasePanel"
-    class="sidePanel"
+    class="sidePanel phaseDrawerPanel"
     class:open={isOpen}
     class:phaseCreationRequiredPanel={phaseCreationRequired}
     role="dialog"
     aria-labelledby="phasePanelTitle"
   >
-    <div class="sidePanelHeader">
-      <div id="phasePanelTitle" style="font-weight:900">
-        {phaseCreationRequired ? 'Crie a primeira fase' : (isEditing ? 'Editar fase' : 'Nova fase')}
+    <!-- Header com título, etapa e badges de status -->
+    <div class="sidePanelHeader phaseDrawerHeader">
+      <div class="phaseDrawerHeaderInfo">
+        <div class="phaseDrawerStepRow">
+          {#if isEditing && phaseIndex >= 0}
+            <span class="phaseDrawerStepPill">Etapa {phaseIndex + 1} de {phases.length}</span>
+            {#if isCompleted}
+              <span class="statusBadge badgeDone">✓ Concluída</span>
+            {:else if isActivePhase}
+              <span class="statusBadge badgeActive"><span class="pulsePoint"></span> Fase Ativa</span>
+            {:else}
+              <span class="statusBadge badgePlanned">⏱ Planejada</span>
+            {/if}
+          {:else if !phaseCreationRequired}
+            <span class="phaseDrawerStepPill">Etapa {phases.length + 1} (Nova)</span>
+          {/if}
+        </div>
+        <h2 id="phasePanelTitle" class="phaseDrawerTitle">
+          {phaseCreationRequired ? 'Crie a primeira fase' : (isEditing ? 'Editar Fase' : 'Nova Fase')}
+        </h2>
+        <span class="phaseDrawerSubtitle">
+          {#if isEditing}
+            Configure o nome, critérios e diretrizes desta etapa do estudo.
+          {:else}
+            Adicione uma nova etapa à esteira de revisão do seu projeto.
+          {/if}
+        </span>
       </div>
-      <button id="btnClosePhase" class="btn" on:click={handleClose}>
-        {phaseCreationRequired ? 'Voltar aos projetos' : 'Fechar'}
+
+      <button
+        id="btnClosePhase"
+        class="btn phaseDrawerCloseBtn"
+        type="button"
+        on:click={handleCloseWithAutoSave}
+        title={phaseCreationRequired ? 'Voltar aos projetos' : 'Fechar painel (Esc)'}
+        aria-label="Fechar painel"
+      >
+        ✕
       </button>
     </div>
 
-    <div class="sidePanelBody u-scroll-y">
+    <div class="sidePanelBody u-scroll-y phaseDrawerBody">
       {#if phaseCreationRequired}
         <div
           id="phaseRequiredNotice"
@@ -202,106 +287,299 @@
         </div>
       {/if}
 
-      <label class="visually-hidden" for="phaseTitle">Título</label>
-      <input
-        id="phaseTitle"
-        class="input"
-        placeholder="Título da fase"
-        bind:value={title}
-        on:input={() => { if (title.trim()) titleError = ''; }}
-      />
-      {#if titleError}
-        <div id="phaseTitleError" class="fieldError visible" aria-live="polite">{titleError}</div>
-      {/if}
 
-      <label class="visually-hidden" for="phaseDesc">Descrição</label>
-      <textarea
-        id="phaseDesc"
-        class="input"
-        style="min-height:120px"
-        placeholder="Descrição da fase"
-        bind:value={description}
-        on:input={() => { if (description.trim()) descError = ''; }}
-      ></textarea>
-      {#if descError}
-        <div id="phaseDescError" class="fieldError visible" aria-live="polite">{descError}</div>
-      {/if}
-
-      <label for="phaseCategories" class="phaseFieldLabel">
-        Categorias usadas nesta fase
-      </label>
-      <div class="categoryMetricHelp phaseTriageHelp">
-        <strong>Controle da triagem:</strong> somente as categorias
-        selecionadas aparecem no menu de marcação e somente os links
-        classificados com elas são realçados no Scholar. Na fase seguinte, os
-        artigos incluídos na fase anterior entram novamente como
-        <strong>Pendentes</strong>.
-        <span>
-          Pendente → fila da triagem · Incluído → selecionado para a próxima
-          fase · Excluído → removido da progressão.
-        </span>
-      </div>
-
-      <div id="phaseCategories" class="categoriesList" aria-live="polite">
-        {#if projectCategories.length === 0}
-          <div class="muted small" style="padding: 8px 0;">Nenhuma categoria cadastrada no projeto.</div>
-        {:else}
-          {#each projectCategories as cat (cat.label || cat.id)}
-            <label class="categoryCheckboxRow">
-              <input
-                type="checkbox"
-                value={cat.label}
-                checked={selectedCategories.includes(cat.label)}
-                on:change={() => toggleCategory(cat.label)}
-              />
-              <span class="categoryColorDot" style="background: {cat.color || '#4CAF50'}"></span>
-              <span>{cat.title || cat.label}</span>
-            </label>
-          {/each}
+      <!-- Campo Título -->
+      <div class="phaseDrawerFieldGroup">
+        <label for="phaseTitle" class="phaseDrawerLabel">
+          Título da fase <span class="requiredAsterisk" aria-hidden="true">*</span>
+        </label>
+        <div class="phaseDrawerFieldHint">
+          Ex.: Triagem de Títulos e Resumos, Leitura Completa de Textos, Extração de Dados.
+        </div>
+        <input
+          id="phaseTitle"
+          class="input phaseDrawerInput"
+          placeholder="Digite o título da fase"
+          bind:value={title}
+          on:input={() => { if (title.trim()) titleError = ''; }}
+        />
+        {#if titleError}
+          <div id="phaseTitleError" class="fieldError visible" aria-live="polite">{titleError}</div>
         {/if}
       </div>
-      {#if categoriesError}
-        <div id="phaseCategoriesError" class="fieldError visible" aria-live="polite">{categoriesError}</div>
-      {/if}
 
-      <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
-        <span class="muted">Rótulo:</span>
-        <button
-          id="btnTogglePhaseStatus"
-          class="btn small"
-          class:ghost={status === 'pending'}
-          type="button"
-          disabled={!isActivePhase}
-          title={isActivePhase ? 'Concluir a fase ativa e avançar' : (status === 'done' ? 'Fase concluída' : 'Fase planejada')}
-          on:click={toggleStatus}
-        >
-          {status === 'done' ? 'Concluído' : 'Em análise'}
-        </button>
+      <!-- Campo Descrição -->
+      <div class="phaseDrawerFieldGroup">
+        <label for="phaseDesc" class="phaseDrawerLabel">
+          Descrição e Diretrizes de Elegibilidade <span class="requiredAsterisk" aria-hidden="true">*</span>
+        </label>
+        <div class="phaseDrawerFieldHint">
+          Detalhe os critérios de inclusão/exclusão e objetivos que os pesquisadores devem seguir.
+        </div>
+        <textarea
+          id="phaseDesc"
+          class="input phaseDrawerTextarea"
+          rows="4"
+          placeholder="Ex.: Nesta fase os pesquisadores devem avaliar apenas título e resumo dos artigos..."
+          bind:value={description}
+          on:input={() => { if (description.trim()) descError = ''; }}
+        ></textarea>
+        {#if descError}
+          <div id="phaseDescError" class="fieldError visible" aria-live="polite">{descError}</div>
+        {/if}
       </div>
 
-      <div style="display:flex;gap:8px;margin-top:12px">
+      <!-- Categorias Ativas na Fase -->
+      <div class="phaseDrawerFieldGroup">
+        <div class="categoriesHeaderRow">
+          <div>
+            <span class="phaseDrawerLabel">
+              Categorias Ativas nesta Fase
+            </span>
+            <div class="phaseDrawerFieldHint">
+              Apenas as categorias marcadas estarão disponíveis na marcação do Google Scholar.
+            </div>
+          </div>
+          {#if projectCategories.length > 0}
+            <div class="categoryFastActions">
+              <button
+                type="button"
+                class="fastActionBtn"
+                on:click={selectAllCategories}
+                title="Selecionar todas as categorias"
+              >
+                Todas
+              </button>
+              <span class="fastActionDivider">·</span>
+              <button
+                type="button"
+                class="fastActionBtn"
+                on:click={deselectAllCategories}
+                title="Desmarcar todas as categorias"
+              >
+                Nenhuma
+              </button>
+            </div>
+          {/if}
+        </div>
+
+        <div class="categoryImpactLegend">
+          <div class="legendItem"><span class="legendPill metricIncluded">Incluído</span> avança p/ próxima fase</div>
+          <div class="legendItem"><span class="legendPill metricExcluded">Excluído</span> descartado do estudo</div>
+          <div class="legendItem"><span class="legendPill metricPending">Pendente</span> fila de avaliação</div>
+        </div>
+
+        <div id="phaseCategoriesList" class="phaseDrawerCategoryList" aria-live="polite">
+          {#if projectCategories.length === 0}
+            <div class="phaseNoCategoriesNote">
+              <span>⚠️ Nenhuma categoria cadastrada no projeto.</span>
+              <span class="subNote">Crie categorias no painel de Categorias para associá-las às fases.</span>
+            </div>
+          {:else}
+            {#each projectCategories as cat (cat.label || cat.id)}
+              {@const isChecked = selectedCategories.includes(cat.label)}
+              {@const normMetric = normalizeCategoryMetricType(cat.metricType, 'pending')}
+              <label
+                class="phaseCategoryCardRow"
+                class:selected={isChecked}
+              >
+                <div class="categoryCheckCol">
+                  <input
+                    type="checkbox"
+                    value={cat.label}
+                    checked={isChecked}
+                    on:change={() => toggleCategory(cat.label)}
+                  />
+                  <span
+                    class="categoryCircleDot"
+                    style="background: {cat.color || '#2eae6c'}"
+                    aria-hidden="true"
+                  ></span>
+                </div>
+
+                <div class="categoryDetailsCol">
+                  <span class="categoryName">{cat.title || cat.label}</span>
+                  {#if cat.description}
+                    <span class="categorySubDesc">{cat.description}</span>
+                  {/if}
+                </div>
+
+                <div class="categoryMetricCol">
+                  {#if normMetric === 'included'}
+                    <span class="categoryMetricBadge metricIncluded" title="Artigos com esta categoria avançam para a próxima fase">
+                      Incluído
+                    </span>
+                  {:else if normMetric === 'excluded'}
+                    <span class="categoryMetricBadge metricExcluded" title="Artigos com esta categoria são excluídos da revisão">
+                      Excluído
+                    </span>
+                  {:else}
+                    <span class="categoryMetricBadge metricPending" title="Artigos com esta categoria permanecem pendentes">
+                      Pendente
+                    </span>
+                  {/if}
+                </div>
+              </label>
+            {/each}
+          {/if}
+        </div>
+        {#if categoriesError}
+          <div id="phaseCategoriesError" class="fieldError visible" aria-live="polite">{categoriesError}</div>
+        {/if}
+      </div>
+
+      <!-- Ciclo e Status da Fase -->
+      <div class="phaseDrawerFieldGroup">
+        <span class="phaseDrawerLabel">Ciclo e Status da Fase</span>
+        
+        {#if isEditing}
+          {#if isActivePhase}
+            <div class="phaseLifecycleBox activeCycle">
+              <div class="lifecycleBoxHeader">
+                <span class="lifecycleBadge activeBadge">🟢 Fase Ativa no Momento</span>
+                <span class="lifecycleHint">Fase em execução pelos pesquisadores</span>
+              </div>
+              <p class="lifecycleDesc">
+                As ações de triagem no Google Scholar e na tabela de artigos estão sendo computadas nesta fase.
+              </p>
+
+              <div class="statusSelectorRow">
+                <button
+                  type="button"
+                  class="statusOptionBtn"
+                  class:selected={status === 'pending'}
+                  on:click={() => handleSetStatus('pending')}
+                >
+                  <div class="statusOptionRadio" class:checked={status === 'pending'}></div>
+                  <div class="statusOptionText">
+                    <strong>Em Andamento</strong>
+                    <span>Triagem em execução pela equipe</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  class="statusOptionBtn"
+                  class:selected={status === 'done'}
+                  on:click={() => handleSetStatus('done')}
+                  title={pendingCount > 0 ? `Bloqueado: existem ${pendingCount} artigos pendentes que precisam ser classificados` : 'Concluir esta fase e avançar para a próxima'}
+                >
+                  <div class="statusOptionRadio" class:checked={status === 'done'}></div>
+                  <div class="statusOptionText">
+                    <strong>Concluir Fase e Avançar</strong>
+                    <span>Finaliza etapa e libera a próxima fase</span>
+                  </div>
+                </button>
+              </div>
+
+              {#if pendingCount > 0 && status === 'pending'}
+                <div class="lifecyclePendingWarning">
+                  <span class="warningIcon">ℹ️</span>
+                  <span>
+                    Para concluir esta fase, você precisará classificar os <strong>{pendingCount}</strong> artigos pendentes.
+                  </span>
+                </div>
+              {/if}
+            </div>
+          {:else if isCompleted}
+            <div class="phaseLifecycleBox completedCycle">
+              <div class="lifecycleBoxHeader">
+                <span class="lifecycleBadge completedBadge">✓ Fase Concluída</span>
+              </div>
+              <p class="lifecycleDesc">
+                Esta fase foi finalizada com êxito. Seus artigos aprovados foram herdados pela fase seguinte. O histórico de triagem permanece arquivado e protegido para garantir a integridade da revisão.
+              </p>
+            </div>
+          {:else if isPlannedPhase}
+            <div class="phaseLifecycleBox plannedCycle">
+              <div class="lifecycleBoxHeader">
+                <span class="lifecycleBadge plannedBadge">⏱ Fase Planejada</span>
+              </div>
+              <p class="lifecycleDesc">
+                Esta etapa aguarda a conclusão da fase ativa atual. Assim que os artigos da fase anterior forem concluídos, esta fase será ativada automaticamente no fluxo contínuo.
+              </p>
+            </div>
+          {/if}
+        {:else}
+          <div class="phaseLifecycleBox newPhaseCycle">
+            <div class="lifecycleBoxHeader">
+              <span class="lifecycleBadge plannedBadge">Nova Etapa Planejada</span>
+            </div>
+            <p class="lifecycleDesc">
+              Esta fase será inserida como a <strong>Etapa {phases.length + 1}</strong> da esteira de revisão.
+            </p>
+          </div>
+        {/if}
+      </div>
+
+      <!-- Botões de Ação Principais -->
+      <div class="phaseDrawerActionsRow">
         <button
           id="btnSavePhase"
-          class="btn"
+          class="btn phaseDrawerPrimaryBtn"
           class:ready={title.trim() && description.trim()}
           type="button"
           disabled={isSaving}
           on:click={handleSave}
+          title="Salvar alterações (Ctrl+Enter)"
         >
-          {isSaving ? 'Salvando...' : 'Salvar fase'}
+          {#if isSaving}
+            <span class="savingSpinner" aria-hidden="true"></span>
+            <span>Salvando...</span>
+          {:else}
+            <span>{isEditing ? 'Salvar alterações' : 'Salvar nova fase'}</span>
+          {/if}
         </button>
-        {#if isEditing && canDelete}
-          <button
-            id="btnDeletePhase"
-            class="btn danger"
-            type="button"
-            disabled={isDeleting}
-            on:click={handleDelete}
-          >
-            {isDeleting ? 'Excluindo...' : 'Excluir fase'}
-          </button>
-        {/if}
+
+        <button
+          id="btnCancelPhase"
+          class="btn phaseDrawerCancelBtn"
+          type="button"
+          disabled={isSaving}
+          on:click={handleClose}
+        >
+          Cancelar
+        </button>
       </div>
+
+      <!-- Zona de Exclusão Segura -->
+      {#if isEditing}
+        <div class="phaseDangerZone">
+          <div class="dangerZoneDivider"></div>
+          {#if canDelete}
+            <div class="dangerZoneContent">
+              <div class="dangerZoneText">
+                <strong class="dangerZoneTitle">Excluir esta fase</strong>
+                <span class="dangerZoneDesc">
+                  Esta ação removerá a fase do projeto. Se for a fase ativa, o sistema promoverá a próxima fase disponível.
+                </span>
+              </div>
+              <button
+                id="btnDeletePhase"
+                class="btn danger phaseDrawerDeleteBtn"
+                type="button"
+                disabled={isDeleting || isSaving}
+                on:click={handleDelete}
+              >
+                {isDeleting ? 'Excluindo...' : 'Excluir fase'}
+              </button>
+            </div>
+          {:else}
+            <div class="dangerZoneLocked">
+              <span class="lockedIcon">🔒</span>
+              <span class="lockedText">
+                {#if phases.length <= 1}
+                  A primeira fase do projeto é obrigatória e não pode ser excluída.
+                {:else if isCompleted}
+                  Fases concluídas estão protegidas contra exclusão para garantir a rastreabilidade do estudo.
+                {:else}
+                  Fases anteriores à fase ativa não podem ser excluídas.
+                {/if}
+              </span>
+            </div>
+          {/if}
+        </div>
+      {/if}
     </div>
   </div>
 {/if}

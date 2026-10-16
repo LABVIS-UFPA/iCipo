@@ -632,8 +632,8 @@ svg .axis line, svg .axis path{stroke: rgba(234,240,255,0.18)}
     /* responsive card: allow variable height but keep a minimum; footer stays fixed
       and body becomes scrollable if content overflows to avoid deforming layout */
     box-sizing:border-box;
-    /* fixed card height to prevent growth from long titles; body scrolls if needed */
-    height:220px;
+    height:auto;
+    min-height:280px;
     display:flex;
     flex-direction:column;
 }
@@ -1379,22 +1379,1007 @@ body{
 
 .card--phases{
   height:auto;
-  min-height:280px;
+  min-height:300px;
 }
-.card--phases .phasesRow{
-  display:block;
-  overflow:visible;
-  padding:4px 0;
-}
-.card--phases .phasesList{
-  display:grid;
-  grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));
+.phasesHeaderRow{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
   gap:16px;
-  width:100%;
-  height:auto;
-  overflow:visible;
-  padding:8px 0;
+  margin-bottom:14px;
 }
+.phasesScrollNav{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.btnScroll{
+  width:34px;
+  height:34px;
+  padding:0;
+  display:grid;
+  place-items:center;
+  font-size:18px;
+  font-weight:900;
+  border-radius:8px;
+  background:#ffffff;
+  border:1px solid #d5dce6;
+  color:#1e293b;
+  cursor:pointer;
+  transition:all .15s ease;
+  user-select:none;
+}
+.btnScroll:hover{
+  background:#f1f5f9;
+  border-color:#94a3b8;
+  color:#0f172a;
+  transform:scale(1.05);
+}
+
+/* Container com barra de rolagem horizontal abaixo dos cards */
+.card--phases .phasesRow,
+.phasesFlowRow{
+  display:block;
+  width:100%;
+  max-width:100%;
+  overflow-x:auto;
+  overflow-y:visible;
+  padding:6px 2px 18px 2px;
+  scroll-behavior:smooth;
+  -webkit-overflow-scrolling:touch;
+  /* Scrollbar moderna, bem visível e confortável para arrastar */
+  scrollbar-width:thin;
+  scrollbar-color:#2eae6c #edf2f7;
+}
+
+/* Barra de rolagem estilizada abaixo dos cards */
+.phasesFlowRow::-webkit-scrollbar{
+  height:10px;
+}
+.phasesFlowRow::-webkit-scrollbar-track{
+  background:#f1f5f9;
+  border-radius:999px;
+  border:1px solid #e2e8f0;
+}
+.phasesFlowRow::-webkit-scrollbar-thumb{
+  background:linear-gradient(90deg, #2eae6c, #238d57);
+  border-radius:999px;
+  box-shadow:0 1px 4px rgba(46,174,108,.25);
+  border:2px solid #f1f5f9;
+}
+.phasesFlowRow::-webkit-scrollbar-thumb:hover{
+  background:linear-gradient(90deg, #238d57, #1b6d43);
+}
+
+/* Linha contínua horizontal SEM QUEBRA DE LINHA */
+.phasesFlowList{
+  display:flex;
+  align-items:stretch;
+  flex-direction:row;
+  flex-wrap:nowrap; /* NUNCA QUEBRA LINHA */
+  gap:16px;
+  width:max-content; /* Expande horizontalmente com todas as fases */
+  min-width:100%;
+  padding:4px 2px;
+}
+
+/* Cada cartão com largura fixa para manter o formato perfeito */
+.phaseFlowCardItem{
+  flex:0 0 350px;
+  width:350px;
+  min-width:350px;
+  max-width:350px;
+  display:flex;
+  flex-direction:column;
+}
+
+/* Seta de Progressão entre Fases no fluxo horizontal */
+.phaseProgressionArrow{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  align-self:center;
+  flex:0 0 auto;
+  gap:6px;
+  padding:0 4px;
+  user-select:none;
+}
+.phaseProgressionArrow .arrowBadge{
+  width:44px;
+  height:44px;
+  border-radius:50%;
+  background:linear-gradient(135deg, #eaf8f0 0%, #d4f2e2 100%);
+  border:2px solid #a3e3c0;
+  color:#16784a;
+  display:grid;
+  place-items:center;
+  box-shadow:0 3px 12px rgba(46,174,108,.18);
+  transition:transform .2s ease, box-shadow .2s ease;
+}
+.phaseProgressionArrow:hover .arrowBadge{
+  transform:scale(1.12);
+  box-shadow:0 6px 18px rgba(46,174,108,.28);
+}
+.phaseProgressionArrow .arrowLabel{
+  font-size:10.5px;
+  font-weight:800;
+  color:#238d57;
+  text-transform:uppercase;
+  letter-spacing:.05em;
+  white-space:nowrap;
+}
+
+/* Card Modernizado da Fase (PhaseCard) */
+.modernPhaseCard{
+  border:1px solid #e1e6ed;
+  border-radius:12px;
+  background:#ffffff;
+  padding:16px 18px;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  min-height:280px;
+  height:100%;
+  box-shadow:0 2px 8px rgba(16,24,40,.04);
+  position:relative;
+  transition:border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+.modernPhaseCard:hover{
+  box-shadow:0 8px 22px rgba(16,24,40,.07);
+  border-color:#d0d7e2;
+}
+.modernPhaseCard.active{
+  border-color:#2eae6c;
+  box-shadow:0 0 0 3px rgba(46,174,108,.15), 0 8px 24px rgba(46,174,108,.10);
+  background:linear-gradient(180deg, #ffffff 0%, #fbfffc 100%);
+}
+.modernPhaseCard.phaseCard--completed{
+  border-color:#cbd5e1;
+  background:#ffffff;
+}
+
+/* Top Row do Card */
+.phaseCardTopRow{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+}
+.phaseStepTag{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  padding:3px 8px;
+  border-radius:6px;
+  background:#f1f5f9;
+  border:1px solid #e2e8f0;
+  font-size:11px;
+}
+.phaseStepTag .stepNumber{
+  font-weight:800;
+  color:#1e293b;
+}
+.phaseStepTag .stepTotal{
+  color:#64748b;
+  font-size:10px;
+}
+.modernPhaseCard.active .phaseStepTag{
+  background:#eaf8f0;
+  border-color:#b9e8cd;
+}
+.modernPhaseCard.active .phaseStepTag .stepNumber{
+  color:#16784a;
+}
+
+.phaseStatusIndicator{
+  display:flex;
+  align-items:center;
+}
+.statusBadge{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:3px 9px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:750;
+}
+.badgeDone{
+  background:#ecfdf5;
+  color:#065f46;
+  border:1px solid #a7f3d0;
+}
+.badgeActive{
+  background:#eaf8f0;
+  color:#16784a;
+  border:1px solid #34d399;
+}
+.badgePlanned{
+  background:#f8fafc;
+  color:#64748b;
+  border:1px solid #e2e8f0;
+}
+.pulsePoint{
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:#22c55e;
+  box-shadow:0 0 0 3px rgba(34,197,94,.25);
+  animation:pulseGreen 1.8s infinite;
+}
+
+/* Head */
+.phaseCardHead{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+.modernPhaseCard .phaseTitle{
+  font-size:16px;
+  font-weight:800;
+  color:#0f172a;
+  margin:0;
+  line-height:1.25;
+}
+.modernPhaseCard .phaseDesc{
+  font-size:12px;
+  color:#64748b;
+  margin:0;
+  line-height:1.4;
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+}
+
+/* Progress bar */
+.phaseProgressBarWrap{
+  display:flex;
+  flex-direction:column;
+  gap:5px;
+  padding:8px 10px;
+  border-radius:8px;
+  background:#f8fafc;
+  border:1px solid #eef2f6;
+}
+.progressBarMeta{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  font-size:11px;
+}
+.progressLabel{
+  color:#64748b;
+  font-weight:600;
+}
+.progressPct{
+  color:#0f172a;
+  font-weight:800;
+}
+.progressBarTrack{
+  width:100%;
+  height:6px;
+  border-radius:999px;
+  background:#e2e8f0;
+  overflow:hidden;
+}
+.progressBarFill{
+  height:100%;
+  background:linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
+  border-radius:999px;
+  transition:width .4s ease;
+}
+.progressBarFill.isDone{
+  background:#10b981;
+}
+
+/* 4 Triage Metrics Boxes */
+.triageMetricsGrid{
+  display:grid;
+  grid-template-columns:repeat(2, 1fr);
+  gap:8px;
+}
+.triageMetricBox{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  padding:8px 10px;
+  border-radius:8px;
+  border:1px solid #e2e8f0;
+  background:#f8fafc;
+  transition:all .15s ease;
+}
+.triageMetricBox:hover{
+  transform:translateY(-1px);
+}
+.metricBoxHeader{
+  display:flex;
+  align-items:center;
+  gap:5px;
+}
+.metricIcon{
+  font-size:12px;
+}
+.metricLabel{
+  font-size:11px;
+  font-weight:700;
+  color:#475569;
+}
+.metricValue{
+  font-size:18px;
+  font-weight:850;
+  line-height:1.15;
+  color:#0f172a;
+}
+.metricSub{
+  font-size:10px;
+  color:#94a3b8;
+}
+.triageMetricBox.metricInherited{
+  border-color:#dbeafe;
+  background:#f0f7ff;
+}
+.triageMetricBox.metricInherited .metricValue{color:#1d4ed8}
+.triageMetricBox.metricPending{
+  border-color:#fef3c7;
+  background:#fffbeb;
+}
+.triageMetricBox.metricPending .metricValue{color:#b45309}
+.triageMetricBox.metricSelected{
+  border-color:#d1fae5;
+  background:#ecfdf5;
+}
+.triageMetricBox.metricSelected .metricValue{color:#047857}
+.triageMetricBox.metricRemoved{
+  border-color:#fee2e2;
+  background:#fef2f2;
+}
+.triageMetricBox.metricRemoved .metricValue{color:#b91c1c}
+
+/* Categories in phase */
+.phaseCategoriesSection{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  padding-top:2px;
+}
+.phaseCategoriesHeader{
+  font-size:11px;
+  font-weight:700;
+  color:#64748b;
+}
+.phaseCategoryBadges{
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px;
+}
+.phaseCategoryBadgeItem{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:3px 7px;
+  border-radius:5px;
+  background:#f1f5f9;
+  border:1px solid #e2e8f0;
+  font-size:11px;
+  color:#334155;
+  font-weight:600;
+}
+.catColorDot{
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  flex:0 0 auto;
+}
+
+/* Footer buttons */
+.modernPhaseCard .phaseCardFooter{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  margin-top:auto;
+  padding-top:12px;
+  border-top:1px solid #f1f5f9;
+}
+.phaseFooterLeft,
+.phaseFooterRight{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.phaseArchiveBtn{
+  background:#f8fafc;
+  color:#334155;
+  border-color:#cbd5e1;
+}
+.phaseArchiveBtn.active{
+  background:#e2e8f0;
+  border-color:#94a3b8;
+}
+.archiveChevron{
+  display:inline-block;
+  transition:transform .2s ease;
+}
+.archiveChevron.expanded{
+  transform:rotate(180deg);
+}
+.phaseFilterBtn{
+  background:#2eae6c;
+  border-color:#2eae6c;
+  color:#ffffff;
+  box-shadow:0 1px 3px rgba(46,174,108,.2);
+}
+.phaseFilterBtn:hover{
+  background:#238d57;
+  border-color:#238d57;
+  color:#ffffff;
+}
+.phaseEditBtn{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  background:#ffffff;
+  border:1px solid #cbd5e1;
+  color:#334155;
+  font-weight:600;
+  border-radius:6px;
+  padding:5px 10px;
+  cursor:pointer;
+  transition:all .18s ease;
+  box-shadow:0 1px 2px rgba(15,23,42,.04);
+}
+.phaseEditBtn:hover{
+  background:#f1f5f9;
+  border-color:#94a3b8;
+  color:#0f172a;
+  transform:translateY(-1px);
+  box-shadow:0 2px 5px rgba(15,23,42,.08);
+}
+.phaseEditBtn:active{
+  transform:translateY(0);
+}
+.phaseEditIcon{
+  width:14px;
+  height:14px;
+  flex-shrink:0;
+  color:#64748b;
+  transition:color .18s ease;
+}
+.phaseEditBtn:hover .phaseEditIcon{
+  color:#0f172a;
+}
+
+/* =========================================================
+   Phase Drawer Panel (Enriched Edit / Add Modal Drawer)
+   ========================================================= */
+.phaseDrawerPanel{
+  width:500px;
+  max-width:96vw;
+}
+.phaseDrawerHeader{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+  padding-bottom:14px;
+  border-bottom:1px solid #e2e8f0;
+}
+.phaseDrawerHeaderInfo{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+.phaseDrawerStepRow{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-bottom:4px;
+}
+.phaseDrawerStepPill{
+  font-size:11px;
+  font-weight:700;
+  background:#e0f2fe;
+  color:#0369a1;
+  padding:2px 8px;
+  border-radius:999px;
+  letter-spacing:.01em;
+}
+.phaseDrawerTitle{
+  font-size:18px;
+  font-weight:800;
+  color:#0f172a;
+  margin:0;
+  line-height:1.25;
+}
+.phaseDrawerSubtitle{
+  font-size:12px;
+  color:#64748b;
+  line-height:1.4;
+}
+.phaseDrawerCloseBtn{
+  background:#ffffff;
+  border:1px solid #cbd5e1;
+  color:#64748b;
+  font-size:13px;
+  font-weight:700;
+  width:32px;
+  height:32px;
+  border-radius:8px;
+  padding:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+  cursor:pointer;
+  transition:all .15s ease;
+}
+.phaseDrawerCloseBtn:hover{
+  background:#f1f5f9;
+  border-color:#94a3b8;
+  color:#0f172a;
+}
+.phaseDrawerBody{
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+  padding-top:14px;
+  padding-bottom:24px;
+}
+
+
+/* Field Groups */
+.phaseDrawerFieldGroup{
+  display:flex;
+  flex-direction:column;
+  gap:5px;
+}
+.phaseDrawerLabel{
+  font-size:13px;
+  font-weight:700;
+  color:#1e293b;
+  display:flex;
+  align-items:center;
+  gap:4px;
+  margin:0;
+}
+.requiredAsterisk{
+  color:#ef4444;
+  font-weight:800;
+}
+.phaseDrawerFieldHint{
+  font-size:11px;
+  color:#64748b;
+  line-height:1.35;
+  margin-bottom:2px;
+}
+.phaseDrawerInput,
+.phaseDrawerTextarea{
+  font-size:13px;
+  border:1px solid #cbd5e1;
+  border-radius:8px;
+  padding:9px 12px;
+  color:#0f172a;
+  background:#ffffff;
+  transition:border-color .15s ease, box-shadow .15s ease;
+}
+.phaseDrawerInput:focus,
+.phaseDrawerTextarea:focus{
+  border-color:#2eae6c;
+  box-shadow:0 0 0 3px rgba(46,174,108,.15);
+  outline:none;
+}
+
+/* Category Selection in Phase Drawer */
+.categoriesHeaderRow{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-end;
+  gap:8px;
+  margin-bottom:2px;
+}
+.categoryFastActions{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size:11px;
+}
+.fastActionBtn{
+  background:none;
+  border:none;
+  padding:0;
+  font-size:11px;
+  font-weight:600;
+  color:#0284c7;
+  cursor:pointer;
+  text-decoration:underline;
+  text-underline-offset:2px;
+}
+.fastActionBtn:hover{
+  color:#0369a1;
+}
+.fastActionDivider{
+  color:#cbd5e1;
+}
+.categoryImpactLegend{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  font-size:10px;
+  color:#64748b;
+  background:#f8fafc;
+  padding:6px 10px;
+  border-radius:6px;
+  border:1px dashed #e2e8f0;
+  margin-bottom:6px;
+}
+.legendItem{
+  display:flex;
+  align-items:center;
+  gap:4px;
+}
+.legendPill{
+  font-size:9px;
+  font-weight:700;
+  padding:1px 5px;
+  border-radius:4px;
+  text-transform:uppercase;
+}
+.phaseDrawerCategoryList{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  max-height:220px;
+  overflow-y:auto;
+  padding-right:4px;
+}
+.phaseCategoryCardRow{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:8px 10px;
+  border:1px solid #e2e8f0;
+  border-radius:8px;
+  background:#ffffff;
+  cursor:pointer;
+  transition:all .15s ease;
+  user-select:none;
+}
+.phaseCategoryCardRow:hover{
+  background:#f8fafc;
+  border-color:#cbd5e1;
+}
+.phaseCategoryCardRow.selected{
+  background:#f0fdf4;
+  border-color:#86efac;
+}
+.categoryCheckCol{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.categoryCircleDot{
+  width:10px;
+  height:10px;
+  border-radius:50%;
+  flex-shrink:0;
+}
+.categoryDetailsCol{
+  display:flex;
+  flex-direction:column;
+  flex:1;
+  min-width:0;
+}
+.categoryName{
+  font-size:13px;
+  font-weight:600;
+  color:#1e293b;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.categorySubDesc{
+  font-size:11px;
+  color:#64748b;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.categoryMetricCol{
+  margin-left:auto;
+  flex-shrink:0;
+}
+.categoryMetricBadge{
+  font-size:10px;
+  font-weight:700;
+  padding:2px 7px;
+  border-radius:999px;
+}
+.metricIncluded{
+  background:rgba(22,163,74,.12);
+  color:#15803d;
+  border:1px solid rgba(22,163,74,.2);
+}
+.metricExcluded{
+  background:rgba(220,38,38,.11);
+  color:#b91c1c;
+  border:1px solid rgba(220,38,38,.2);
+}
+.metricPending{
+  background:rgba(217,119,6,.12);
+  color:#b45309;
+  border:1px solid rgba(217,119,6,.2);
+}
+.phaseNoCategoriesNote{
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+  padding:12px;
+  background:#f8fafc;
+  border:1px dashed #cbd5e1;
+  border-radius:8px;
+  font-size:12px;
+  color:#64748b;
+}
+
+/* Phase Lifecycle & Status */
+.phaseLifecycleBox{
+  border-radius:10px;
+  padding:12px 14px;
+  border:1px solid #e2e8f0;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  background:#f8fafc;
+}
+.activeCycle{
+  background:#f0fdf4;
+  border-color:#bbf7d0;
+}
+.completedCycle{
+  background:#f8fafc;
+  border-color:#e2e8f0;
+}
+.plannedCycle{
+  background:#f8fafc;
+  border-color:#e2e8f0;
+}
+.newPhaseCycle{
+  background:#f8fafc;
+  border-color:#e2e8f0;
+}
+.lifecycleBoxHeader{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.lifecycleBadge{
+  font-size:11px;
+  font-weight:700;
+  padding:2px 8px;
+  border-radius:999px;
+}
+.activeBadge{
+  background:#dcfce7;
+  color:#166534;
+  border:1px solid #86efac;
+}
+.completedBadge{
+  background:#f1f5f9;
+  color:#475569;
+  border:1px solid #cbd5e1;
+}
+.plannedBadge{
+  background:#f1f5f9;
+  color:#64748b;
+  border:1px solid #e2e8f0;
+}
+.lifecycleHint{
+  font-size:11px;
+  color:#64748b;
+}
+.lifecycleDesc{
+  font-size:12px;
+  color:#475569;
+  line-height:1.45;
+  margin:0;
+}
+.statusSelectorRow{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+  margin-top:4px;
+}
+.statusOptionBtn{
+  display:flex;
+  align-items:flex-start;
+  gap:8px;
+  padding:9px 10px;
+  border:1px solid #cbd5e1;
+  border-radius:8px;
+  background:#ffffff;
+  text-align:left;
+  cursor:pointer;
+  transition:all .15s ease;
+}
+.statusOptionBtn:hover{
+  border-color:#94a3b8;
+  background:#f8fafc;
+}
+.statusOptionBtn.selected{
+  border-color:#2eae6c;
+  background:#ffffff;
+  box-shadow:0 0 0 2px rgba(46,174,108,.25);
+}
+.statusOptionRadio{
+  width:14px;
+  height:14px;
+  border-radius:50%;
+  border:1.5px solid #94a3b8;
+  margin-top:2px;
+  flex-shrink:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  transition:border-color .15s ease;
+}
+.statusOptionRadio.checked{
+  border-color:#2eae6c;
+}
+.statusOptionRadio.checked::after{
+  content:'';
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  background:#2eae6c;
+}
+.statusOptionText{
+  display:flex;
+  flex-direction:column;
+  gap:1px;
+}
+.statusOptionText strong{
+  font-size:12px;
+  color:#0f172a;
+  line-height:1.2;
+}
+.statusOptionText span{
+  font-size:10px;
+  color:#64748b;
+  line-height:1.25;
+}
+.lifecyclePendingWarning{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size:11px;
+  color:#b45309;
+  background:#fffbeb;
+  padding:6px 10px;
+  border-radius:6px;
+  border:1px solid #fde68a;
+  line-height:1.35;
+}
+
+/* Actions and Buttons */
+.phaseDrawerActionsRow{
+  display:flex;
+  gap:10px;
+  margin-top:4px;
+}
+.phaseDrawerPrimaryBtn{
+  flex:1;
+  background:#2eae6c;
+  border:1px solid #2eae6c;
+  color:#ffffff;
+  font-weight:700;
+  padding:10px 16px;
+  border-radius:8px;
+  box-shadow:0 2px 4px rgba(46,174,108,.25);
+  cursor:pointer;
+  transition:all .15s ease;
+}
+.phaseDrawerPrimaryBtn:hover:not(:disabled){
+  background:#238d57;
+  border-color:#238d57;
+  color:#ffffff;
+}
+.phaseDrawerPrimaryBtn:disabled{
+  opacity:.65;
+  cursor:not-allowed;
+}
+.phaseDrawerCancelBtn{
+  background:#ffffff;
+  border:1px solid #cbd5e1;
+  color:#475569;
+  font-weight:600;
+  padding:10px 16px;
+  border-radius:8px;
+  cursor:pointer;
+  transition:all .15s ease;
+}
+.phaseDrawerCancelBtn:hover:not(:disabled){
+  background:#f1f5f9;
+  color:#0f172a;
+}
+.savingSpinner{
+  display:inline-block;
+  width:12px;
+  height:12px;
+  border:2px solid rgba(255,255,255,.3);
+  border-radius:50%;
+  border-top-color:#ffffff;
+  animation:spin .6s linear infinite;
+  margin-right:6px;
+}
+@keyframes spin{
+  to{transform:rotate(360deg)}
+}
+
+/* Danger Zone */
+.phaseDangerZone{
+  margin-top:4px;
+}
+.dangerZoneDivider{
+  height:1px;
+  background:#f1f5f9;
+  margin-bottom:12px;
+}
+.dangerZoneContent{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  padding:10px 12px;
+  background:#fef2f2;
+  border:1px solid #fee2e2;
+  border-radius:8px;
+}
+.dangerZoneText{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+.dangerZoneTitle{
+  font-size:12px;
+  font-weight:700;
+  color:#991b1b;
+}
+.dangerZoneDesc{
+  font-size:10px;
+  color:#b91c1c;
+  line-height:1.3;
+}
+.phaseDrawerDeleteBtn{
+  font-size:11px;
+  font-weight:700;
+  padding:6px 12px;
+  border-radius:6px;
+  flex-shrink:0;
+  cursor:pointer;
+}
+.dangerZoneLocked{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size:11px;
+  color:#64748b;
+  padding:8px 12px;
+  background:#f8fafc;
+  border-radius:6px;
+  border:1px dashed #e2e8f0;
+}
+.lockedIcon{
+  font-size:12px;
+}
+.lockedText{
+  line-height:1.35;
+}
+
+
 
 .card--categories{
   height:auto;
@@ -2347,14 +3332,22 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
   .paperBulkCategoryOptionOutcome{grid-column:2;justify-self:start}
 }
 
-/* Painel lateral de consulta das fases concluídas. */
+/* Painel lateral de consulta das fases concluídas e em andamento */
+.phaseArchiveOverlay{
+  position:fixed;
+  inset:0;
+  z-index:1190!important;
+  background:rgba(15,23,42,.45);
+  backdrop-filter:blur(2px);
+  transition:opacity .18s ease;
+}
 .phaseArchivePanel{
   position:fixed;
   top:0;
   right:0;
   bottom:0;
   z-index:1200;
-  width:min(520px, calc(100vw - 32px));
+  width:min(560px, calc(100vw - 32px));
   min-width:0;
   padding:22px;
   overflow-x:hidden;
@@ -2363,7 +3356,7 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
   border:0;
   border-left:1px solid #dce4ee;
   border-radius:0;
-  background:#f8fafc;
+  background:#ffffff;
   box-shadow:-18px 0 44px rgba(16,24,40,.2);
   scrollbar-gutter:stable;
 }
@@ -2379,35 +3372,90 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
   display:flex;
   align-items:flex-start;
   justify-content:space-between;
-  gap:18px;
+  gap:14px;
+  padding-bottom:12px;
+  border-bottom:1px solid #edf0f4;
 }
-.phaseArchiveHeaderText{min-width:0}
+.phaseArchiveHeaderText{
+  min-width:0;
+  flex:1;
+}
+.phaseArchiveStepRow{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-bottom:4px;
+}
 .phaseArchiveEyebrow{
-  display:block;
-  color:#4677b7;
-  font-size:10px;
-  font-weight:850;
-  letter-spacing:.065em;
-  text-transform:uppercase;
+  display:inline-block;
+  color:#0369a1;
+  background:#e0f2fe;
+  font-size:10.5px;
+  font-weight:700;
+  letter-spacing:.02em;
+  padding:2px 7px;
+  border-radius:999px;
 }
-.phaseArchiveHeader h3{
+.phaseArchiveHeader h3,
+.phaseArchiveTitle{
   margin:4px 0 0;
-  color:#172033;
+  color:#0f172a;
   font-size:18px;
+  font-weight:800;
   line-height:1.25;
 }
-.phaseArchiveHeader p{
-  max-width:760px;
+.phaseArchiveDescription{
   margin:6px 0 0;
-  color:#667085;
-  font-size:11.5px;
-  line-height:1.5;
+  color:#64748b;
+  font-size:12px;
+  line-height:1.45;
 }
-.main .phaseArchiveClose{
-  flex:0 0 auto;
-  min-height:34px;
-  padding:0 11px;
-  font-size:10.5px;
+.phaseArchiveCloseBtn{
+  background:#ffffff;
+  border:1px solid #cbd5e1;
+  color:#64748b;
+  font-size:13px;
+  font-weight:700;
+  width:32px;
+  height:32px;
+  border-radius:8px;
+  padding:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+  cursor:pointer;
+  transition:all .15s ease;
+}
+.phaseArchiveCloseBtn:hover{
+  background:#f1f5f9;
+  border-color:#94a3b8;
+  color:#0f172a;
+}
+.phaseArchiveQuickActionBar{
+  display:flex;
+  justify-content:flex-end;
+  margin-top:10px;
+}
+.phaseArchiveTableBtn{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  background:#2eae6c;
+  border:1px solid #2eae6c;
+  color:#ffffff;
+  font-weight:700;
+  font-size:11px;
+  padding:5px 11px;
+  border-radius:6px;
+  box-shadow:0 1px 3px rgba(46,174,108,.25);
+  cursor:pointer;
+  transition:all .15s ease;
+}
+.phaseArchiveTableBtn:hover{
+  background:#238d57;
+  border-color:#238d57;
+  color:#ffffff;
 }
 
 .phaseArchivePhaseInfo{
@@ -2461,30 +3509,219 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
 .phaseArchiveSummary{
   display:flex;
   flex-wrap:wrap;
-  gap:8px;
-  margin-top:15px;
+  gap:6px;
+  margin-top:12px;
 }
 .phaseArchiveSummaryItem{
   display:inline-flex;
-  align-items:baseline;
+  align-items:center;
   gap:6px;
-  min-height:31px;
-  padding:6px 10px;
+  padding:5px 10px;
   border:1px solid #dce3eb;
   border-radius:999px;
-  background:#fff;
-  color:#5c687a;
-  font-size:10px;
-  font-weight:750;
+  background:#ffffff;
+  color:#475569;
+  font-size:11px;
+  font-weight:600;
+  cursor:pointer;
+  transition:all .15s ease;
+}
+.phaseArchiveSummaryItem:hover{
+  background:#f8fafc;
+  border-color:#cbd5e1;
+}
+.phaseArchiveSummaryItem.active{
+  border-color:#2eae6c;
+  background:#f0fdf4;
+  color:#15803d;
+  box-shadow:0 0 0 1.5px #2eae6c;
 }
 .phaseArchiveSummaryItem strong{
-  color:#172033;
-  font-size:13px;
+  background:#f1f5f9;
+  color:#0f172a;
+  padding:1px 6px;
+  border-radius:999px;
+  font-size:10px;
+  font-weight:800;
+}
+.phaseArchiveSummaryItem.active strong{
+  background:#dcfce7;
+  color:#166534;
 }
 .phaseArchiveSummaryItem--selected{border-color:#c7e7d4;background:#effaf4;color:#24794d}
 .phaseArchiveSummaryItem--removed{border-color:#f0ccd1;background:#fff2f3;color:#ae3d48}
 .phaseArchiveSummaryItem--inherited{border-color:#cbdcf3;background:#f0f6fe;color:#3c6fae}
 .phaseArchiveSummaryItem--pending{border-color:#e1d5b4;background:#fff9e9;color:#8b6a17}
+
+/* Toolbar de Busca e Categoria */
+.phaseArchiveToolbar{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  margin-top:14px;
+  padding-bottom:12px;
+  border-bottom:1px solid #e2e8f0;
+}
+.phaseArchiveSearchRow{
+  display:flex;
+  gap:8px;
+  align-items:center;
+}
+.phaseArchiveSearchWrap{
+  position:relative;
+  flex:1;
+}
+.phaseArchiveSearchInput{
+  width:100%;
+  padding:8px 28px 8px 10px;
+  border:1px solid #cbd5e1;
+  border-radius:7px;
+  font-size:12px;
+  color:#0f172a;
+  background:#ffffff;
+  transition:border-color .15s ease, box-shadow .15s ease;
+  box-sizing:border-box;
+}
+.phaseArchiveSearchInput:focus{
+  border-color:#2eae6c;
+  outline:none;
+  box-shadow:0 0 0 3px rgba(46,174,108,.12);
+}
+.phaseArchiveClearBtn{
+  position:absolute;
+  right:8px;
+  top:50%;
+  transform:translateY(-50%);
+  background:none;
+  border:none;
+  color:#94a3b8;
+  font-size:12px;
+  cursor:pointer;
+  padding:2px 4px;
+}
+.phaseArchiveCategorySelect{
+  max-width:180px;
+  padding:8px 10px;
+  border:1px solid #cbd5e1;
+  border-radius:7px;
+  font-size:11.5px;
+  color:#334155;
+  background:#ffffff;
+  cursor:pointer;
+}
+.phaseArchiveMetaCount{
+  font-size:11px;
+  color:#64748b;
+}
+
+/* Cards Detalhados de Artigos */
+.phaseArchiveArticleCard{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  padding:12px 14px;
+  background:#ffffff;
+  border:1px solid #e2e8f0;
+  border-radius:10px;
+  transition:all .18s ease;
+  box-shadow:0 1px 2px rgba(15,23,42,.03);
+  margin-bottom:10px;
+}
+.phaseArchiveArticleCard:hover{
+  border-color:#cbd5e1;
+  box-shadow:0 3px 8px rgba(15,23,42,.06);
+  transform:translateY(-1px);
+}
+.phaseArchiveCardTop{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.phaseArchiveCardBadges{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.phaseArchiveDateTag{
+  font-size:10px;
+  color:#94a3b8;
+}
+.phaseArchiveCardTitle{
+  font-size:13px;
+  font-weight:700;
+  color:#0f172a;
+  margin:0;
+  line-height:1.35;
+}
+.phaseArchiveCardTitle a{
+  color:#0f172a;
+  text-decoration:none;
+  display:inline-flex;
+  align-items:baseline;
+  gap:4px;
+}
+.phaseArchiveCardTitle a:hover{
+  color:#0284c7;
+  text-decoration:underline;
+}
+.extLinkIcon{
+  font-size:11px;
+  color:#0284c7;
+}
+.phaseArchiveCardMeta{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:10px;
+  font-size:11px;
+  color:#64748b;
+}
+.phaseArchiveCardNote{
+  font-size:11px;
+  color:#475569;
+  background:#f8fafc;
+  border-left:3px solid #cbd5e1;
+  padding:6px 10px;
+  border-radius:0 6px 6px 0;
+  line-height:1.35;
+}
+.phaseArchiveCardActions{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding-top:2px;
+}
+.phaseArchiveMiniBtn{
+  background:#ffffff;
+  border:1px solid #cbd5e1;
+  color:#475569;
+  font-size:11px;
+  font-weight:600;
+  padding:4px 9px;
+  border-radius:6px;
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  transition:all .15s ease;
+  text-decoration:none;
+}
+.phaseArchiveMiniBtn:hover{
+  background:#f1f5f9;
+  color:#0f172a;
+  border-color:#94a3b8;
+}
+.phaseArchiveMiniBtn.copied{
+  background:#f0fdf4;
+  border-color:#86efac;
+  color:#15803d;
+}
+.outcomeIcon{
+  font-size:11px;
+  margin-right:2px;
+}
 .phaseArchiveGroups{
   display:grid;
   grid-template-columns:1fr;

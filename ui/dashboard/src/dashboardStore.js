@@ -66,7 +66,40 @@ export const projectStore = writable({});
 export const papersStore = writable([]);
 export const highlightedLinksStore = writable({});
 export const accessStateStore = writable('loading'); // 'loading' | 'ready' | 'project-required' | 'offline'
-export const activeViewStore = writable('overview'); // 'overview' | 'phases' | 'categories' | 'papers'
+
+export const DASHBOARD_VIEWS = ['overview', 'phases', 'categories', 'papers'];
+
+export function getSavedDashboardView() {
+  if (typeof window !== 'undefined' && window.location.hash) {
+    const hash = window.location.hash.replace('#', '').toLowerCase().trim();
+    if (DASHBOARD_VIEWS.includes(hash)) return hash;
+  }
+  try {
+    const saved = localStorage.getItem('icipo_dashboard_view');
+    if (saved && DASHBOARD_VIEWS.includes(saved.toLowerCase().trim())) {
+      return saved.toLowerCase().trim();
+    }
+  } catch {}
+  return 'overview';
+}
+
+export function persistDashboardView(view) {
+  if (!DASHBOARD_VIEWS.includes(view)) return;
+  try {
+    localStorage.setItem('icipo_dashboard_view', view);
+  } catch {}
+  try {
+    if (typeof window !== 'undefined') {
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, '', `#${view}`);
+      } else {
+        window.location.hash = `#${view}`;
+      }
+    }
+  } catch {}
+}
+
+export const activeViewStore = writable(getSavedDashboardView()); // 'overview' | 'phases' | 'categories' | 'papers'
 export const phaseCreationRequiredStore = writable(false);
 export const dashboardIntroRequiredStore = writable(false);
 export const categoryCreationRequiredStore = writable(false);
@@ -273,8 +306,28 @@ export async function loadDashboardState() {
     articleTutorialOpenStore.set(artReq);
     accessStateStore.set('ready');
 
-    const defaultView = introReq ? 'overview' : (phaseReq ? 'phases' : (catReq ? 'categories' : (artReq ? 'papers' : 'overview')));
-    activeViewStore.set(defaultView);
+    // Determina a visualização ativa respeitando a página atual ou salva pelo usuário
+    const currentView = get(activeViewStore);
+    const savedView = getSavedDashboardView();
+    const preferredView = currentView && DASHBOARD_VIEWS.includes(currentView)
+      ? currentView
+      : savedView;
+
+    let targetView = preferredView;
+    if (introReq) {
+      targetView = 'overview';
+    } else if (phaseReq) {
+      targetView = 'phases';
+    } else if (catReq) {
+      targetView = 'categories';
+    } else if (artReq) {
+      targetView = 'papers';
+    } else if (!DASHBOARD_VIEWS.includes(targetView)) {
+      targetView = 'overview';
+    }
+
+    persistDashboardView(targetView);
+    activeViewStore.set(targetView);
   } catch (err) {
     console.error('Falha ao carregar estado do dashboard:', err);
     if (err?.message === "No active project") {
@@ -355,6 +408,7 @@ export function setActiveView(view) {
       ? 'phases'
       : (catReq ? 'categories' : view));
 
+  persistDashboardView(allowedView);
   activeViewStore.set(allowedView);
 }
 
@@ -367,6 +421,7 @@ export function openPapersWithFilter({ metric = 'all', category = 'all', phase =
   paperCategoryFilterStore.set(category);
   paperPhaseFilterStore.set(phase);
   paperCurrentPhaseToggleStore.set(phase === 'active');
+  persistDashboardView('papers');
   activeViewStore.set('papers');
 }
 
@@ -738,7 +793,7 @@ export function dismissIntroModal() {
   dashboardIntroRequiredStore.set(false);
   const phaseReq = get(phaseCreationRequiredStore);
   if (phaseReq) {
-    activeViewStore.set('phases');
+    setActiveView('phases');
   }
 }
 

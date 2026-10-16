@@ -18,6 +18,9 @@
   function setTab(tabId) {
     activeTab = tabId;
     try {
+      localStorage.setItem('icipo_options_tab', tabId);
+    } catch {}
+    try {
       if (history && history.replaceState) history.replaceState(null, '', `#${tabId}`);
       else location.hash = `#${tabId}`;
     } catch {}
@@ -213,11 +216,23 @@
   let onFocus;
 
   onMount(() => {
+    let initialTab = null;
     if (location.hash) {
       const hash = location.hash.replace('#', '');
-      if (hash === 'panel-backup' || hash === 'panel-server') {
-        activeTab = hash;
+      if (['panel-backup', 'panel-server', 'panel-danger'].includes(hash)) {
+        initialTab = hash;
       }
+    }
+    if (!initialTab) {
+      try {
+        const saved = localStorage.getItem('icipo_options_tab');
+        if (['panel-backup', 'panel-server', 'panel-danger'].includes(saved)) {
+          initialTab = saved;
+        }
+      } catch {}
+    }
+    if (initialTab) {
+      activeTab = initialTab;
     }
 
     loadExtensionState();

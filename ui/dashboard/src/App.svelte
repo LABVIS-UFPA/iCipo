@@ -17,15 +17,31 @@
     accessStateStore,
     loadDashboardState,
     bindStorageSync,
-    unbindStorageSync
+    unbindStorageSync,
+    setActiveView,
+    DASHBOARD_VIEWS
   } from "./dashboardStore.js";
 
+  function handleHashChange() {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash.replace('#', '').toLowerCase().trim();
+    if (DASHBOARD_VIEWS.includes(hash)) {
+      setActiveView(hash);
+    }
+  }
+
   onMount(async () => {
+    if (typeof window !== "undefined") {
+      window.addEventListener("hashchange", handleHashChange);
+    }
     bindStorageSync();
     await loadDashboardState();
   });
 
   onDestroy(() => {
+    if (typeof window !== "undefined") {
+      window.removeEventListener("hashchange", handleHashChange);
+    }
     unbindStorageSync();
   });
 </script>
