@@ -501,13 +501,13 @@
         <table class="phaseTable" id="phaseArticlesTable">
           <thead>
             <tr>
-              <th>Título / Autores</th>
-              <th style="width:74px">Ano</th>
-              <th style="width:110px">Desfecho</th>
-              <th style="width:150px">Categoria</th>
-              <th style="width:130px">Tags</th>
-              <th style="width:180px;text-align:center">Decisão na Fase</th>
-              <th style="width:96px;text-align:right">Ações</th>
+              <th class="phaseColTitle">Título / Autores</th>
+              <th class="phaseColYear">Ano</th>
+              <th class="phaseColOutcome">Desfecho</th>
+              <th class="phaseColCategory">Categoria</th>
+              <th class="phaseColTags">Tags</th>
+              <th class="phaseColTriage">Decisão</th>
+              <th class="phaseColActions">Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -538,7 +538,7 @@
                   </div>
                 </td>
 
-                <td>
+                <td class="phaseTableCellYear">
                   <input
                     class="cellInput phaseInlineYear"
                     value={extractPaperYear(record.paper) || ""}
@@ -549,21 +549,21 @@
                   />
                 </td>
 
-                <td>
+                <td class="phaseTableCellOutcome">
                   <span class="phaseArchiveOutcome {outcomeInfo.cls}">
                     <span class="outcomeIcon" aria-hidden="true">{outcomeInfo.icon}</span>
                     <span>{outcomeInfo.label}</span>
                   </span>
                 </td>
 
-                <td>
+                <td class="phaseTableCellCategory">
                   <span class="phaseArchiveCategoryBadge" title="Categoria: {catInfo.name}">
                     <i style="background: {catInfo.color}"></i>
                     <span>{catInfo.name}</span>
                   </span>
                 </td>
 
-                <td>
+                <td class="phaseTableCellTags">
                   <input
                     class="cellInput phaseInlineTags"
                     value={Array.isArray(record.paper?.tags) ? record.paper.tags.join(";") : ""}
