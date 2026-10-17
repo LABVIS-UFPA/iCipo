@@ -512,7 +512,7 @@ svg .axis line, svg .axis path{stroke: rgba(234,240,255,0.18)}
 .categoryList .title{font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width: calc(100% - 160px)}
 .categoryList .sub{font-size:12px;color:var(--muted)}
 .categoryList .right{display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0;align-items:center}
-.categoryList button{height:34px;padding:0 12px;border:0;border-radius:8px;background:rgba(255,255,255,0.06);color:var(--text);font-weight:900;cursor:pointer}
+.categoryList button{display:inline-flex;align-items:center;gap:5px;height:34px;padding:0 12px;border:0;border-radius:8px;background:rgba(255,255,255,0.06);color:var(--text);font-weight:900;cursor:pointer}
 .categoryList button:hover{filter:brightness(1.04)}
 .categoryList button.dark{background: rgba(255,255,255,0.92); color: #101010}
 
@@ -1228,6 +1228,7 @@ body{
   display:flex;
   justify-content:center;
   align-items:center;
+  gap:6px;
   width:100%;
   min-width:0;
   min-height:36px;

@@ -293,7 +293,13 @@
         type="button"
         on:click={() => setTab('panel-backup')}
       >
-        <span class="navIcon" aria-hidden="true">⇩</span>
+        <span class="navIcon" aria-hidden="true">
+          <svg class="academicSvg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </span>
         <span class="navText">
           <strong>Backup</strong>
           <small>Exportar e restaurar dados</small>
@@ -306,7 +312,14 @@
         type="button"
         on:click={() => setTab('panel-server')}
       >
-        <span class="navIcon" aria-hidden="true">⌁</span>
+        <span class="navIcon" aria-hidden="true">
+          <svg class="academicSvg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+            <line x1="6" y1="6" x2="6.01" y2="6"/>
+            <line x1="6" y1="18" x2="6.01" y2="18"/>
+          </svg>
+        </span>
         <span class="navText">
           <strong>Servidor</strong>
           <small>Conexão WebSocket local</small>
@@ -338,11 +351,23 @@
 
       <div class="sidebarNavActions">
         <button class="sidebarBack dashboardReturnButton" type="button" on:click={navigateToDashboard}>
-          <span class="dashboardReturnIcon" aria-hidden="true">⌂</span>
+          <span class="dashboardReturnIcon" aria-hidden="true">
+            <svg class="academicSvg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="7" height="9" rx="1.5"/>
+              <rect x="14" y="3" width="7" height="5" rx="1.5"/>
+              <rect x="14" y="12" width="7" height="9" rx="1.5"/>
+              <rect x="3" y="16" width="7" height="5" rx="1.5"/>
+            </svg>
+          </span>
           <span>Voltar ao dashboard</span>
         </button>
         <button class="sidebarBack projectsReturnButton" type="button" on:click={navigateToProjects}>
-          <span class="dashboardReturnIcon" aria-hidden="true">📁</span>
+          <span class="dashboardReturnIcon" aria-hidden="true">
+            <svg class="academicSvg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/>
+              <path d="M6 6h10M6 10h10M6 14h6"/>
+            </svg>
+          </span>
           <span>Meus projetos</span>
         </button>
       </div>
@@ -364,7 +389,9 @@
           <p>Controle seus backups e a comunicação com o servidor local.</p>
         </div>
         <div class="securityBadge">
-          <span aria-hidden="true">✓</span>
+          <svg class="academicSvg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
           <div>
             <strong>Dados no seu dispositivo</strong>
             <small>As configurações ficam armazenadas localmente.</small>
@@ -375,7 +402,13 @@
       <!-- PAINEL BACKUP -->
       <section class="panel" class:active={activeTab === 'panel-backup'} id="panel-backup">
         <div class="panelHeader">
-          <div class="panelTitleIcon" aria-hidden="true">⇩</div>
+          <div class="panelTitleIcon" aria-hidden="true">
+            <svg class="academicSvg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+          </div>
           <div>
             <h2>Backup do armazenamento</h2>
             <p>Exporte uma cópia de segurança ou restaure os dados da extensão.</p>
@@ -384,26 +417,48 @@
 
         <div class="settingsGrid backupGrid">
           <article class="settingsCard actionCard">
-            <div class="cardIcon cardIconGreen" aria-hidden="true">↓</div>
+            <div class="cardIcon cardIconGreen" aria-hidden="true">
+              <svg class="academicSvg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+            </div>
             <div class="cardContent">
               <span class="cardEyebrow">Exportação</span>
               <h3>Baixar backup</h3>
               <p>Gere um arquivo JSON com os dados atualmente salvos na extensão.</p>
             </div>
             <button class="btn primary" type="button" on:click={downloadBackup}>
-              <span aria-hidden="true">↓</span> Baixar arquivo JSON
+              <svg class="academicSvg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              <span>Baixar arquivo JSON</span>
             </button>
           </article>
 
           <article class="settingsCard actionCard">
-            <div class="cardIcon cardIconPurple" aria-hidden="true">↑</div>
+            <div class="cardIcon cardIconPurple" aria-hidden="true">
+              <svg class="academicSvg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+            </div>
             <div class="cardContent">
               <span class="cardEyebrow">Restauração</span>
               <h3>Importar backup</h3>
               <p>Selecione um arquivo JSON. A importação pode substituir dados existentes.</p>
             </div>
             <label class="filePicker" for="uploadStorage">
-              <span class="filePickerIcon" aria-hidden="true">＋</span>
+              <span class="filePickerIcon" aria-hidden="true">
+                <svg class="academicSvg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+              </span>
               <span><strong>Selecionar arquivo</strong><small>{uploadFileName}</small></span>
               <input id="uploadStorage" type="file" accept=".json,application/json" on:change={handleFileUpload} />
             </label>
@@ -411,7 +466,13 @@
         </div>
 
         <aside class="infoCallout">
-          <span class="calloutIcon" aria-hidden="true">i</span>
+          <span class="calloutIcon" aria-hidden="true">
+            <svg class="academicSvg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="16" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+          </span>
           <div>
             <strong>Antes de restaurar</strong>
             <p>Faça um backup atual. Após uma restauração, recarregue as páginas abertas para atualizar as informações exibidas.</p>
@@ -422,7 +483,14 @@
       <!-- PAINEL SERVIDOR -->
       <section class="panel" class:active={activeTab === 'panel-server'} id="panel-server">
         <div class="panelHeader">
-          <div class="panelTitleIcon" aria-hidden="true">⌁</div>
+          <div class="panelTitleIcon" aria-hidden="true">
+            <svg class="academicSvg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+              <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+              <line x1="6" y1="6" x2="6.01" y2="6"/>
+              <line x1="6" y1="18" x2="6.01" y2="18"/>
+            </svg>
+          </div>
           <div>
             <h2>Servidor WebSocket</h2>
             <p>Configure a comunicação entre a extensão e o servidor local do projeto.</p>
@@ -444,7 +512,13 @@
             <div class="field fieldUrl">
               <label for="serverUrl">URL</label>
               <div class="inputShell">
-                <span aria-hidden="true">⌂</span>
+                <span aria-hidden="true">
+                  <svg class="academicSvg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="2" y1="12" x2="22" y2="12"/>
+                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                  </svg>
+                </span>
                 <input type="text" id="serverUrl" bind:value={serverUrl} placeholder="ws://localhost" autocomplete="off" />
               </div>
               <small>Use o protocolo <code>ws://</code> para conexões locais.</small>
@@ -453,7 +527,7 @@
             <div class="field fieldPort">
               <label for="serverPort">Porta</label>
               <div class="inputShell">
-                <span aria-hidden="true">#</span>
+                <span aria-hidden="true" style="font-weight:750;font-size:13px">#</span>
                 <input type="number" id="serverPort" bind:value={serverPort} placeholder="8080" min="1" max="65535" />
               </div>
               <small>Porta padrão do projeto: 8080.</small>
@@ -465,7 +539,11 @@
               {serverStatus === 'Conectado' ? 'Desconectar' : 'Conectar'}
             </button>
             <button class="btn secondary" type="button" on:click={sendPing}>
-              <span aria-hidden="true">↗</span> Enviar ping
+              <svg class="academicSvg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="22 2 11 13"/>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              </svg>
+              <span>Enviar ping</span>
             </button>
             <span class="connectionHint">As últimas 500 mensagens são mantidas no armazenamento local.</span>
           </div>

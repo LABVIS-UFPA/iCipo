@@ -310,7 +310,13 @@
       on:click={() => handleFilterPillClick('inherited')}
       title="Filtrar artigos herdados da fase anterior"
     >
-      <span>📥 Herdados</span>
+      <span style="display:inline-flex;align-items:center;gap:5px">
+        <svg class="academicSvg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
+          <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
+        </svg>
+        <span>Herdados</span>
+      </span>
       <strong>{inheritedCount}</strong>
     </button>
 
@@ -321,7 +327,12 @@
       on:click={() => handleFilterPillClick('pending')}
       title="Filtrar artigos pendentes de avaliação"
     >
-      <span>⏳ Pendentes</span>
+      <span style="display:inline-flex;align-items:center;gap:5px">
+        <svg class="academicSvg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M5 22h14M5 2h14M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/>
+        </svg>
+        <span>Pendentes</span>
+      </span>
       <strong>{pendingCount}</strong>
     </button>
 
@@ -332,7 +343,13 @@
       on:click={() => handleFilterPillClick('included')}
       title="Filtrar artigos aprovados para avançar"
     >
-      <span>✅ Aprovados</span>
+      <span style="display:inline-flex;align-items:center;gap:5px">
+        <svg class="academicSvg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+          <polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+        <span>Aprovados</span>
+      </span>
       <strong>{selectedCount}</strong>
     </button>
 
@@ -343,7 +360,14 @@
       on:click={() => handleFilterPillClick('excluded')}
       title="Filtrar artigos excluídos ou duplicados"
     >
-      <span>❌ Excluídos</span>
+      <span style="display:inline-flex;align-items:center;gap:5px">
+        <svg class="academicSvg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="15" y1="9" x2="9" y2="15"/>
+          <line x1="9" y1="9" x2="15" y2="15"/>
+        </svg>
+        <span>Excluídos</span>
+      </span>
       <strong>{removedCount}</strong>
     </button>
   </div>
@@ -393,7 +417,13 @@
           on:click={() => setPhaseArticlesViewMode('cards')}
           title="Visualizar em cartões com detalhes completos"
         >
-          ▤ Cartões
+          <svg class="academicSvg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="3" width="7" height="7" rx="1"/>
+            <rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="14" y="14" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/>
+          </svg>
+          <span>Cartões</span>
         </button>
         <button
           type="button"
@@ -402,7 +432,11 @@
           on:click={() => setPhaseArticlesViewMode('table')}
           title="Visualizar em tabela analítica compacta"
         >
-          ▦ Tabela
+          <svg class="academicSvg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <path d="M3 9h18M3 15h18M9 3v18"/>
+          </svg>
+          <span>Tabela</span>
         </button>
       </div>
     </div>

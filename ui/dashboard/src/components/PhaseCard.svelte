@@ -120,7 +120,12 @@
       <div class="phaseStatusIndicator">
         {#if isCompleted}
           <span class="statusBadge badgeDone" title="Fase concluída e protegida">
-            <span class="statusBadgeIcon">✓</span> Concluída
+            <span class="statusBadgeIcon" aria-hidden="true">
+              <svg class="academicSvg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </span>
+            <span>Concluída</span>
           </span>
         {:else if isActivePhase}
           <span class="statusBadge badgeActive" title="Fase atualmente em condução">
@@ -128,7 +133,13 @@
           </span>
         {:else}
           <span class="statusBadge badgePlanned" title="Aguardando conclusão da fase anterior">
-            <span class="statusBadgeIcon">⏱</span> Planejada
+            <span class="statusBadgeIcon" aria-hidden="true">
+              <svg class="academicSvg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+            </span>
+            <span>Planejada</span>
           </span>
         {/if}
       </div>
@@ -184,7 +195,12 @@
         on:keydown={(ev) => ev.key === 'Enter' && handleMetricBoxClick(ev, 'inherited')}
       >
         <div class="metricBoxHeader">
-          <span class="metricIcon">📥</span>
+          <span class="metricIcon" aria-hidden="true">
+            <svg class="academicSvg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
+              <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
+            </svg>
+          </span>
           <span class="metricLabel">Herdados</span>
         </div>
         <strong class="metricValue">{stats.inherited}</strong>
@@ -200,7 +216,11 @@
         on:keydown={(ev) => ev.key === 'Enter' && handleMetricBoxClick(ev, 'pending')}
       >
         <div class="metricBoxHeader">
-          <span class="metricIcon">⏳</span>
+          <span class="metricIcon" aria-hidden="true">
+            <svg class="academicSvg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M5 22h14M5 2h14M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/>
+            </svg>
+          </span>
           <span class="metricLabel">Pendentes</span>
         </div>
         <strong class="metricValue">{stats.pending}</strong>
@@ -216,7 +236,12 @@
         on:keydown={(ev) => ev.key === 'Enter' && handleMetricBoxClick(ev, 'included')}
       >
         <div class="metricBoxHeader">
-          <span class="metricIcon">✅</span>
+          <span class="metricIcon" aria-hidden="true">
+            <svg class="academicSvg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+          </span>
           <span class="metricLabel">Aprovados</span>
         </div>
         <strong class="metricValue">{stats.selected}</strong>
@@ -232,7 +257,13 @@
         on:keydown={(ev) => ev.key === 'Enter' && handleMetricBoxClick(ev, 'excluded')}
       >
         <div class="metricBoxHeader">
-          <span class="metricIcon">❌</span>
+          <span class="metricIcon" aria-hidden="true">
+            <svg class="academicSvg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="15" y1="9" x2="9" y2="15"/>
+              <line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+          </span>
           <span class="metricLabel">Excluídos</span>
         </div>
         <strong class="metricValue">{stats.removed}</strong>
@@ -271,7 +302,12 @@
           aria-expanded={isExpanded}
           title={isExpanded ? 'Recolher gaveta de artigos' : 'Ver e triar artigos desta fase'}
         >
-          <span class="phaseArchiveBtnIcon">▤</span>
+          <span class="phaseArchiveBtnIcon" aria-hidden="true">
+            <svg class="academicSvg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <path d="M3 9h18M3 15h18M9 3v18"/>
+            </svg>
+          </span>
           <span>{isExpanded ? 'Ocultar artigos' : 'Ver artigos'}</span>
           <span class="archiveChevron" class:expanded={isExpanded} aria-hidden="true">▾</span>
         </button>

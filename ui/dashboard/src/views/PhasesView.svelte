@@ -48,7 +48,17 @@
 <section class="view phasesView" id="view_phases">
   <div class="panelHeader">
     <div>
-      <h2>Fases do Estudo</h2>
+      <div class="viewTitleWithBadge">
+        <span class="viewTitleIconBadge" aria-hidden="true">
+          <svg class="academicSvg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 6h16M4 12h16M4 18h16"/>
+            <circle cx="8" cy="6" r="2" fill="currentColor"/>
+            <circle cx="16" cy="12" r="2" fill="currentColor"/>
+            <circle cx="10" cy="18" r="2" fill="currentColor"/>
+          </svg>
+        </span>
+        <h2>Fases do Estudo</h2>
+      </div>
       <p>
         Gerencie as etapas da sua Revisão Sistemática. Os artigos selecionados em cada etapa avançam como herança para a fase seguinte.
       </p>
@@ -63,11 +73,17 @@
         type="button"
         on:click={handleAddPhase}
       >
-        <span aria-hidden="true">＋</span>
+        <svg class="academicSvg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
         <span>Adicionar nova fase</span>
       </button>
-      <div class="muted phaseToolbarHint">
-        <span>💡 Use a barra de rolagem horizontal abaixo dos cards para navegar no fluxo sequencial.</span>
+      <div class="muted phaseToolbarHint" style="display:inline-flex;align-items:center;gap:6px">
+        <svg class="academicSvg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--orange);" aria-hidden="true">
+          <path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-7 7c0 2.5 1.5 4.5 3 6h8c1.5-1.5 3-3.5 3-6a7 7 0 0 0-7-7z"/>
+        </svg>
+        <span>Use a barra de rolagem horizontal abaixo dos cards para navegar no fluxo sequencial.</span>
       </div>
     </div>
   </div>
@@ -111,7 +127,14 @@
       <div id="phasesList" class="phasesFlowList" aria-live="polite">
         {#if phases.length === 0}
           <div class="overviewEmptyState" style="padding: 36px 20px; text-align: center; width: 100%;">
-            <div style="font-size: 32px; margin-bottom: 8px;">📑</div>
+            <div style="margin-bottom: 10px; color: var(--green);">
+              <svg class="academicSvg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 6h16M4 12h16M4 18h16"/>
+                <circle cx="8" cy="6" r="2" fill="currentColor"/>
+                <circle cx="16" cy="12" r="2" fill="currentColor"/>
+                <circle cx="10" cy="18" r="2" fill="currentColor"/>
+              </svg>
+            </div>
             <div style="font-weight: 750; font-size: 15px; margin-bottom: 6px;">Nenhuma fase cadastrada</div>
             <p style="color: var(--muted); font-size: 13px; max-width: 440px; margin: 0 auto 16px;">
               Este projeto ainda não possui fases. Crie a primeira fase para definir critérios de triagem e começar a marcar artigos no Google Scholar.

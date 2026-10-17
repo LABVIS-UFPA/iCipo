@@ -111,13 +111,26 @@
 <section class="view overviewView" id="view_overview">
   <div class="overviewHeading">
     <div>
-      <h2>Visão Geral</h2>
+      <div class="viewTitleWithBadge">
+        <span class="viewTitleIconBadge" aria-hidden="true">
+          <svg class="academicSvg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="9" rx="1.5"/>
+            <rect x="14" y="3" width="7" height="5" rx="1.5"/>
+            <rect x="14" y="12" width="7" height="9" rx="1.5"/>
+            <rect x="3" y="16" width="7" height="5" rx="1.5"/>
+          </svg>
+        </span>
+        <h2>Visão Geral</h2>
+      </div>
       <p>
         Acompanhe o progresso do seu projeto e explore os principais indicadores.
       </p>
     </div>
     <div class="overviewUpdated">
-      <span aria-hidden="true">◷</span>
+      <svg class="academicSvg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10"/>
+        <polyline points="12 6 12 12 16 14"/>
+      </svg>
       <span id="overviewUpdatedAt">{updatedText}</span>
     </div>
   </div>
@@ -151,7 +164,12 @@
       aria-label="Ver todos os artigos"
       on:click={() => handleMetricClick('all')}
     >
-      <span class="paperMetricIcon" aria-hidden="true">▤</span>
+      <span class="paperMetricIcon" aria-hidden="true">
+        <svg class="academicSvg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/>
+          <path d="M6 6h10M6 10h10M6 14h6"/>
+        </svg>
+      </span>
       <span class="paperMetricContent">
         <span class="paperMetricLabel">Total</span>
         <strong id="paperMetricTotal">{metrics.total}</strong>
@@ -169,7 +187,12 @@
       aria-label="Ver artigos incluídos"
       on:click={() => handleMetricClick('included')}
     >
-      <span class="paperMetricIcon" aria-hidden="true">✓</span>
+      <span class="paperMetricIcon" aria-hidden="true">
+        <svg class="academicSvg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          <path d="m9 12 2 2 4-4"/>
+        </svg>
+      </span>
       <span class="paperMetricContent">
         <span class="paperMetricLabel">Incluídos</span>
         <strong id="paperMetricIncluded">{metrics.included}</strong>
@@ -185,7 +208,13 @@
       aria-label="Ver artigos excluídos"
       on:click={() => handleMetricClick('excluded')}
     >
-      <span class="paperMetricIcon" aria-hidden="true">×</span>
+      <span class="paperMetricIcon" aria-hidden="true">
+        <svg class="academicSvg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="15" y1="9" x2="9" y2="15"/>
+          <line x1="9" y1="9" x2="15" y2="15"/>
+        </svg>
+      </span>
       <span class="paperMetricContent">
         <span class="paperMetricLabel">Excluídos</span>
         <strong id="paperMetricExcluded">{metrics.excluded}</strong>
@@ -201,7 +230,11 @@
       aria-label="Ver artigos pendentes"
       on:click={() => handleMetricClick('pending')}
     >
-      <span class="paperMetricIcon" aria-hidden="true">◷</span>
+      <span class="paperMetricIcon" aria-hidden="true">
+        <svg class="academicSvg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 22h14M5 2h14M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/>
+        </svg>
+      </span>
       <span class="paperMetricContent">
         <span class="paperMetricLabel">Pendentes</span>
         <strong id="paperMetricPending">{metrics.pending}</strong>
@@ -215,7 +248,13 @@
     <article class="overviewCard categoryDistributionCard">
       <div class="overviewCardHeader">
         <div class="overviewCardTitle">
-          <span class="overviewTitleIcon">◫</span> Distribuição por categoria
+          <span class="overviewTitleIcon" aria-hidden="true">
+            <svg class="academicSvg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.21 15.89A10 10 0 1 1 8 2.83"/>
+              <path d="M22 12A10 10 0 0 0 12 2v10z"/>
+            </svg>
+          </span>
+          <span>Distribuição por categoria</span>
         </div>
       </div>
       <div class="categoryDistributionBody">
@@ -263,7 +302,14 @@
     <article class="overviewCard phaseProgressCard">
       <div class="overviewCardHeader">
         <div class="overviewCardTitle">
-          <span class="overviewTitleIcon">▧</span> Progresso das fases
+          <span class="overviewTitleIcon" aria-hidden="true">
+            <svg class="academicSvg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 6h16M4 12h16M4 18h16"/>
+              <circle cx="8" cy="6" r="2" fill="currentColor"/>
+              <circle cx="16" cy="12" r="2" fill="currentColor"/>
+            </svg>
+          </span>
+          <span>Progresso das fases</span>
         </div>
       </div>
       <div id="phaseProgressList" class="phaseProgressList">
@@ -304,7 +350,15 @@
   <article class="overviewCard recentArticlesCard">
     <div class="overviewCardHeader">
       <div class="overviewCardTitle">
-        <span class="overviewTitleIcon">▣</span> Artigos recentes
+        <span class="overviewTitleIcon" aria-hidden="true">
+          <svg class="academicSvg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+        </span>
+        <span>Artigos recentes</span>
       </div>
     </div>
     <div class="overviewRecentTableWrap">

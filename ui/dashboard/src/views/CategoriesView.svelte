@@ -14,7 +14,15 @@
 
 <section class="view categoriesView" id="view_categories">
   <div class="panelHeader">
-    <h2>Categorias</h2>
+    <div class="viewTitleWithBadge">
+      <span class="viewTitleIconBadge" aria-hidden="true">
+        <svg class="academicSvg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+          <line x1="7" y1="7" x2="7.01" y2="7"/>
+        </svg>
+      </span>
+      <h2>Categorias</h2>
+    </div>
     <p>
       Gerencie as categorias padrão (<b>Incluir</b>, <b>Excluir</b> e <b>Pendente</b>) e crie categorias personalizadas com desfecho vinculado às métricas da pesquisa.
     </p>
@@ -23,10 +31,18 @@
   <div class="toolbar">
     <div style="display:flex;gap:10px;align-items:center;width:100%;flex-wrap:wrap">
       <button id="btnShowAddCategory" class="btn" type="button" on:click={handleAddCategory}>
-        + Criar categoria personalizada
+        <svg class="academicSvg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        <span>Criar categoria personalizada</span>
       </button>
       <button class="btn ghost" type="button" on:click={openArticleTutorial}>
-        📖 Como funciona a triagem
+        <svg class="academicSvg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+          <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+        </svg>
+        <span>Como funciona a triagem</span>
       </button>
       <div class="muted" style="margin-left:auto">
         Categorias personalizadas somam automaticamente no indicador ao qual foram associadas.
@@ -35,7 +51,13 @@
   </div>
 
   <div class="card card--categories" style="margin-top:12px">
-    <div class="cardTitle">Lista de categorias</div>
+    <div class="cardTitle" style="display:flex;align-items:center;gap:7px">
+      <svg class="academicSvg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--green)" aria-hidden="true">
+        <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+        <line x1="7" y1="7" x2="7.01" y2="7"/>
+      </svg>
+      <span>Lista de categorias</span>
+    </div>
     <div class="muted" style="margin-bottom:8px">
       Use <b>Editar</b> para ajustar a finalidade da categoria ou
       <b>Excluir</b> para removê-la.
