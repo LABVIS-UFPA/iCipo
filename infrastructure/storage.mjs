@@ -1027,6 +1027,16 @@ class NodeFsStrategy {
       .map(entry => entry.paper)
       .filter(paper => paper && typeof paper === 'object' && paper.visited !== false);
 
+    const activePhase = phases.find(p => p.label === project.activePhaseLabel && !p.completed)
+      || phases.find(p => !p.completed)
+      || phases[0]
+      || null;
+
+    // Se uma categoria estiver desmarcada na fase ativa, os links marcados nessa categoria não devem ser destacados no navegador
+    const activeCategoryLabels = new Set(
+      Array.isArray(activePhase?.categories) ? activePhase.categories : []
+    );
+
     for (const paper of allProjectPapers) {
       const normalizedUrl = normalizeArticleUrl(paper.url || '');
       if (!normalizedUrl) continue;
@@ -1051,6 +1061,11 @@ class NodeFsStrategy {
       const category = categoryMap.get(latestClassification.classification.categoryLabel)
         || null;
       if (!category) continue;
+
+      // Se a categoria foi desmarcada na fase ativa, não destaca o link no navegador!
+      if (!activeCategoryLabels.has(category.label)) {
+        continue;
+      }
 
       const rawUrl = String(paper.url || '').trim();
       if (!rawUrl) continue;

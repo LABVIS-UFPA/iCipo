@@ -54,23 +54,33 @@
   $: stats = isEditing && editingPhase ? getPhaseStats(editingPhase, $papersStore) : null;
   $: pendingCount = stats ? stats.pending : 0;
 
-  // Sincroniza formulário quando editingPhase muda ou o painel abre
-  $: if (isOpen) {
+  let lastOpenedEditingPhase = undefined;
+  let wasOpen = false;
+
+  // Sincroniza formulário quando o painel abre ou editingPhase muda
+  $: if (isOpen && (!wasOpen || editingPhase !== lastOpenedEditingPhase)) {
+    wasOpen = true;
+    lastOpenedEditingPhase = editingPhase;
     if (editingPhase) {
       title = editingPhase.title || '';
       description = editingPhase.desc ?? editingPhase.description ?? '';
       const existingCats = Array.isArray(editingPhase.categories) ? editingPhase.categories : [];
-      selectedCategories = [...new Set([...existingCats, ...defaultCategoryLabels])];
+      selectedCategories = existingCats.length > 0 ? [...existingCats] : (defaultCategoryLabels.length ? [...defaultCategoryLabels] : projectCategories.map(c => c.label));
       status = isPhaseCompleted(editingPhase) ? 'done' : 'pending';
     } else {
       title = '';
       description = '';
-      selectedCategories = projectCategories.map(c => c.label);
+      selectedCategories = defaultCategoryLabels.length ? [...defaultCategoryLabels] : projectCategories.map(c => c.label);
       status = 'pending';
     }
     titleError = '';
     descError = '';
     categoriesError = '';
+  }
+
+  $: if (!isOpen) {
+    wasOpen = false;
+    lastOpenedEditingPhase = undefined;
   }
   function handleClose() {
     if (phaseCreationRequired) {
@@ -114,16 +124,16 @@
   }
 
   function toggleCategory(catLabel) {
-    if (defaultCategoryLabels.includes(catLabel)) {
-      // Categorias padrão vêm ativadas por padrão em todas as fases
-      return;
-    }
     if (selectedCategories.includes(catLabel)) {
+      if (selectedCategories.length <= 1) {
+        categoriesError = 'A fase deve manter pelo menos uma categoria ativa.';
+        return;
+      }
       selectedCategories = selectedCategories.filter(l => l !== catLabel);
     } else {
       selectedCategories = [...selectedCategories, catLabel];
     }
-    if (selectedCategories.length > 0) categoriesError = '';
+    categoriesError = '';
   }
 
   function selectAllCategories() {
@@ -188,12 +198,17 @@
       }
     }
 
+    if (selectedCategories.length === 0) {
+      categoriesError = 'Selecione pelo menos uma categoria ativa para a fase.';
+      return;
+    }
+
     const selectedCategoryObjects = projectCategories.filter(cat => selectedCategories.includes(cat.label));
     const inheritanceCategory = selectedCategoryObjects.find(cat => (
       normalizeCategoryMetricType(cat?.metricType, 'pending') === 'pending'
     ));
 
-    const allCategoriesToSave = [...new Set([...selectedCategories, ...defaultCategoryLabels])];
+    const allCategoriesToSave = [...new Set(selectedCategories)];
 
     const phasePayload = {
       title: cleanTitle,
@@ -371,7 +386,7 @@
               Categorias Ativas nesta Fase
             </span>
             <div class="phaseDrawerFieldHint">
-              As categorias padrão vêm ativadas por padrão em todas as fases. Você pode associar categorias personalizadas adicionais para esta etapa.
+              Marque ou desmarque as categorias para controlar quais links marcados serão destacados no navegador nesta fase.
             </div>
           </div>
           {#if projectCategories.length > 0}
@@ -417,15 +432,13 @@
               <label
                 class="phaseCategoryCardRow"
                 class:selected={isChecked}
-                class:isDefaultRow={isDefault}
-                title={isDefault ? 'Categoria padrão: ativada por padrão em todas as fases da pesquisa' : ''}
+                title={isDefault ? 'Categoria padrão (clique para marcar ou desmarcar nesta fase)' : (isChecked ? 'Categoria ativa nesta fase' : 'Categoria desmarcada')}
               >
                 <div class="categoryCheckCol">
                   <input
                     type="checkbox"
                     value={cat.label}
                     checked={isChecked}
-                    disabled={isDefault}
                     on:change={() => toggleCategory(cat.label)}
                   />
                   <span

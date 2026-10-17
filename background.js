@@ -410,8 +410,9 @@ async function getHighlightsSnapshotFromWs() {
 
   try {
     const data = await storage.getAllHighlightedLinksForActiveProject();
+    const payload = (data && data.data) ? data.data : data;
     return {
-      highlightedLinks: data?.highlightedLinks || {},
+      highlightedLinks: payload?.highlightedLinks || {},
       active: true
     };
   } catch (error) {

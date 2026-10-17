@@ -1797,6 +1797,48 @@ body{
   color:#334155;
   font-weight:600;
 }
+button.phaseCategoryBadgeItem{
+  cursor:pointer;
+  transition:all 0.15s ease;
+  font-family:inherit;
+}
+button.phaseCategoryBadgeItem:hover:not(:disabled){
+  transform:translateY(-1px);
+  box-shadow:0 2px 4px rgba(0,0,0,0.06);
+}
+button.phaseCategoryBadgeItem.isCatActive{
+  background:#f0fdf4;
+  border-color:#86efac;
+  color:#166534;
+}
+button.phaseCategoryBadgeItem.isCatInactive{
+  background:#f8fafc;
+  border-color:#cbd5e1;
+  border-style:dashed;
+  color:#94a3b8;
+  opacity:0.8;
+}
+button.phaseCategoryBadgeItem.isCatInactive:hover:not(:disabled){
+  opacity:1;
+  border-color:#94a3b8;
+  background:#f1f5f9;
+  color:#475569;
+}
+button.phaseCategoryBadgeItem:disabled{
+  cursor:default;
+  opacity:0.85;
+}
+.catCheckIcon{
+  font-size:10px;
+  margin-left:2px;
+  font-weight:700;
+}
+.phaseCatToggleHint{
+  font-size:10px;
+  color:#94a3b8;
+  font-weight:500;
+  margin-left:auto;
+}
 .catColorDot{
   width:7px;
   height:7px;

@@ -271,10 +271,9 @@ async function fetchOverviewContext(project, consolidatedPapers) {
     console.warn("Não foi possível carregar as marcações da fase ativa.", error);
   }
 
-  const highlightedLinks = {
-    ...(projectScope.highlightedLinks || {}),
-    ...(activeScope.highlightedLinks || {}),
-  };
+  const highlightedLinks = projectScope.highlightedLinks
+    ? { ...projectScope.highlightedLinks }
+    : { ...(activeScope.highlightedLinks || {}) };
 
   return {
     highlightedLinks,
@@ -282,8 +281,8 @@ async function fetchOverviewContext(project, consolidatedPapers) {
   };
 }
 
-export async function loadDashboardState() {
-  accessStateStore.set('loading');
+export async function loadDashboardState(silent = false) {
+  if (!silent) accessStateStore.set('loading');
   try {
     const res = await storage.getActiveProject();
     if (!res || !res.id) {
@@ -344,10 +343,8 @@ export async function loadDashboardState() {
     if (defaultCategoryLabels.length > 0 && Array.isArray(project.phases) && project.phases.length > 0) {
       let phaseCategoriesUpdated = false;
       for (const ph of project.phases) {
-        if (!Array.isArray(ph.categories)) ph.categories = [];
-        const missingDefaults = defaultCategoryLabels.filter(dl => !ph.categories.includes(dl));
-        if (missingDefaults.length > 0) {
-          ph.categories = [...ph.categories, ...missingDefaults];
+        if (!Array.isArray(ph.categories) || ph.categories.length === 0) {
+          ph.categories = defaultCategoryLabels.length ? [...defaultCategoryLabels] : (project.categories || []).map(c => c.label);
           phaseCategoriesUpdated = true;
         }
       }
@@ -1015,24 +1012,72 @@ export async function savePhaseAction(phasePayload, phaseEditingLabel = null) {
   const project = get(projectStore);
   if (!project?.id) throw new Error('Abra um projeto antes de salvar fases.');
 
-  // Assegura que as categorias padrão da pesquisa estejam sempre ativadas por padrão na fase
   const defaultLabels = (project.categories || [])
     .filter(c => isDefaultCategory(c.label) || ['included', 'excluded', 'pending'].includes(normalizeCategoryMetricType(c.metricType, inferMetricTypeFromCategory(c))))
     .map(c => c.label);
 
-  const mergedCategories = [...new Set([...defaultLabels, ...(phasePayload.categories || [])])];
-  const payloadWithDefaults = {
+  let finalCategories;
+  if (Array.isArray(phasePayload.categories) && phasePayload.categories.length > 0) {
+    // Respeita as categorias ativadas/desmarcadas pelo usuário
+    finalCategories = [...new Set(phasePayload.categories)];
+  } else if (!phaseEditingLabel) {
+    // Nova fase: ativa por padrão as categorias padrão
+    finalCategories = defaultLabels.length ? [...defaultLabels] : (project.categories || []).map(c => c.label);
+  } else {
+    finalCategories = (project.categories || []).map(c => c.label);
+  }
+
+  const payload = {
     ...phasePayload,
-    categories: mergedCategories
+    categories: finalCategories
   };
 
   if (phaseEditingLabel) {
-    await storage.updatePhase(project.id, phaseEditingLabel, payloadWithDefaults);
+    await storage.updatePhase(project.id, phaseEditingLabel, payload);
   } else {
-    await storage.savePhase(project.id, payloadWithDefaults);
+    await storage.savePhase(project.id, payload);
   }
 
-  await loadDashboardState();
+  await loadDashboardState(true);
+}
+
+export async function togglePhaseCategoryAction(phaseLabel, categoryLabel) {
+  const project = get(projectStore);
+  if (!project?.id) throw new Error('Abra um projeto antes de configurar categorias.');
+  const phases = Array.isArray(project.phases) ? project.phases : [];
+  const targetPhase = phases.find(p => p.label === phaseLabel);
+  if (!targetPhase) return;
+
+  const currentCats = Array.isArray(targetPhase.categories) ? targetPhase.categories : [];
+  let nextCats;
+  if (currentCats.includes(categoryLabel)) {
+    if (currentCats.length <= 1) {
+      alert('A fase deve conter pelo menos uma categoria ativa.');
+      return;
+    }
+    nextCats = currentCats.filter(c => c !== categoryLabel);
+  } else {
+    nextCats = [...currentCats, categoryLabel];
+  }
+
+  // Atualização otimista imediata no projectStore para feedback instantâneo sem recarregar a tela
+  const updatedPhases = phases.map(ph => {
+    if (ph.label === phaseLabel) {
+      return { ...ph, categories: nextCats };
+    }
+    return ph;
+  });
+  projectStore.set({ ...project, phases: updatedPhases });
+
+  const payload = {
+    title: targetPhase.title,
+    description: targetPhase.description || targetPhase.desc || '',
+    categories: nextCats,
+    criteria: targetPhase.criteria || [],
+  };
+
+  await storage.updatePhase(project.id, phaseLabel, payload);
+  await loadDashboardState(true);
 }
 
 export async function deletePhaseAction(phaseLabel) {

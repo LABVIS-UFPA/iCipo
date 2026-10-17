@@ -6,7 +6,8 @@
     activePhaseLabelStore,
     expandedCompletedPhaseStore,
     paperMetricFilterStore,
-    openPhasePanel
+    openPhasePanel,
+    togglePhaseCategoryAction
   } from '../dashboardStore.js';
   import {
     getPhaseStats,
@@ -58,6 +59,16 @@
     ev.stopPropagation();
     paperMetricFilterStore.set(metric);
     expandedCompletedPhaseStore.set(label);
+  }
+
+  async function handleToggleCategory(ev, catLabel) {
+    ev.stopPropagation();
+    if (isCompleted) return;
+    try {
+      await togglePhaseCategoryAction(label, catLabel);
+    } catch (err) {
+      console.warn('Falha ao alternar categoria na fase:', err);
+    }
   }
 
   function handleCardClick(ev) {
@@ -272,20 +283,32 @@
     </div>
 
     <!-- Categories used in this phase -->
-    {#if phaseCategories.length > 0}
-      <div class="phaseCategoriesSection" title="Critérios e categorias ativas nesta fase">
+    {#if allCategories.length > 0}
+      <div class="phaseCategoriesSection" title="Categorias desta fase — clique para marcar ou desmarcar">
         <div class="phaseCategoriesHeader">
-          <span>Categorias ativas ({phaseCategories.length}):</span>
+          <span>Categorias ({phaseCategoryLabels.length} ativas):</span>
+          {#if !isCompleted}
+            <small class="phaseCatToggleHint">Clique para alternar</small>
+          {/if}
         </div>
         <div class="phaseCategoryBadges">
-          {#each phaseCategories as cat}
-            <span
+          {#each allCategories as cat}
+            {@const isCatActive = phaseCategoryLabels.includes(cat.label)}
+            <button
+              type="button"
               class="phaseCategoryBadgeItem"
-              title="{cat.title || cat.label}: resultado {cat.metricType || 'pendente'}"
+              class:isCatActive={isCatActive}
+              class:isCatInactive={!isCatActive}
+              class:isReadOnly={isCompleted}
+              disabled={isCompleted}
+              on:click={(ev) => handleToggleCategory(ev, cat.label)}
+              title="{cat.title || cat.label}: {isCatActive ? 'Ativa na fase (destacada no navegador). Clique para desmarcar.' : 'Desmarcada (não destaca links no navegador). Clique para ativar.'}"
+              aria-pressed={isCatActive}
             >
-              <span class="catColorDot" style="background: {cat.color || '#2eae6c'};"></span>
+              <span class="catColorDot" style="background: {isCatActive ? (cat.color || '#2eae6c') : '#94a3b8'};"></span>
               <span class="catName">{cat.title || cat.label}</span>
-            </span>
+              <span class="catCheckIcon" aria-hidden="true">{isCatActive ? '✓' : '○'}</span>
+            </button>
           {/each}
         </div>
       </div>
