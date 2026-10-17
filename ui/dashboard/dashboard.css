@@ -6027,6 +6027,11 @@ a.phaseArchiveArticleTitle:hover{color:#146fd1;text-decoration:underline}
   background: #fef2f2;
 }
 
+.timelineNode.node-bulk {
+  border-color: #6366f1;
+  background: #eef2ff;
+}
+
 .timelineLine {
   width: 2px;
   background: #e2e8f0;
@@ -6110,6 +6115,12 @@ a.phaseArchiveArticleTitle:hover{color:#146fd1;text-decoration:underline}
   background: rgba(239, 68, 68, 0.1);
   color: #b91c1c;
   border-color: rgba(239, 68, 68, 0.25);
+}
+
+.timelineActionBadge.node-bulk {
+  background: rgba(99, 102, 241, 0.1);
+  color: #4338ca;
+  border-color: rgba(99, 102, 241, 0.25);
 }
 
 .timelineActionTitle {
@@ -6231,6 +6242,78 @@ a.phaseArchiveArticleTitle:hover{color:#146fd1;text-decoration:underline}
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+.timelineMovementCard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  padding: 10px 14px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.movementCol {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+  flex: 1;
+}
+
+.movementLabel {
+  font-size: 10px;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.movementPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #1e293b;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.movementPill.highlightTo {
+  background: #ffffff;
+  border-color: #94a3b8;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.movementCatName {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.movementArrowCol {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+.movementArrowIcon {
+  font-size: 16px;
+  font-weight: 800;
+  color: #0284c7;
+}
+
+.timelineUnmarkBox {
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  border-radius: 8px;
+  padding: 10px 12px;
 }
 
 .timelineFieldDiff {

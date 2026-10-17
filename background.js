@@ -612,6 +612,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         phaseLabel,
         origin: inferred.origin,
         status,
+        previousCategory: previousPaper.categoryLabel || null,
+        previousStatus: previousPaper.status || "new",
         prevStatus: previousPaper.status || "new",
         categoryChanged,
         colorChanged,
