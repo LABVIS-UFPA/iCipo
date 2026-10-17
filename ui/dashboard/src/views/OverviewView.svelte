@@ -77,9 +77,10 @@
     openPapersWithFilter({ metric: metricType, phase: phaseParam });
   }
 
-  function handleCategoryClick(categoryKey) {
+  function handleCategoryClick(entry) {
     const phaseParam = scope === 'all' ? 'all' : scope;
-    openPapersWithFilter({ category: categoryKey, phase: phaseParam });
+    const metricType = typeof entry === 'object' && entry ? (entry.metricType || entry.key) : entry;
+    openPapersWithFilter({ metric: metricType, category: 'all', phase: phaseParam });
   }
 
   function getArticleCategoryInfo(paper) {
@@ -261,7 +262,7 @@
               <path d="M22 12A10 10 0 0 0 12 2v10z"/>
             </svg>
           </span>
-          <span>Distribuição por categoria</span>
+          <span>Distribuição por categorias padrão</span>
         </div>
       </div>
       <div class="categoryDistributionBody">
@@ -269,7 +270,7 @@
           id="categoryDonut"
           class="categoryDonut"
           role="img"
-          aria-label="Distribuição dos artigos por categoria"
+          aria-label="Distribuição dos artigos por categorias padrão"
           style="background: {donutGradient}"
         >
           <div class="categoryDonutCenter">
@@ -283,7 +284,7 @@
             <button
               type="button"
               class="categoryLegendRow"
-              on:click={() => handleCategoryClick(entry.key)}
+              on:click={() => handleCategoryClick(entry)}
             >
               <span class="categoryLegendLabel">
                 <i style="background: {entry.color}"></i>

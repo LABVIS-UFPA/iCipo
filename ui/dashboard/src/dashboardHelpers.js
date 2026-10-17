@@ -357,12 +357,21 @@ export function getOverviewMetricType(paper, scope = "all", activePhaseLabel = "
   if (phaseLabel && phaseLabel !== "all") {
     const classification = getPaperClassificationForPhase(paper, phaseLabel);
     if (!classification || isInheritedPhaseClassification(classification)) return null;
-    metricType = normalizeMetricType(classification.outcome ?? paper?.status, "pending");
+    if (classification.outcome) {
+      metricType = normalizeMetricType(classification.outcome, "pending");
+    } else {
+      const category = getPaperCategoryForPhase(paper, phaseLabel, projectCategories, highlightedLinks);
+      metricType = category
+        ? normalizeCategoryMetricType(category.metricType, inferMetricTypeFromCategory(category))
+        : normalizeMetricType(paper?.status, "pending");
+    }
   } else {
     const latestClassification = getLatestPaperClassification(paper);
-    metricType = latestClassification
-      ? normalizeMetricType(latestClassification.outcome ?? paper?.status, "pending")
-      : getPaperMetricType(paper, projectCategories, highlightedLinks, activePhaseLabel);
+    if (latestClassification?.outcome) {
+      metricType = normalizeMetricType(latestClassification.outcome, "pending");
+    } else {
+      metricType = getPaperMetricType(paper, projectCategories, highlightedLinks, activePhaseLabel);
+    }
   }
 
   return metricType === "duplicate" ? "excluded" : metricType;
@@ -387,6 +396,7 @@ export function computeOverviewMetrics(papers = [], highlightedLinks = {}, scope
   };
 
   for (const paper of papers) {
+    if (paper?.visited === false) continue;
     const metricType = getOverviewMetricType(paper, scope, activePhaseLabel, projectCategories, highlightedLinks);
     if (!metricType) continue;
     metrics.total += 1;
@@ -405,25 +415,55 @@ export function formatMetricPercentage(value, total) {
 
 export function buildCategoryDistribution(papers = [], projectCategories = [], highlightedLinks = {}, scope = "all", activePhaseLabel = "") {
   const categories = Array.isArray(projectCategories) ? projectCategories : [];
-  const entries = categories.map(category => ({
-    key: getPaperCategoryKey(category),
-    label: category.title || category.label || "Categoria",
-    color: normalizeHexColor(category.color, "#4CAF50"),
-    count: 0,
-  })).filter(entry => entry.key);
-  const byKey = new Map(entries.map(entry => [entry.key, entry]));
 
-  const phaseLabel = resolveOverviewPhaseLabel(scope, activePhaseLabel);
+  // As métricas da visão geral exibem exclusivamente as 3 categorias padrão (Incluir, Excluir e Pendente).
+  // Categorias personalizadas somam automaticamente no desfecho da categoria padrão à qual foram atreladas.
+  const defaultDefinitions = [
+    {
+      metricType: "included",
+      defaultKey: "incluir",
+      defaultTitle: "Incluir",
+      fallbackColor: "#22C55E",
+    },
+    {
+      metricType: "excluded",
+      defaultKey: "excluir",
+      defaultTitle: "Excluir",
+      fallbackColor: "#EF4444",
+    },
+    {
+      metricType: "pending",
+      defaultKey: "pendente",
+      defaultTitle: "Pendente",
+      fallbackColor: "#F59E0B",
+    },
+  ];
+
+  const entries = defaultDefinitions.map(def => {
+    const matched = categories.find(c => 
+      isDefaultCategory(c.label) && normalizeCategoryMetricType(c.metricType, inferMetricTypeFromCategory(c)) === def.metricType
+    ) || categories.find(c => 
+      String(c?.label || "").toLowerCase() === def.defaultKey
+    );
+
+    return {
+      key: matched?.label || def.defaultKey,
+      label: matched?.title || def.defaultTitle,
+      color: normalizeHexColor(matched?.color, def.fallbackColor),
+      metricType: def.metricType,
+      count: 0,
+    };
+  });
+
   for (const paper of papers) {
-    let category = getPaperCategoryForPhase(paper, phaseLabel, projectCategories, highlightedLinks);
-    if (!category) {
-      const metricType = getOverviewMetricType(paper, scope, activePhaseLabel, projectCategories, highlightedLinks) || "pending";
-      category = categories.find(c => normalizeCategoryMetricType(c.metricType, inferMetricTypeFromCategory(c)) === metricType)
-        || categories[0];
-    }
-    const key = getPaperCategoryKey(category);
-    if (key && byKey.has(key)) {
-      byKey.get(key).count += 1;
+    if (paper?.visited === false) continue;
+    const metricType = getOverviewMetricType(paper, scope, activePhaseLabel, projectCategories, highlightedLinks);
+    if (!metricType) continue;
+
+    const norm = normalizeCategoryMetricType(metricType, "pending");
+    const target = entries.find(e => e.metricType === norm) || entries.find(e => e.metricType === "pending");
+    if (target) {
+      target.count += 1;
     }
   }
 
@@ -812,7 +852,12 @@ export function getPaperMetricTypeForPhase(paper, phaseLabel, projectCategories 
   if (!phaseLabel || phaseLabel === "all") return getPaperMetricType(paper, projectCategories, highlightedLinks);
   const classification = getPaperClassificationForPhase(paper, phaseLabel);
   if (!classification) return "pending";
-  return normalizeMetricType(classification.outcome ?? paper?.status, "pending");
+  if (classification.outcome) return normalizeMetricType(classification.outcome, "pending");
+  const category = getPaperCategoryForPhase(paper, phaseLabel, projectCategories, highlightedLinks);
+  if (category) {
+    return normalizeCategoryMetricType(category.metricType, inferMetricTypeFromCategory(category));
+  }
+  return normalizeMetricType(paper?.status, "pending");
 }
 
 export function getPaperMetricLabel(metricType) {
