@@ -8,7 +8,9 @@
     phaseCreationRequiredStore,
     closePhasePanel,
     savePhaseAction,
-    deletePhaseAction
+    deletePhaseAction,
+    openArticleTutorial,
+    setTutorialStage
   } from '../dashboardStore.js';
   import {
     canDeletePhaseLabel,
@@ -178,8 +180,13 @@
 
     isSaving = true;
     try {
+      const isCreatingFirstPhase = !isEditing && phases.length === 0;
       await savePhaseAction(phasePayload, isEditing ? editingPhase.label : null);
       closePhasePanel();
+      if (isCreatingFirstPhase && project?.id) {
+        setTutorialStage('articles-open', project.id);
+        openArticleTutorial();
+      }
     } catch (err) {
       console.warn('Falha ao salvar fase:', err);
       alert(err?.message || 'Falha ao salvar fase.');
@@ -279,10 +286,9 @@
           aria-live="assertive"
         >
           <span class="requiredStepLabel">Tutorial · Etapa 2 de 4</span>
-          <strong>Crie a primeira fase para continuar</strong>
+          <strong>Crie a primeira fase da sua revisão</strong>
           <span>
-            Este projeto ainda não possui fases. Preencha os campos
-            obrigatórios e salve uma fase para liberar o dashboard.
+            As fases dividem a seleção em etapas progressivas. As três categorias padrão (<b>Incluir</b>, <b>Excluir</b> e <b>Pendente</b>) já virão vinculadas automaticamente nesta fase para iniciar a triagem de imediato.
           </span>
         </div>
       {/if}

@@ -10,6 +10,33 @@ import {
   inferMetricTypeFromCategory,
 } from "./utils.mjs";
 
+export const DEFAULT_PROJECT_CATEGORIES = Object.freeze([
+  {
+    title: "Incluir",
+    label: "incluir",
+    description: "Artigos que atendem aos critérios da fase e devem seguir para a próxima etapa da pesquisa.",
+    color: "#22C55E",
+    metricType: "included",
+    criteria: [],
+  },
+  {
+    title: "Excluir",
+    label: "excluir",
+    description: "Artigos que não atendem aos critérios da fase e não devem seguir na progressão.",
+    color: "#EF4444",
+    metricType: "excluded",
+    criteria: [],
+  },
+  {
+    title: "Pendente",
+    label: "pendente",
+    description: "Artigos que ainda precisam ser analisados antes de uma decisão de inclusão ou exclusão.",
+    color: "#F59E0B",
+    metricType: "pending",
+    criteria: [],
+  },
+]);
+
 class Project {
   // Default project schema (matches ui/projects/projects.html form)
   static defaults = {
@@ -28,6 +55,10 @@ class Project {
   };
 
   constructor(id, data = null, withDefaults = false) {
+    if (typeof id === 'object' && id !== null && data === null) {
+      data = id;
+      id = data.id || null;
+    }
     this.id = id;
     this.projectDir = id;
 
@@ -46,6 +77,11 @@ class Project {
 
       this._migrateLegacyCategoryPhaseLinks(data.categories);
       this._normalizeActivePhase();
+    }
+
+    // Garante que o projeto sempre possua as três categorias padrão se nenhuma categoria tiver sido fornecida
+    if (!this.categories || (Array.isArray(this.categories) && this.categories.length === 0)) {
+      this.categories = DEFAULT_PROJECT_CATEGORIES.map(c => Category.fromJSON(c));
     }
   }
 
@@ -469,6 +505,9 @@ class Project {
   }
 
   static fromJSON(id, json) {
+    if (typeof id === 'object' && id !== null && json === undefined) {
+      return new Project(id.id, id);
+    }
     return new Project(id, json);
   }
 }

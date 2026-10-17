@@ -103,22 +103,25 @@ O iCipó é organizado em quatro camadas bem delimitadas, garantindo desacoplame
 - **Trava de Segurança:** Uma vez concluída uma fase, ela é bloqueada contra exclusão para garantir a reprodutibilidade científica da pesquisa.
 - **Painel de Arquivo de Fases:** Expanda o histórico de fases encerradas para auditar quais artigos foram processados e qual foi o desfecho de cada um naquela etapa.
 
-### 🏷️ 3. Categorização Semântica com Contraste Acessível
-- **Mapeamento Métrico Direto:** Cada categoria criada deve possuir um impacto no estudo: **Incluído**, **Excluído** ou **Pendente**.
-- **Cálculo Automático de Contraste (WCAG):** Ao selecionar uma cor hexadecimal para a categoria, o sistema calcula dinamicamente se o texto do selo deve ser renderizado em branco ou preto para máxima legibilidade.
-- **Sincronização com o Navegador:** Apenas as categorias associadas à fase ativa aparecem no menu de contexto do clique direito no Google Scholar.
+### 🏷️ 3. Categorização Semântica (Categorias Padrão & Personalizadas)
+- **Categorias Padrão:** O iCipó já vem configurado com **Incluir**, **Excluir** e **Pendente** como categorias padrão essenciais da revisão.
+- **Categorias Personalizadas com Impacto Métrico:** O pesquisador pode criar categorias personalizadas adicionais para justificar motivos específicos (ex.: *Excluir - Fora do Escopo*, *Incluir - Estudo Primário*), escolhendo explicitamente a qual métrica cada uma se relaciona: **Incluir**, **Excluir** ou **Pendente**.
+- **Cálculo Automático de Contraste (WCAG):** Ao selecionar uma cor para a categoria, o sistema calcula dinamicamente o contraste do texto para máxima legibilidade.
+- **Sincronização com o Navegador:** Apenas as categorias vinculadas à fase ativa aparecem no menu de contexto do clique direito no Google Scholar.
 
-### ⚡ 4. Triagem Analítica em Lote e Edição Inline
-- **Edição Direta:** Atualize o **Ano** de publicação e adicione **Tags** diretamente na linha da tabela sem precisar abrir modais de edição.
-- **Ações em Lote (*Bulk Actions*):** Selecione múltiplos artigos via checkbox e aplique **Incluir**, **Remover**, **Pendente** ou **Remover marcados da fase**.
-- **Desempate Inteligente de Categorias (*PaperBulkCategoryModal*):** Se houver mais de uma categoria cadastrada com o mesmo desfecho métrico (ex.: duas categorias de exclusão diferentes), o sistema abre um modal de desempate perguntando ao pesquisador qual justificativa específica deve ser aplicada aos itens selecionados.
+### ⚡ 4. Triagem Integrada nas Fases ("Ver artigos")
+- **Gaveta de Artigos por Fase:** Acesso direto a todos os artigos vinculados à fase ativa através do botão "Ver artigos" no cartão da fase.
+- **Alternância de Visualização (Cartões vs. Tabela):** Suporte a modo Cartões (com autores, ano e notas) ou modo Tabela (linhas densas para análise rápida), com preferência persistida automaticamente.
+- **Triagem Direta com Botões de Ação:** Classificação imediata com botões **✓ Incluir**, **× Excluir** e **⏳ Pendente** diretamente no artigo.
+- **Seleção Inteligente de Categoria (*PaperBulkCategoryModal*):** Se houver mais de uma categoria cadastrada para o mesmo desfecho, o sistema apresenta um seletor rápido para o pesquisador escolher qual motivo específico aplicar.
+- **Desmarcar Artigos:** Opção de desmarcar um artigo para retirá-lo da fase ativa sem marcá-lo como reprovado na pesquisa.
 
-### 🎓 5. Tutorial Interativo Integrado (Onboarding)
-- O Dashboard conta com um guia passo a passo em gaveta retrátil (*ArticleTutorialPanel*) com 4 etapas:
-  1. Configuração do Projeto e Escopo.
-  2. Definição da Fase Ativa e Categorias.
-  3. Coleta e Classificação no Google Scholar.
-  4. Triagem, Análise de KPIs e Snowballing.
+### 🎓 5. Tutorial Interativo Integrado (Onboarding em 4 Etapas)
+- O Dashboard conta com um guia passo a passo completo e acessível a qualquer momento pelo botão **📖 Tutorial**:
+  1. **Etapa 1:** Introdução geral ao Dashboard, Fases, Categorias e Visão Geral.
+  2. **Etapa 2:** Criação da Primeira Fase com vinculação automática das categorias padrão.
+  3. **Etapa 3:** Gestão de Categorias Padrão e criação de Categorias Personalizadas vinculadas às métricas.
+  4. **Etapa 4:** Como funciona a triagem de artigos na fase (Google Scholar, gaveta de artigos, modo Cartões/Tabela, botões diretos e filtros).
 
 ---
 

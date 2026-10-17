@@ -34,15 +34,15 @@
       >
         <div>
           <strong>Fases</strong>
-          <span>Estruturam o processo de seleção e análise.</span>
+          <span>Estruturam as etapas sequenciais da revisão (ex.: Títulos/Resumos e Leitura Completa).</span>
         </div>
         <div>
-          <strong>Categorias</strong>
-          <span>Classificam os artigos em cada etapa.</span>
+          <strong>Categorias Padrão & Personalizadas</strong>
+          <span>Utilize as categorias padrão (<b>Incluir</b>, <b>Excluir</b> e <b>Pendente</b>) ou crie categorias personalizadas vinculadas a qualquer uma das três métricas.</span>
         </div>
         <div>
-          <strong>Visão Geral</strong>
-          <span>Resume a distribuição e a evolução dos estudos.</span>
+          <strong>Visão Geral & Triagem</strong>
+          <span>Acesse artigos dentro de cada fase e acompanhe a evolução consolidada dos estudos.</span>
         </div>
       </div>
 

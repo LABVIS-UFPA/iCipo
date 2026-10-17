@@ -13,7 +13,8 @@
     getCategoryDeletionBlockReason,
     normalizeHexColor,
     normalizeCategoryMetricType,
-    inferMetricTypeFromCategory
+    inferMetricTypeFromCategory,
+    isDefaultCategory
   } from '../dashboardHelpers.js';
 
   let title = '';
@@ -34,9 +35,14 @@
   $: project = $projectStore || {};
 
   $: isEditing = Boolean(editingCategory && editingCategory.label);
+  $: isDefault = isEditing && isDefaultCategory(editingCategory?.label);
   $: deletionBlockReason = isEditing
     ? getCategoryDeletionBlockReason(project, editingCategory.label)
     : '';
+  $: cannotDelete = isEditing && (Boolean(deletionBlockReason) || isDeleting || isDefault);
+  $: deleteTooltip = isDefault
+    ? 'As 3 categorias padrão (Incluir, Excluir, Pendente) não podem ser excluídas para manter a consistência do fluxo de triagem.'
+    : (deletionBlockReason || 'Excluir categoria');
 
   // Synchronize form when editingCategory changes or panel opens
   $: if (isOpen) {
@@ -170,7 +176,13 @@
   >
     <div class="sidePanelHeader">
       <div id="categoryPanelTitle" style="font-weight:900">
-        {categoryCreationRequired ? 'Crie a primeira categoria' : (isEditing ? 'Editar categoria' : 'Nova categoria')}
+        {#if categoryCreationRequired}
+          Categorias da Triagem
+        {:else if isEditing}
+          {isDefault ? 'Editar Categoria Padrão' : 'Editar Categoria Personalizada'}
+        {:else}
+          Nova Categoria Personalizada
+        {/if}
       </div>
       <button id="btnCloseCategory" class="btn" on:click={handleClose}>
         {categoryCreationRequired ? 'Voltar aos projetos' : 'Fechar'}
@@ -186,10 +198,10 @@
           aria-live="assertive"
         >
           <span class="requiredStepLabel">Tutorial · Etapa 3 de 4</span>
-          <strong>Crie as categorias da sua triagem</strong>
+          <strong>Categorias Padrão e Personalizadas</strong>
           <span>
-            As categorias organizam e identificam os artigos durante cada fase.
-            Você pode criá-las manualmente ou usar a sugestão padrão do iCipó com um clique.
+            O iCipó organiza a triagem através de 3 categorias padrão essenciais: <b>Incluir</b>, <b>Excluir</b> e <b>Pendente</b>.
+            Você pode utilizá-las diretamente ou criar categorias personalizadas adicionais para detalhar critérios específicos, associando cada uma à sua respectiva métrica.
           </span>
         </div>
 
@@ -227,7 +239,20 @@
         </div>
 
         <div class="categoryManualDivider">
-          <span>ou crie manualmente</span>
+          <span>ou crie uma categoria personalizada</span>
+        </div>
+      {/if}
+
+      {#if isDefault}
+        <div class="categoryDefaultNotice">
+          <div>
+            <strong>Categoria Padrão do iCipó ({title})</strong>
+            <span>
+              Esta é uma das 3 categorias essenciais do fluxo de triagem. Seu impacto nas métricas é fixado como
+              <b>{metricType === 'included' ? 'Incluir' : (metricType === 'excluded' ? 'Excluir' : 'Pendente')}</b>.
+              Você pode personalizar a descrição, a cor e adicionar critérios específicos de elegibilidade.
+            </span>
+          </div>
         </div>
       {/if}
 
@@ -235,7 +260,7 @@
       <input
         id="categoryTitle"
         class="input"
-        placeholder="Ex.: Incluído"
+        placeholder="Ex.: Fora do Escopo, Estudo Primário, Alta Relevância"
         bind:value={title}
         on:input={() => { if (title.trim()) titleError = ''; }}
       />
@@ -247,8 +272,8 @@
       <textarea
         id="categoryDescription"
         class="input"
-        style="min-height:110px"
-        placeholder="Explique quando esta categoria deve ser utilizada"
+        style="min-height:90px"
+        placeholder="Explique quando esta categoria deve ser utilizada na triagem"
         bind:value={description}
       ></textarea>
 
@@ -264,16 +289,88 @@
         <span id="categoryColorValue" class="categoryColorValue">{color}</span>
       </div>
 
-      <label for="categoryMetricType">Impacto na métrica</label>
-      <select id="categoryMetricType" class="input select" bind:value={metricType}>
+      <label for="categoryMetricType" style="font-weight:700;display:block;margin-top:10px">
+        Impacto nas métricas (Desfecho)
+      </label>
+      <div class="categoryMetricHelp">
+        Defina se esta categoria personalizada estará relacionada nas métricas e relatórios como <b>Incluir</b>, <b>Excluir</b> ou <b>Pendente</b>:
+      </div>
+
+      {#if !isDefault}
+        <div class="categoryMetricCards">
+          <label class="categoryMetricCard" class:active={metricType === 'included'}>
+            <input
+              type="radio"
+              name="categoryMetricChoice"
+              value="included"
+              bind:group={metricType}
+            />
+            <div class="categoryMetricCardBody">
+              <div class="categoryMetricCardHeader">
+                <span class="categoryMetricBadge categoryMetricBadge--included">✓ Incluir</span>
+                <strong>Relacionada a Incluir</strong>
+              </div>
+              <span class="categoryMetricCardDesc">
+                Artigo atende aos critérios da fase, avança para a próxima etapa da pesquisa e alimenta o indicador de Inclusões da Visão Geral.
+              </span>
+            </div>
+          </label>
+
+          <label class="categoryMetricCard" class:active={metricType === 'excluded'}>
+            <input
+              type="radio"
+              name="categoryMetricChoice"
+              value="excluded"
+              bind:group={metricType}
+            />
+            <div class="categoryMetricCardBody">
+              <div class="categoryMetricCardHeader">
+                <span class="categoryMetricBadge categoryMetricBadge--excluded">× Excluir</span>
+                <strong>Relacionada a Excluir</strong>
+              </div>
+              <span class="categoryMetricCardDesc">
+                Artigo não atende aos critérios, é descartado da revisão e alimenta o indicador de Exclusões da Visão Geral.
+              </span>
+            </div>
+          </label>
+
+          <label class="categoryMetricCard" class:active={metricType === 'pending'}>
+            <input
+              type="radio"
+              name="categoryMetricChoice"
+              value="pending"
+              bind:group={metricType}
+            />
+            <div class="categoryMetricCardBody">
+              <div class="categoryMetricCardHeader">
+                <span class="categoryMetricBadge categoryMetricBadge--pending">⏳ Pendente</span>
+                <strong>Relacionada a Pendente</strong>
+              </div>
+              <span class="categoryMetricCardDesc">
+                Artigo fica aguardando análise completa. Deve ser avaliado antes de a fase ser marcada como concluída.
+              </span>
+            </div>
+          </label>
+        </div>
+      {:else}
+        <div style="margin:6px 0 12px">
+          <span class="categoryMetricBadge categoryMetricBadge--{metricType}">
+            {metricType === 'included' ? '✓ Incluído' : (metricType === 'excluded' ? '× Excluído' : '⏳ Pendente')}
+          </span>
+        </div>
+      {/if}
+
+      <select
+        id="categoryMetricType"
+        class="input select visually-hidden"
+        bind:value={metricType}
+        tabindex="-1"
+        aria-hidden="true"
+      >
         <option value="included">Incluído</option>
         <option value="excluded">Excluído</option>
         <option value="pending">Não contabilizar / Pendente</option>
       </select>
-      <div class="categoryMetricHelp">
-        Define em qual indicador da Visão Geral os artigos desta categoria
-        serão contabilizados. Duplicatas são identificadas automaticamente pelo link.
-      </div>
 
       <fieldset class="categoryFieldset">
         <legend>Critérios da categoria</legend>
@@ -281,7 +378,7 @@
           <input
             id="categoryCriterionNew"
             class="input"
-            placeholder="Digite um novo critério"
+            placeholder="Digite um novo critério específico"
             bind:value={newCriterion}
             on:keydown={handleCriterionKeydown}
           />
@@ -325,8 +422,8 @@
             id="btnDeleteCategory"
             class="btn danger"
             type="button"
-            disabled={Boolean(deletionBlockReason) || isDeleting}
-            title={deletionBlockReason || 'Excluir categoria'}
+            disabled={cannotDelete}
+            title={deleteTooltip}
             on:click={handleDelete}
           >
             {isDeleting ? 'Excluindo...' : 'Excluir categoria'}

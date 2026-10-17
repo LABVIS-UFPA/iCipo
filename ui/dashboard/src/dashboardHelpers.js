@@ -713,6 +713,13 @@ export const DEFAULT_TUTORIAL_CATEGORIES = Object.freeze([
   },
 ]);
 
+export const DEFAULT_PROJECT_CATEGORIES = DEFAULT_TUTORIAL_CATEGORIES;
+
+export function isDefaultCategory(categoryLabel) {
+  const norm = String(categoryLabel || "").trim().toLowerCase();
+  return DEFAULT_TUTORIAL_CATEGORIES.some(c => c.label === norm);
+}
+
 export function getCategoryDeletionBlockReason(project, categoryLabel) {
   const categories = Array.isArray(project?.categories) ? project.categories : [];
   if (categories.length <= 1) {

@@ -316,7 +316,21 @@ export async function loadDashboardState() {
     } catch {}
 
     const hasPhases = Array.isArray(project.phases) && project.phases.length > 0;
-    const hasCategories = Array.isArray(project.categories) && project.categories.length > 0;
+    let hasCategories = Array.isArray(project.categories) && project.categories.length > 0;
+    if (!hasCategories) {
+      try {
+        const projectInstance = project instanceof Project ? project : Project.fromJSON(project);
+        if (projectInstance.categories?.length) {
+          await storage.saveProject(projectInstance);
+          project = projectInstance.toJSON ? projectInstance.toJSON() : projectInstance;
+          projectStore.set(project);
+          hasCategories = true;
+        }
+      } catch (err) {
+        console.warn('Erro ao inicializar categorias padrão no dashboard:', err);
+      }
+    }
+
     const phaseReq = !hasPhases;
     const introReq = phaseReq && !hasSeenDashboardIntro(project.id);
     const savedTutorialStage = getTutorialStage(project.id);

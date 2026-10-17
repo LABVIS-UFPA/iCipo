@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { storage } from '../../../infrastructure/storage.mjs';
   import { slugify } from '../../../core/utils.mjs';
-  import { Project } from '../../../core/entities.mjs';
+  import { Project, DEFAULT_PROJECT_CATEGORIES } from '../../../core/entities.mjs';
   import '../../tokens.css';
 
   let projects = [];
@@ -169,7 +169,8 @@
           name,
           description: desc,
           researchers: researchersArray,
-          objective: obj
+          objective: obj,
+          categories: DEFAULT_PROJECT_CATEGORIES.map((c) => ({ ...c }))
         });
         await storage.saveProject(newProj);
       }

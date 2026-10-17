@@ -10,12 +10,14 @@
     inferMetricTypeFromCategory,
     getReadableCategoryTextColor,
     getCategoryDeletionBlockReason,
+    isDefaultCategory,
     PAPER_METRIC_LABELS
   } from '../dashboardHelpers.js';
 
   export let category = {};
 
   $: project = $projectStore || {};
+  $: isDefault = isDefaultCategory(category.label);
   $: color = normalizeHexColor(category.color, '#4CAF50');
   $: textColor = getReadableCategoryTextColor(color);
   $: usesDarkText = textColor === '#101828';
@@ -51,7 +53,14 @@
   <div class="left">
     <span class="pill" style="background-color: {color}"></span>
     <div style="min-width: 0;">
-      <span class="title">{category.title || category.label}</span>
+      <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <span class="title">{category.title || category.label}</span>
+        {#if isDefault}
+          <span class="categoryKindBadge categoryKindBadge--default" title="Categoria padrão do iCipó">Padrão</span>
+        {:else}
+          <span class="categoryKindBadge categoryKindBadge--custom" title="Categoria personalizada">Personalizada</span>
+        {/if}
+      </div>
       {#if category.description}
         <span class="sub">{category.description}</span>
       {/if}

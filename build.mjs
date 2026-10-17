@@ -25,7 +25,11 @@ async function run() {
       });
       console.log(`✅ [${t}] construído com sucesso!`);
     } catch (err) {
-      console.error(`❌ Erro ao construir [${t}]:`, err);
+      console.error(`❌ Erro ao construir [${t}]:`);
+      console.error(err.message);
+      if (err.frame) console.error(err.frame);
+      if (err.loc) console.error('Location:', err.loc);
+      if (err.stack) console.error(err.stack);
       process.exit(1);
     }
   }

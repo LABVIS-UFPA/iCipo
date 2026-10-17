@@ -1,5 +1,5 @@
 <script>
-  import { projectStore, openCategoryPanel } from '../dashboardStore.js';
+  import { projectStore, openCategoryPanel, openArticleTutorial } from '../dashboardStore.js';
   import CategoryItem from '../components/CategoryItem.svelte';
   import CategoryPanel from '../components/CategoryPanel.svelte';
 
@@ -16,18 +16,20 @@
   <div class="panelHeader">
     <h2>Categorias</h2>
     <p>
-      Crie categorias e defina como cada classificação afeta as métricas.
+      Gerencie as categorias padrão (<b>Incluir</b>, <b>Excluir</b> e <b>Pendente</b>) e crie categorias personalizadas com desfecho vinculado às métricas da pesquisa.
     </p>
   </div>
 
   <div class="toolbar">
-    <div style="display:flex;gap:8px;align-items:center;width:100%">
+    <div style="display:flex;gap:10px;align-items:center;width:100%;flex-wrap:wrap">
       <button id="btnShowAddCategory" class="btn" type="button" on:click={handleAddCategory}>
-        Criar categoria
+        + Criar categoria personalizada
       </button>
-      <div class="muted">
-        As categorias continuam sendo exibidas com a mesma geometria após a
-        criação.
+      <button class="btn ghost" type="button" on:click={openArticleTutorial}>
+        📖 Como funciona a triagem
+      </button>
+      <div class="muted" style="margin-left:auto">
+        Categorias personalizadas somam automaticamente no indicador ao qual foram associadas.
       </div>
     </div>
   </div>
