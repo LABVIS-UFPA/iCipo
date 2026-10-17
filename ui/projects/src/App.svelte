@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { storage } from '../../../infrastructure/storage.mjs';
   import { slugify } from '../../../core/utils.mjs';
   import { Project, DEFAULT_PROJECT_CATEGORIES } from '../../../core/entities.mjs';
@@ -11,6 +11,7 @@
   let sidenavOpen = false;
   let editMode = false;
   let editingProjectID = null;
+  let editingProject = null;
 
   let projectName = '';
   let projectDescription = '';
@@ -92,6 +93,7 @@
   function openCreateSidenav() {
     editMode = false;
     editingProjectID = null;
+    editingProject = null;
     projectName = '';
     projectDescription = '';
     projectResearchers = '';
@@ -107,6 +109,7 @@
 
       editMode = true;
       editingProjectID = data.id;
+      editingProject = data;
       projectName = data.name || '';
       projectDescription = data.description || '';
       projectResearchers = Array.isArray(data.researchers)
@@ -122,6 +125,32 @@
 
   function closeSidenav() {
     sidenavOpen = false;
+  }
+
+  async function handleCloseWithAutoSave() {
+    if (editMode && editingProject) {
+      const name = projectName.trim();
+      const desc = projectDescription.trim();
+      const researchersStr = projectResearchers.trim();
+      const obj = projectObjective.trim();
+
+      const origName = (editingProject.name || '').trim();
+      const origDesc = (editingProject.description || '').trim();
+      const origResearchers = (
+        Array.isArray(editingProject.researchers)
+          ? editingProject.researchers.join(', ')
+          : (editingProject.researchers || '')
+      ).trim();
+      const origObj = (editingProject.objective || '').trim();
+
+      const hasChanged = (name !== origName) || (desc !== origDesc) || (researchersStr !== origResearchers) || (obj !== origObj);
+
+      if (hasChanged && name && desc && researchersStr) {
+        await handleSaveProject();
+        return;
+      }
+    }
+    closeSidenav();
   }
 
   async function handleSaveProject() {
@@ -203,8 +232,19 @@
     }
   }
 
+  function handleKeydown(e) {
+    if (e.key === 'Escape' && sidenavOpen) {
+      handleCloseWithAutoSave();
+    }
+  }
+
   onMount(() => {
     loadProjects();
+    window.addEventListener('keydown', handleKeydown);
+  });
+
+  onDestroy(() => {
+    window.removeEventListener('keydown', handleKeydown);
   });
 </script>
 
@@ -340,7 +380,23 @@
                       class="pill"
                       style={`background:${project.color || '#2eae6c'}`}
                       aria-hidden="true"
-                    ></div>
+                      title="Projeto: {project.name || project.id}"
+                    >
+                      <svg
+                        class="academicSvg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#ffffff"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+                        <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+                      </svg>
+                    </div>
 
                     <div class="projectTexts">
                       <div class="titleRow">
@@ -397,7 +453,7 @@
     <div
       class="sideOverlay"
       class:open={sidenavOpen}
-      on:click={closeSidenav}
+      on:click={handleCloseWithAutoSave}
       aria-hidden={!sidenavOpen}
     ></div>
 
@@ -408,75 +464,204 @@
       aria-hidden={!sidenavOpen}
     >
       <div class="sidenavHeader">
-        <div>
-          <span class="sidenavEyebrow">{editMode ? 'MODIFICAÇÃO' : 'NOVO CADASTRO'}</span>
-          <h2>{editMode ? 'Editar projeto' : 'Novo projeto'}</h2>
+        <div class="sidenavHeaderLeft">
+          <span class="sidenavEyebrow">
+            {editMode ? 'MODO DE EDIÇÃO CIENTÍFICA' : 'NOVO CADASTRO'}
+          </span>
+          <div class="sidenavTitleRow">
+            <span class="sidenavBadgeIcon" class:edit={editMode}>
+              {#if editMode}
+                <svg class="academicSvg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+              {:else}
+                <svg class="academicSvg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+              {/if}
+            </span>
+            <h2>{editMode ? 'Editar projeto' : 'Novo projeto'}</h2>
+          </div>
         </div>
-        <button class="closeBtn" on:click={closeSidenav} aria-label="Fechar painel">✕</button>
+        <button class="closeBtn" on:click={handleCloseWithAutoSave} aria-label="Fechar painel" title="Fechar (Esc)">✕</button>
       </div>
 
-      <div class="note">Preencha os campos obrigatórios identificados com asterisco (*).</div>
+      {#if editMode}
+        <div class="projectSummaryBanner">
+          <div class="projectSummaryPill" style={`background:${editingProject?.color || '#2eae6c'}`}>
+            <svg class="academicSvg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+              <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+            </svg>
+          </div>
+          <div class="projectSummaryInfo">
+            <div class="projectSummaryTop">
+              <strong class="projectSummaryName">{projectName || editingProjectID}</strong>
+              {#if projects.find(p => p.id === editingProjectID)?.isCurrent}
+                <span class="activeProjectPill">Ativo no Dashboard</span>
+              {/if}
+            </div>
+            <span class="projectSummaryMeta">
+              <code>ID: {editingProjectID}</code>
+              {#if editingProject?.phases?.length}
+                · {editingProject.phases.length} {editingProject.phases.length === 1 ? 'fase' : 'fases'}
+              {/if}
+              {#if editingProject?.categories?.length}
+                · {editingProject.categories.length} categorias
+              {/if}
+            </span>
+          </div>
+        </div>
+      {/if}
+
+      <div class="note">
+        {editMode
+          ? 'Atualize os dados metodológicos deste projeto. Ao clicar fora, as alterações são salvas automaticamente.'
+          : 'Preencha os campos obrigatórios identificados com asterisco (*).'}
+      </div>
 
       <div class="formContent">
-        <div class="formRow formRowStack">
-          <label for="projectName">Nome do projeto *</label>
-          <input
-            id="projectName"
-            type="text"
-            bind:value={projectName}
-            placeholder="Ex.: Revisão Sistemática de IA"
-          />
+        <!-- Seção 1: Identificação do Estudo -->
+        <div class="formSection">
+          <div class="formSectionHeader">
+            <svg class="academicSvg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/>
+              <path d="M6 6h10M6 10h10M6 14h6"/>
+            </svg>
+            <span>Identificação do estudo</span>
+          </div>
+
+          <div class="formRow formRowStack">
+            <label for="projectName">
+              Nome do projeto <span class="requiredAsterisk">*</span>
+            </label>
+            <input
+              id="projectName"
+              type="text"
+              bind:value={projectName}
+              placeholder="Ex.: Revisão Sistemática de IA"
+            />
+          </div>
+
+          <div class="formRow formRowStack">
+            <label for="projectIdPreview">
+              ID do projeto
+              {#if editMode}
+                <span class="lockedIdBadge">
+                  <svg class="academicSvg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  </svg>
+                  Identificador fixo
+                </span>
+              {:else}
+                <span class="muted" style={`color:${projectIdStatusColor}`}>{projectIdStatus}</span>
+              {/if}
+            </label>
+            <input
+              id="projectIdPreview"
+              type="text"
+              value={projectIdPreview}
+              readonly
+              placeholder="Identificador gerado automaticamente"
+              disabled
+            />
+            {#if editMode}
+              <small class="fieldHint">O ID permanente mantém a integridade do histórico de triagem e fases.</small>
+            {/if}
+          </div>
         </div>
 
-        <div class="formRow formRowStack">
-          <label for="projectIdPreview">
-            ID do projeto <span class="muted" style={`color:${projectIdStatusColor}`}>{projectIdStatus}</span>
-          </label>
-          <input
-            id="projectIdPreview"
-            type="text"
-            value={projectIdPreview}
-            readonly
-            placeholder="Identificador gerado automaticamente"
-            disabled
-          />
+        <!-- Seção 2: Equipe & Autoria -->
+        <div class="formSection">
+          <div class="formSectionHeader">
+            <svg class="academicSvg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            <span>Equipe de Pesquisa & Autores</span>
+          </div>
+
+          <div class="formRow formRowStack">
+            <label for="projectResearchers">
+              Pesquisadores responsáveis <span class="requiredAsterisk">*</span>
+            </label>
+            <input
+              id="projectResearchers"
+              type="text"
+              bind:value={projectResearchers}
+              placeholder="Ex.: Alice Silva, Roberto Souza"
+            />
+            <small class="fieldHint">Separe múltiplos pesquisadores por vírgula.</small>
+          </div>
         </div>
 
-        <div class="formRow formRowStack">
-          <label for="projectDescription">Descrição *</label>
-          <textarea
-            id="projectDescription"
-            rows="3"
-            bind:value={projectDescription}
-            placeholder="Breve descrição dos objetivos e escopo do estudo…"
-          ></textarea>
-        </div>
+        <!-- Seção 3: Escopo e Metodologia Científica -->
+        <div class="formSection">
+          <div class="formSectionHeader">
+            <svg class="academicSvg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="22" y1="12" x2="18" y2="12"/>
+              <line x1="6" y1="12" x2="2" y2="12"/>
+              <line x1="12" y1="6" x2="12" y2="2"/>
+              <line x1="12" y1="22" x2="12" y2="18"/>
+            </svg>
+            <span>Escopo e Metodologia Científica</span>
+          </div>
 
-        <div class="formRow formRowStack">
-          <label for="projectResearchers">Pesquisadores * (separados por vírgula)</label>
-          <input
-            id="projectResearchers"
-            type="text"
-            bind:value={projectResearchers}
-            placeholder="Ex.: Alice Silva, Roberto Souza"
-          />
-        </div>
+          <div class="formRow formRowStack">
+            <label for="projectDescription">
+              Descrição do estudo <span class="requiredAsterisk">*</span>
+            </label>
+            <textarea
+              id="projectDescription"
+              rows="3"
+              bind:value={projectDescription}
+              placeholder="Breve descrição dos objetivos e escopo do estudo…"
+            ></textarea>
+          </div>
 
-        <div class="formRow formRowStack">
-          <label for="projectObjective">Objetivo principal</label>
-          <textarea
-            id="projectObjective"
-            rows="2"
-            bind:value={projectObjective}
-            placeholder="Meta ou questão de pesquisa central…"
-          ></textarea>
+          <div class="formRow formRowStack">
+            <label for="projectObjective">
+              Objetivo principal / Questão central
+            </label>
+            <textarea
+              id="projectObjective"
+              rows="2"
+              bind:value={projectObjective}
+              placeholder="Meta ou questão de pesquisa central (ex.: PICOC, escopo temático)…"
+            ></textarea>
+          </div>
         </div>
       </div>
 
       <div class="formActions">
-        <button class="btn btnCancel" on:click={closeSidenav}>Cancelar</button>
+        <button class="btn btnCancel" on:click={closeSidenav}>
+          <svg class="academicSvg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+          <span>Cancelar</span>
+        </button>
         <button class="btn btn-primary btnSave" on:click={handleSaveProject}>
-          {editMode ? 'Salvar alterações' : 'Criar projeto'}
+          {#if editMode}
+            <svg class="academicSvg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+              <polyline points="17 21 17 13 7 13 7 21"/>
+              <polyline points="7 3 7 8 15 8"/>
+            </svg>
+            <span>Salvar alterações</span>
+          {:else}
+            <svg class="academicSvg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            <span>Criar projeto</span>
+          {/if}
         </button>
       </div>
     </aside>
@@ -831,7 +1016,11 @@
     height:38px!important;
     flex:0 0 auto;
     border-radius:9px!important;
-    box-shadow:inset 0 0 0 1px rgba(0,0,0,.08);
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.08), 0 2px 6px rgba(46,174,108,.25);
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    color:#ffffff;
   }
   .projectTexts{min-width:0;display:flex;flex-direction:column;gap:3px;flex:1}
   .titleRow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -906,20 +1095,20 @@
     pointer-events:auto;
   }
 
-  /* Painel lateral (Sidenav) */
+  /* Painel lateral (Sidenav) Personalizado */
   .sidenav.projectsSidenav{
     position:fixed;
     top:0;
     right:0;
     bottom:0;
     z-index:50;
-    width:min(440px, 94vw)!important;
+    width:min(460px, 94vw)!important;
     height:100%;
     display:flex!important;
     flex-direction:column;
     padding:24px;
     overflow-y:auto;
-    border-left:1px solid #e1e6ed;
+    border-left:1px solid #d5dce6;
     background:#ffffff;
     box-shadow:-18px 0 48px rgba(5,17,29,.20);
     transform:translateX(105%)!important;
@@ -935,11 +1124,39 @@
     align-items:flex-start;
     justify-content:space-between;
     gap:12px;
-    margin-bottom:8px;
+    margin-bottom:12px;
+    padding-bottom:12px;
+    border-bottom:1px solid #edf1f6;
+  }
+  .sidenavHeaderLeft{
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+  }
+  .sidenavTitleRow{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .sidenavBadgeIcon{
+    width:32px;
+    height:32px;
+    border-radius:8px;
+    background:rgba(46,174,108,.12);
+    border:1px solid rgba(46,174,108,.25);
+    color:#1f8b57;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-shrink:0;
+  }
+  .sidenavBadgeIcon.edit{
+    background:rgba(37,99,235,.10);
+    border-color:rgba(37,99,235,.22);
+    color:#1d4ed8;
   }
   .sidenavEyebrow{
     display:block;
-    margin-bottom:4px;
     color:#2b9e65;
     font-size:10px;
     font-weight:850;
@@ -961,7 +1178,82 @@
     transition:background .15s ease;
   }
   .closeBtn:hover{background:#e2e8f0;color:#0f172a}
-  .projectsSidenav .note{margin:4px 0 20px;color:var(--muted);font-size:12px}
+
+  /* Card Resumo do Projeto no Modo de Edição */
+  .projectSummaryBanner{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding:12px 14px;
+    border-radius:10px;
+    background:#f8fafc;
+    border:1px solid #e2e8f0;
+    margin-bottom:14px;
+  }
+  .projectSummaryPill{
+    width:36px;
+    height:36px;
+    border-radius:8px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:#fff;
+    box-shadow:0 2px 6px rgba(46,174,108,.25);
+    flex-shrink:0;
+  }
+  .projectSummaryInfo{
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+    gap:3px;
+    flex:1;
+  }
+  .projectSummaryTop{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+  .projectSummaryName{
+    color:#101828;
+    font-size:13.5px;
+    font-weight:750;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    max-width:240px;
+  }
+  .activeProjectPill{
+    display:inline-flex;
+    align-items:center;
+    padding:2px 7px;
+    border-radius:999px;
+    background:#eaf8f0;
+    border:1px solid #bfe4ce;
+    color:#16784a;
+    font-size:9.5px;
+    font-weight:800;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+  }
+  .projectSummaryMeta{
+    color:#64748b;
+    font-size:11px;
+    display:flex;
+    align-items:center;
+    gap:5px;
+    flex-wrap:wrap;
+  }
+  .projectSummaryMeta code{
+    font-family:var(--font-mono, monospace);
+    background:#edf2f7;
+    padding:1px 5px;
+    border-radius:4px;
+    color:#334155;
+    font-size:10.5px;
+  }
+
+  .projectsSidenav .note{margin:0 0 16px;color:var(--muted);font-size:12px;line-height:1.45}
 
   .formContent{
     display:flex;
@@ -969,12 +1261,54 @@
     gap:14px;
     flex:1;
   }
+  .formSection{
+    background:#fafbfd;
+    border:1px solid #e8ecf2;
+    border-radius:10px;
+    padding:14px;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+  }
+  .formSectionHeader{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    color:#334155;
+    font-size:12px;
+    font-weight:800;
+    padding-bottom:8px;
+    border-bottom:1px solid #edf1f6;
+  }
   .formRowStack{display:flex;flex-direction:column;gap:6px}
   .projectsSidenav label{
-    display:block;
+    display:flex;
+    align-items:center;
+    gap:4px;
     color:#344054;
     font-size:12px;
     font-weight:750;
+  }
+  .requiredAsterisk{
+    color:#e5484d;
+    font-weight:800;
+  }
+  .lockedIdBadge{
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    padding:1px 6px;
+    border-radius:4px;
+    background:#f1f4f8;
+    color:#475467;
+    font-size:10.5px;
+    font-weight:700;
+    margin-left:auto;
+  }
+  .fieldHint{
+    color:#8a95a5;
+    font-size:11px;
+    line-height:1.35;
   }
   .projectsSidenav input[type=text],.projectsSidenav textarea{
     width:100%;
