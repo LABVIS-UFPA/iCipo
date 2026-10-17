@@ -17,6 +17,33 @@
     isDefaultCategory
   } from '../dashboardHelpers.js';
 
+  const PRESET_COLORS = [
+    '#22C55E',
+    '#10B981',
+    '#06B6D4',
+    '#3B82F6',
+    '#6366F1',
+    '#8B5CF6',
+    '#EC4899',
+    '#F43F5E',
+    '#EF4444',
+    '#F59E0B',
+    '#64748B'
+  ];
+
+  function getReadableColor(hex) {
+    if (!hex || typeof hex !== 'string') return '#ffffff';
+    let c = hex.replace('#', '');
+    if (c.length === 3) c = c.split('').map(x => x + x).join('');
+    const num = parseInt(c, 16);
+    if (isNaN(num)) return '#ffffff';
+    const r = (num >> 16) & 255;
+    const g = (num >> 8) & 255;
+    const b = num & 255;
+    const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+    return yiq >= 140 ? '#0f172a' : '#ffffff';
+  }
+
   let title = '';
   let description = '';
   let color = '#4CAF50';
@@ -75,6 +102,45 @@
     closeCategoryPanel();
   }
 
+  async function handleCloseWithAutoSave() {
+    if (categoryCreationRequired) {
+      window.location.href = '../projects/projects.html';
+      return;
+    }
+
+    const cleanTitle = title.trim();
+
+    // Se estiver editando e o título estiver vazio, adverte o usuário e mantém o painel aberto
+    if (isEditing && !cleanTitle) {
+      titleError = 'Preencha o título da categoria antes de salvar.';
+      return;
+    }
+
+    // Se o título estiver preenchido, salva automaticamente ao clicar fora
+    if (cleanTitle) {
+      try {
+        await handleSave();
+        return;
+      } catch (err) {
+        console.warn('Falha no auto-save da categoria ao fechar:', err);
+        return;
+      }
+    }
+
+    // Se for uma nova categoria sem título preenchido, fecha diretamente sem salvar
+    closeCategoryPanel();
+  }
+
+  async function handleKeydown(event) {
+    if (!isOpen) return;
+    if (event.key === 'Escape' && !categoryCreationRequired) {
+      await handleCloseWithAutoSave();
+    } else if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+      event.preventDefault();
+      await handleSave();
+    }
+  }
+
   function handleColorChange(event) {
     color = event.target.value.toUpperCase();
   }
@@ -114,11 +180,19 @@
   }
 
   async function handleSave() {
+    if (isSaving) return;
     titleError = '';
     const cleanTitle = title.trim();
     if (!cleanTitle) {
       titleError = 'Preencha o título da categoria.';
       return;
+    }
+
+    // Se houver algum critério digitado no campo de texto mas não adicionado, adiciona
+    const pendingCriterion = newCriterion.trim();
+    if (pendingCriterion && !criteria.includes(pendingCriterion)) {
+      criteria = [...criteria, pendingCriterion];
+      newCriterion = '';
     }
 
     const data = {
@@ -137,6 +211,7 @@
     } catch (err) {
       console.warn('Falha ao salvar categoria:', err);
       titleError = err?.message || 'Não foi possível salvar a categoria.';
+      throw err;
     } finally {
       isSaving = false;
     }
@@ -159,37 +234,76 @@
   }
 </script>
 
+<svelte:window on:keydown={handleKeydown} />
+
 {#if isOpen}
   <div
-    class="sideOverlay"
-    on:click={handleClose}
+    class="sideOverlay open"
+    on:click={handleCloseWithAutoSave}
     aria-hidden="true"
   ></div>
 
   <div
     id="categoryPanel"
-    class="sidePanel"
+    class="sidePanel phaseDrawerPanel categoryDrawerPanel"
     class:open={isOpen}
     class:categoryCreationRequiredPanel={categoryCreationRequired}
     role="dialog"
     aria-labelledby="categoryPanelTitle"
   >
-    <div class="sidePanelHeader">
-      <div id="categoryPanelTitle" style="font-weight:900">
-        {#if categoryCreationRequired}
-          Categorias da Triagem
-        {:else if isEditing}
-          {isDefault ? 'Editar Categoria Padrão' : 'Editar Categoria Personalizada'}
-        {:else}
-          Nova Categoria Personalizada
-        {/if}
+    <!-- Header moderno e informativo -->
+    <div class="sidePanelHeader phaseDrawerHeader">
+      <div class="phaseDrawerHeaderInfo">
+        <div class="phaseDrawerStepRow">
+          {#if categoryCreationRequired}
+            <span class="phaseDrawerStepPill">Tutorial · Etapa 3 de 4</span>
+          {:else if isEditing}
+            <span class="categoryKindBadge {isDefault ? 'categoryKindBadge--default' : 'categoryKindBadge--custom'}">
+              {isDefault ? 'Categoria Padrão' : 'Categoria Personalizada'}
+            </span>
+            <span class="categoryMetricBadge categoryMetricBadge--{metricType}">
+              {metricType === 'included' ? '✓ Incluir' : (metricType === 'excluded' ? '× Excluir' : '⏳ Pendente')}
+            </span>
+          {:else}
+            <span class="categoryKindBadge categoryKindBadge--custom">Nova Categoria</span>
+            <span class="categoryMetricBadge categoryMetricBadge--{metricType}">
+              {metricType === 'included' ? '✓ Incluir' : (metricType === 'excluded' ? '× Excluir' : '⏳ Pendente')}
+            </span>
+          {/if}
+        </div>
+        <h2 id="categoryPanelTitle" class="phaseDrawerTitle">
+          {#if categoryCreationRequired}
+            Categorias da Triagem
+          {:else if isEditing}
+            {title ? title : (isDefault ? 'Editar Categoria Padrão' : 'Editar Categoria')}
+          {:else}
+            Nova Categoria Personalizada
+          {/if}
+        </h2>
+        <span class="phaseDrawerSubtitle">
+          {#if isDefault}
+            Configure o nome, cor, critérios e diretrizes desta categoria padrão.
+          {:else if isEditing}
+            Edite as configurações, métricas e critérios de inclusão/exclusão.
+          {:else}
+            Crie uma categoria personalizada para detalhar critérios específicos da pesquisa.
+          {/if}
+        </span>
       </div>
-      <button id="btnCloseCategory" class="btn" on:click={handleClose}>
-        {categoryCreationRequired ? 'Voltar aos projetos' : 'Fechar'}
+
+      <button
+        id="btnCloseCategory"
+        class="btn phaseDrawerCloseBtn"
+        type="button"
+        on:click={handleCloseWithAutoSave}
+        title={categoryCreationRequired ? 'Voltar aos projetos' : 'Fechar e salvar alterações (Esc)'}
+        aria-label="Fechar painel"
+      >
+        ✕
       </button>
     </div>
 
-    <div class="sidePanelBody u-scroll-y">
+    <div class="sidePanelBody u-scroll-y phaseDrawerBody">
       {#if categoryCreationRequired}
         <div
           id="categoryRequiredNotice"
@@ -244,9 +358,10 @@
       {/if}
 
       {#if isDefault}
-        <div class="categoryDefaultNotice">
+        <div class="categoryDefaultNotice" role="note">
+          <span style="font-size:16px;line-height:1">🛡️</span>
           <div>
-            <strong>Categoria Padrão do iCipó ({title})</strong>
+            <strong>Categoria Padrão do iCipó ({title || editingCategory.title})</strong>
             <span>
               Esta é uma das 3 categorias essenciais do fluxo de triagem. Seu impacto nas métricas é fixado como
               <b>{metricType === 'included' ? 'Incluir' : (metricType === 'excluded' ? 'Excluir' : 'Pendente')}</b>.
@@ -256,180 +371,307 @@
         </div>
       {/if}
 
-      <label for="categoryTitle">Título da categoria</label>
-      <input
-        id="categoryTitle"
-        class="input"
-        placeholder="Ex.: Fora do Escopo, Estudo Primário, Alta Relevância"
-        bind:value={title}
-        on:input={() => { if (title.trim()) titleError = ''; }}
-      />
-      {#if titleError}
-        <div id="categoryTitleError" class="fieldError visible" aria-live="polite">{titleError}</div>
-      {/if}
-
-      <label for="categoryDescription">Descrição</label>
-      <textarea
-        id="categoryDescription"
-        class="input"
-        style="min-height:90px"
-        placeholder="Explique quando esta categoria deve ser utilizada na triagem"
-        bind:value={description}
-      ></textarea>
-
-      <label for="categoryColor">Cor</label>
-      <div class="categoryColorRow">
+      <!-- Campo Título -->
+      <div class="phaseDrawerFieldGroup">
+        <label for="categoryTitle" class="phaseDrawerLabel">
+          Título da categoria <span class="requiredAsterisk" aria-hidden="true">*</span>
+        </label>
+        <div class="phaseDrawerFieldHint">
+          Ex.: Fora do Escopo, Estudo Primário, Alta Relevância, Não Indexado
+        </div>
         <input
-          type="color"
-          id="categoryColor"
-          class="input categoryColorInput"
-          value={color}
-          on:input={handleColorChange}
+          id="categoryTitle"
+          class="input phaseDrawerInput"
+          placeholder="Digite o título da categoria"
+          bind:value={title}
+          on:input={() => { if (title.trim()) titleError = ''; }}
         />
-        <span id="categoryColorValue" class="categoryColorValue">{color}</span>
+        {#if titleError}
+          <div id="categoryTitleError" class="fieldError visible" aria-live="polite">{titleError}</div>
+        {/if}
       </div>
 
-      <label for="categoryMetricType" style="font-weight:700;display:block;margin-top:10px">
-        Impacto nas métricas (Desfecho)
-      </label>
-      <div class="categoryMetricHelp">
-        Defina se esta categoria personalizada estará relacionada nas métricas e relatórios como <b>Incluir</b>, <b>Excluir</b> ou <b>Pendente</b>:
+      <!-- Campo Descrição -->
+      <div class="phaseDrawerFieldGroup">
+        <label for="categoryDescription" class="phaseDrawerLabel">
+          Descrição e Diretrizes de Uso
+        </label>
+        <div class="phaseDrawerFieldHint">
+          Explique com clareza quando os revisores devem aplicar esta categoria na triagem.
+        </div>
+        <textarea
+          id="categoryDescription"
+          class="input phaseDrawerTextarea"
+          rows="3"
+          placeholder="Ex.: Aplique esta categoria quando o artigo não contemplar os métodos exigidos..."
+          bind:value={description}
+        ></textarea>
       </div>
 
-      {#if !isDefault}
-        <div class="categoryMetricCards">
-          <label class="categoryMetricCard" class:active={metricType === 'included'}>
-            <input
-              type="radio"
-              name="categoryMetricChoice"
-              value="included"
-              bind:group={metricType}
-            />
-            <div class="categoryMetricCardBody">
-              <div class="categoryMetricCardHeader">
-                <span class="categoryMetricBadge categoryMetricBadge--included">✓ Incluir</span>
-                <strong>Relacionada a Incluir</strong>
-              </div>
-              <span class="categoryMetricCardDesc">
-                Artigo atende aos critérios da fase, avança para a próxima etapa da pesquisa e alimenta o indicador de Inclusões da Visão Geral.
-              </span>
-            </div>
-          </label>
-
-          <label class="categoryMetricCard" class:active={metricType === 'excluded'}>
-            <input
-              type="radio"
-              name="categoryMetricChoice"
-              value="excluded"
-              bind:group={metricType}
-            />
-            <div class="categoryMetricCardBody">
-              <div class="categoryMetricCardHeader">
-                <span class="categoryMetricBadge categoryMetricBadge--excluded">× Excluir</span>
-                <strong>Relacionada a Excluir</strong>
-              </div>
-              <span class="categoryMetricCardDesc">
-                Artigo não atende aos critérios, é descartado da revisão e alimenta o indicador de Exclusões da Visão Geral.
-              </span>
-            </div>
-          </label>
-
-          <label class="categoryMetricCard" class:active={metricType === 'pending'}>
-            <input
-              type="radio"
-              name="categoryMetricChoice"
-              value="pending"
-              bind:group={metricType}
-            />
-            <div class="categoryMetricCardBody">
-              <div class="categoryMetricCardHeader">
-                <span class="categoryMetricBadge categoryMetricBadge--pending">⏳ Pendente</span>
-                <strong>Relacionada a Pendente</strong>
-              </div>
-              <span class="categoryMetricCardDesc">
-                Artigo fica aguardando análise completa. Deve ser avaliado antes de a fase ser marcada como concluída.
-              </span>
-            </div>
-          </label>
+      <!-- Campo Cor com Paleta Rápida -->
+      <div class="phaseDrawerFieldGroup">
+        <label for="categoryColor" class="phaseDrawerLabel">
+          Cor de Identificação
+        </label>
+        <div class="phaseDrawerFieldHint">
+          A cor será utilizada nas etiquetas do Scholar, cartões de fase e relatórios visuais.
         </div>
-      {:else}
-        <div style="margin:6px 0 12px">
-          <span class="categoryMetricBadge categoryMetricBadge--{metricType}">
-            {metricType === 'included' ? '✓ Incluído' : (metricType === 'excluded' ? '× Excluído' : '⏳ Pendente')}
-          </span>
-        </div>
-      {/if}
+        <div class="categoryColorPaletteWrapper">
+          <div class="categoryColorPickerRow">
+            <input
+              type="color"
+              id="categoryColor"
+              class="categoryColorPickerInput"
+              value={color}
+              on:input={handleColorChange}
+              title="Escolher cor personalizada"
+            />
+            <div
+              class="categoryColorPreviewBox"
+              style="background: {color}; color: {getReadableColor(color)}"
+            >
+              {color}
+            </div>
+            <span style="font-size:11.5px;color:#64748b">
+              Clique no seletor ou nas cores rápidas abaixo:
+            </span>
+          </div>
 
-      <select
-        id="categoryMetricType"
-        class="input select visually-hidden"
-        bind:value={metricType}
-        tabindex="-1"
-        aria-hidden="true"
-      >
-        <option value="included">Incluído</option>
-        <option value="excluded">Excluído</option>
-        <option value="pending">Não contabilizar / Pendente</option>
-      </select>
-
-      <fieldset class="categoryFieldset">
-        <legend>Critérios da categoria</legend>
-        <div class="categoryCriterionComposer">
-          <input
-            id="categoryCriterionNew"
-            class="input"
-            placeholder="Digite um novo critério específico"
-            bind:value={newCriterion}
-            on:keydown={handleCriterionKeydown}
-          />
-          <button id="btnAddCategoryCriterion" type="button" class="btn" on:click={addCriterion}>
-            Adicionar
-          </button>
-        </div>
-        <div id="categoryCriteria" class="categoriesList categoryRequirementsList" aria-live="polite">
-          {#if criteria.length === 0}
-            <div class="muted categoryEmptyRequirements">Nenhum critério cadastrado.</div>
-          {:else}
-            {#each criteria as criterion, index (criterion + index)}
-              <div class="categoryCriterionItem">
-                <span>{criterion}</span>
-                <button
-                  type="button"
-                  class="btn small ghost danger"
-                  title="Remover critério"
-                  on:click={() => removeCriterion(index)}
-                >
-                  ✕
-                </button>
-              </div>
+          <div class="categoryQuickSwatches" aria-label="Cores rápidas">
+            {#each PRESET_COLORS as presetColor}
+              <button
+                type="button"
+                class="categorySwatchDot"
+                class:selected={color.toUpperCase() === presetColor.toUpperCase()}
+                style="background: {presetColor}"
+                title="Usar cor {presetColor}"
+                on:click={() => { color = presetColor.toUpperCase(); }}
+                aria-label="Cor {presetColor}"
+              ></button>
             {/each}
+          </div>
+        </div>
+      </div>
+
+      <!-- Campo Impacto nas Métricas (Desfecho) -->
+      <div class="phaseDrawerFieldGroup">
+        <span class="phaseDrawerLabel">
+          Impacto nas Métricas (Desfecho)
+        </span>
+        <div class="phaseDrawerFieldHint">
+          {#if isDefault}
+            Categorias padrão possuem vínculo estrutural fixo com o desfecho da fase.
+          {:else}
+            Defina como esta categoria alimentará as métricas e indicadores de progresso:
           {/if}
         </div>
-      </fieldset>
 
-      <div style="display:flex;gap:8px;margin-top:12px">
+        {#if !isDefault}
+          <div class="categoryMetricCards">
+            <label class="categoryMetricCard" class:active={metricType === 'included'}>
+              <input
+                type="radio"
+                name="categoryMetricChoice"
+                value="included"
+                bind:group={metricType}
+              />
+              <div class="categoryMetricCardBody">
+                <div class="categoryMetricCardHeader">
+                  <span class="categoryMetricBadge categoryMetricBadge--included">✓ Incluir</span>
+                  <strong>Relacionada a Incluir</strong>
+                </div>
+                <span class="categoryMetricCardDesc">
+                  Artigo atende aos critérios da fase, avança para a próxima etapa da pesquisa e contabiliza nas Inclusões.
+                </span>
+              </div>
+            </label>
+
+            <label class="categoryMetricCard" class:active={metricType === 'excluded'}>
+              <input
+                type="radio"
+                name="categoryMetricChoice"
+                value="excluded"
+                bind:group={metricType}
+              />
+              <div class="categoryMetricCardBody">
+                <div class="categoryMetricCardHeader">
+                  <span class="categoryMetricBadge categoryMetricBadge--excluded">× Excluir</span>
+                  <strong>Relacionada a Excluir</strong>
+                </div>
+                <span class="categoryMetricCardDesc">
+                  Artigo não atende aos critérios, é descartado da revisão e contabiliza nas Exclusões.
+                </span>
+              </div>
+            </label>
+
+            <label class="categoryMetricCard" class:active={metricType === 'pending'}>
+              <input
+                type="radio"
+                name="categoryMetricChoice"
+                value="pending"
+                bind:group={metricType}
+              />
+              <div class="categoryMetricCardBody">
+                <div class="categoryMetricCardHeader">
+                  <span class="categoryMetricBadge categoryMetricBadge--pending">⏳ Pendente</span>
+                  <strong>Relacionada a Pendente</strong>
+                </div>
+                <span class="categoryMetricCardDesc">
+                  Artigo fica em triagem/avaliação. Deve ser resolvido antes de a fase ser marcada como concluída.
+                </span>
+              </div>
+            </label>
+          </div>
+        {:else}
+          <div class="categoryDefaultImpactBox">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="categoryMetricBadge categoryMetricBadge--{metricType}">
+                {metricType === 'included' ? '✓ Incluído' : (metricType === 'excluded' ? '× Excluído' : '⏳ Pendente')}
+              </span>
+              <strong style="font-size:12px;color:#1e293b">
+                {metricType === 'included' ? 'Avança p/ próxima etapa' : (metricType === 'excluded' ? 'Descartado da revisão' : 'Aguardando decisão')}
+              </strong>
+            </div>
+            <span class="categoryDefaultImpactHint">
+              Esta categoria padrão alimenta os indicadores globais do método PRISMA e orienta as decisões da equipe.
+            </span>
+          </div>
+        {/if}
+
+        <select
+          id="categoryMetricType"
+          class="input select visually-hidden"
+          bind:value={metricType}
+          tabindex="-1"
+          aria-hidden="true"
+        >
+          <option value="included">Incluído</option>
+          <option value="excluded">Excluído</option>
+          <option value="pending">Não contabilizar / Pendente</option>
+        </select>
+      </div>
+
+      <!-- Critérios Específicos -->
+      <div class="phaseDrawerFieldGroup">
+        <label for="categoryCriterionNew" class="phaseDrawerLabel">
+          Critérios da Categoria
+        </label>
+        <div class="phaseDrawerFieldHint">
+          Adicione diretrizes e regras práticas para orientar os pesquisadores na marcação.
+        </div>
+
+        <div class="categoryCriterionBox">
+          <div class="categoryCriterionInputRow">
+            <input
+              id="categoryCriterionNew"
+              class="input phaseDrawerInput"
+              style="flex:1"
+              placeholder="Digite um critério e aperte Enter ou Adicionar"
+              bind:value={newCriterion}
+              on:keydown={handleCriterionKeydown}
+            />
+            <button
+              id="btnAddCategoryCriterion"
+              type="button"
+              class="categoryAddCriterionBtn"
+              on:click={addCriterion}
+            >
+              + Adicionar
+            </button>
+          </div>
+
+          <div id="categoryCriteria" class="categoryCriteriaChips" aria-live="polite">
+            {#if criteria.length === 0}
+              <div class="categoryEmptyCriteria">Nenhum critério específico cadastrado. Digite acima e clique em Adicionar.</div>
+            {:else}
+              {#each criteria as criterion, index (criterion + index)}
+                <div class="categoryCriterionChip" title={criterion}>
+                  <span class="criterionChipText">{criterion}</span>
+                  <button
+                    type="button"
+                    class="criterionChipRemoveBtn"
+                    title="Remover critério"
+                    on:click={() => removeCriterion(index)}
+                    aria-label="Remover critério"
+                  >
+                    ✕
+                  </button>
+                </div>
+              {/each}
+            {/if}
+          </div>
+        </div>
+      </div>
+
+      <!-- Botões de Ação Principais -->
+      <div class="phaseDrawerActionsRow">
         <button
           id="btnSaveCategory"
-          class="btn"
+          class="btn phaseDrawerPrimaryBtn"
+          class:ready={title.trim()}
           type="button"
           disabled={isSaving}
           on:click={handleSave}
+          title="Salvar alterações (Ctrl+Enter)"
         >
-          {isSaving ? 'Salvando...' : 'Salvar categoria'}
+          {#if isSaving}
+            <span class="savingSpinner" aria-hidden="true"></span>
+            <span>Salvando...</span>
+          {:else}
+            <span>{isEditing ? 'Salvar alterações' : 'Salvar categoria'}</span>
+          {/if}
         </button>
-        {#if isEditing}
-          <button
-            id="btnDeleteCategory"
-            class="btn danger"
-            type="button"
-            disabled={cannotDelete}
-            title={deleteTooltip}
-            on:click={handleDelete}
-          >
-            {isDeleting ? 'Excluindo...' : 'Excluir categoria'}
-          </button>
-        {/if}
+
+        <button
+          id="btnCancelCategory"
+          class="btn phaseDrawerCancelBtn"
+          type="button"
+          disabled={isSaving}
+          on:click={handleClose}
+        >
+          Cancelar
+        </button>
       </div>
+
+      <!-- Zona de Exclusão / Proteção Segura -->
+      {#if isEditing}
+        <div class="phaseDangerZone">
+          <div class="dangerZoneDivider"></div>
+          {#if isDefault}
+            <div class="dangerZoneLocked" title={deleteTooltip}>
+              <span class="lockedIcon">🔒</span>
+              <span class="lockedText">
+                As categorias padrão (<strong>Incluir</strong>, <strong>Excluir</strong>, <strong>Pendente</strong>) são protegidas e não podem ser excluídas para manter a consistência do fluxo de triagem.
+              </span>
+            </div>
+          {:else if deletionBlockReason}
+            <div class="dangerZoneLocked" title={deleteTooltip}>
+              <span class="lockedIcon">⚠️</span>
+              <span class="lockedText">
+                {deletionBlockReason}
+              </span>
+            </div>
+          {:else}
+            <div class="dangerZoneContent">
+              <div class="dangerZoneText">
+                <strong class="dangerZoneTitle">Excluir esta categoria</strong>
+                <span class="dangerZoneDesc">
+                  Esta categoria personalizada será removida do projeto e de todas as fases associadas.
+                </span>
+              </div>
+              <button
+                id="btnDeleteCategory"
+                class="btn danger phaseDrawerDeleteBtn"
+                type="button"
+                disabled={cannotDelete}
+                on:click={handleDelete}
+              >
+                {isDeleting ? 'Excluindo...' : 'Excluir categoria'}
+              </button>
+            </div>
+          {/if}
+        </div>
+      {/if}
     </div>
   </div>
 {/if}
