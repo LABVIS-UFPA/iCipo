@@ -23,7 +23,10 @@
     normalizeHexColor,
     getOverviewPaperCategory,
     resolveOverviewPhaseLabel,
-    getPaperClassificationForPhase
+    getPaperClassificationForPhase,
+    inferMetricTypeFromCategory,
+    normalizeCategoryMetricType,
+    getOverviewMetricType
   } from '../dashboardHelpers.js';
 
   $: project = $projectStore || {};
@@ -80,12 +83,16 @@
   }
 
   function getArticleCategoryInfo(paper) {
-    const category = getOverviewPaperCategory(paper, scope, project.categories, $highlightedLinksStore, activePhaseLabel);
-    const phaseLabel = resolveOverviewPhaseLabel(scope, activePhaseLabel);
+    let category = getOverviewPaperCategory(paper, scope, project.categories, $highlightedLinksStore, activePhaseLabel);
+    if (!category) {
+      const metricType = getOverviewMetricType(paper, scope, activePhaseLabel, project.categories, $highlightedLinksStore) || 'pending';
+      category = (project.categories || []).find(c => normalizeCategoryMetricType(c.metricType, inferMetricTypeFromCategory(c)) === metricType)
+        || (project.categories || [])[0];
+    }
     const color = category?.color
-      ? normalizeHexColor(category.color, '#A5ADBA')
-      : (phaseLabel === 'all' ? getPaperCategoryColor(paper, project.categories, $highlightedLinksStore) : '#A5ADBA');
-    const label = category?.title || category?.label || 'Sem categoria';
+      ? normalizeHexColor(category.color, '#2eae6c')
+      : '#2eae6c';
+    const label = category?.title || category?.label || 'Pendente';
     return { color, label };
   }
 

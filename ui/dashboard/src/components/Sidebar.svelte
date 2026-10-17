@@ -5,6 +5,7 @@
     dashboardIntroRequiredStore,
     phaseCreationRequiredStore,
     categoryCreationRequiredStore,
+    articleTutorialRequiredStore,
     setActiveView
   } from '../dashboardStore.js';
   import { formatResearchers } from '../dashboardHelpers.js';
@@ -16,10 +17,14 @@
 
   $: requiredView = $dashboardIntroRequiredStore
     ? '__intro__'
-    : ($phaseCreationRequiredStore ? 'phases' : ($categoryCreationRequiredStore ? 'categories' : null));
+    : ($phaseCreationRequiredStore
+      ? 'phases'
+      : ($categoryCreationRequiredStore
+        ? 'categories'
+        : ($articleTutorialRequiredStore ? '__tutorial__' : null)));
 
   function isLocked(view) {
-    return Boolean(requiredView && (requiredView === '__intro__' || view !== requiredView));
+    return Boolean(requiredView && (requiredView === '__intro__' || requiredView === '__tutorial__' || view !== requiredView));
   }
 
   function handleNav(view) {

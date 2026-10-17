@@ -1,14 +1,31 @@
 <script>
   import {
     articleTutorialOpenStore,
+    articleTutorialRequiredStore,
     closeArticleTutorial
   } from "../dashboardStore.js";
 
   $: isOpen = $articleTutorialOpenStore;
+  $: isMandatory = $articleTutorialRequiredStore;
 
   function handleKeydown(event) {
-    if (event.key === "Escape" && isOpen) {
+    if (event.key === "Escape" && isOpen && !isMandatory) {
       closeArticleTutorial();
+    }
+  }
+
+  function handleOverlayClick() {
+    if (isMandatory) return;
+    closeArticleTutorial();
+  }
+
+  async function handleCompleteTutorial() {
+    await closeArticleTutorial({ markComplete: true });
+  }
+
+  function handleBackToProjects() {
+    if (confirm('O tutorial é obrigatório para configurar o projeto. Deseja sair e voltar para a lista de projetos?')) {
+      window.location.href = '../projects/projects.html';
     }
   }
 </script>
@@ -19,22 +36,32 @@
   <button
     type="button"
     class="sideOverlay open"
-    aria-label="Fechar tutorial"
-    on:click={closeArticleTutorial}
+    class:mandatoryOverlay={isMandatory}
+    aria-label={isMandatory ? "Tutorial obrigatório em andamento" : "Fechar tutorial"}
+    on:click={handleOverlayClick}
   ></button>
 
   <div
     class="sidePanel articleTutorialPanel open"
+    class:mandatoryTutorialPanel={isMandatory}
     aria-hidden="false"
     role="dialog"
     aria-label="Tutorial · Como funciona a triagem de artigos na fase"
   >
     <div class="sidePanelHeader">
       <div>
-        <div class="tutorialEyebrow">Tutorial · Etapa 4 de 4</div>
+        <div class="tutorialEyebrow" style="display:flex;align-items:center;gap:6px">
+          {#if isMandatory}
+            <span class="tutorialStepBadge tutorialStepBadge--mandatory">Tutorial Obrigatório · Etapa 4 de 4</span>
+          {:else}
+            <span>Tutorial · Etapa 4 de 4</span>
+          {/if}
+        </div>
         <div style="font-weight:900;font-size:16px">Como funciona a triagem de artigos</div>
       </div>
-      <button class="btn" on:click={closeArticleTutorial}>Entendi</button>
+      {#if !isMandatory}
+        <button class="btn" on:click={() => closeArticleTutorial()}>Fechar</button>
+      {/if}
     </div>
 
     <div class="sidePanelBody u-scroll-y">
@@ -79,12 +106,12 @@
       <div class="articleTutorialStep">
         <span class="articleTutorialNumber">4</span>
         <div>
-          <strong>Categorias Padrão: Incluir, Excluir e Pendente</strong>
+          <strong>Categorias Padrão: Ativadas por padrão em todas as fases</strong>
           <span>
-            O iCipó já vem configurado com as três categorias essenciais:
+            O iCipó já vem configurado com as três categorias essenciais ativadas por padrão em cada fase:
             <b style="color:#16a34a">Incluir</b> (artigo aprovado que segue para a próxima fase),
             <b style="color:#dc2626">Excluir</b> (artigo descartado da revisão) e
-            <b style="color:#d97706">Pendente</b> (aguardando avaliação). Elas alimentam os gráficos e taxas da Visão Geral.
+            <b style="color:#d97706">Pendente</b> (aguardando avaliação). Elas asseguram a esteira de triagem contínua e alimentam os gráficos da Visão Geral.
           </span>
         </div>
       </div>
@@ -95,7 +122,7 @@
         <div>
           <strong>Categorias personalizadas vinculadas às métricas</strong>
           <span>
-            Você pode criar categorias personalizadas (ex.: <i>Fora do Escopo</i>, <i>Estudo Primário</i>) e escolher explicitamente se cada uma estará relacionada nas métricas a <b>Incluir</b>, <b>Excluir</b> ou <b>Pendente</b>.
+            Além das categorias padrão que já vêm ativadas em todas as fases, você pode criar categorias personalizadas (ex.: <i>Fora do Escopo</i>, <i>Estudo Primário</i>) e escolher explicitamente se cada uma estará relacionada nas métricas a <b>Incluir</b>, <b>Excluir</b> ou <b>Pendente</b>.
           </span>
         </div>
       </div>
@@ -139,6 +166,43 @@
           Vá ao Google Scholar para coletar seus estudos ou clique em <b>Ver artigos</b> no cartão da sua fase para experimentar a triagem.
         </span>
       </div>
+
+      {#if isMandatory}
+        <div class="articleTutorialActionRow" style="margin-top: 20px; padding-bottom: 24px; text-align: center; display: flex; flex-direction: column; gap: 10px;">
+          <button
+            id="btnCompleteTutorial"
+            class="btn btn-primary articleTutorialCompleteBtn"
+            type="button"
+            on:click={handleCompleteTutorial}
+            style="width: 100%; padding: 13px 20px; font-weight: 750; font-size: 15px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;"
+          >
+            <svg class="academicSvg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            <span>Concluir tutorial e começar pesquisa</span>
+          </button>
+
+          <button
+            type="button"
+            class="btn ghost small"
+            on:click={handleBackToProjects}
+            style="color: var(--muted); font-size: 12px;"
+          >
+            Sair e voltar aos projetos
+          </button>
+        </div>
+      {:else}
+        <div class="articleTutorialActionRow" style="margin-top: 16px; padding-bottom: 20px; text-align: center;">
+          <button
+            class="btn ghost"
+            type="button"
+            on:click={() => closeArticleTutorial()}
+            style="width: 100%;"
+          >
+            Fechar tutorial
+          </button>
+        </div>
+      {/if}
     </div>
   </div>
 {/if}

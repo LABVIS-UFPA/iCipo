@@ -516,11 +516,11 @@
         </div>
       {/if}
 
-      <div class="note">
-        {editMode
-          ? 'Atualize os dados metodológicos deste projeto. Ao clicar fora, as alterações são salvas automaticamente.'
-          : 'Preencha os campos obrigatórios identificados com asterisco (*).'}
-      </div>
+      {#if !editMode}
+        <div class="note">
+          Preencha os campos obrigatórios identificados com asterisco (*).
+        </div>
+      {/if}
 
       <div class="formContent">
         <!-- Seção 1: Identificação do Estudo -->
@@ -683,15 +683,15 @@
   .layout{
     --sidebar:var(--sidebar-bg, #071827);
     --sidebar2:var(--sidebar-bg-2, #0b2032);
-    --workspace:var(--workspace, #f5f7fa);
-    --surface:var(--surface, #ffffff);
+    --workspace:var(--workspace-subtle, #f5f7fa);
+    --surface:var(--surface-soft, #ffffff);
     --text:var(--text-primary, #172033);
     --muted:var(--text-muted, #69758a);
-    --border:var(--border, #e1e6ed);
+    --border:var(--border-light, #e1e6ed);
     --borderStrong:var(--border-strong, #d5dce6);
-    --green:var(--green, #2eae6c);
-    --greenDark:var(--green-dark, #238d57);
-    --red:var(--red, #e5484d);
+    --green:#2eae6c;
+    --greenDark:#238d57;
+    --red:#e5484d;
     display:grid;
     grid-template-columns:224px minmax(0,1fr);
     grid-template-rows:100vh;
@@ -886,20 +886,38 @@
     padding:6px 13px;
     font-size:12px;
   }
-  .btnOpen{
-    border-color:var(--green);
-    background:var(--green);
-    color:#ffffff;
-    box-shadow:0 2px 6px rgba(46,174,108,.20);
+  .btnOpen,
+  .btnAction.btnOpen{
+    border-color:#2eae6c !important;
+    background:#2eae6c !important;
+    color:#ffffff !important;
+    box-shadow:0 2px 6px rgba(46,174,108,.25);
   }
-  .btnOpen:hover{
-    background:var(--greenDark);
-    border-color:var(--greenDark);
-    color:#ffffff;
+  .btnOpen:hover,
+  .btnAction.btnOpen:hover{
+    background:#238d57 !important;
+    border-color:#238d57 !important;
+    color:#ffffff !important;
+    box-shadow:0 4px 10px rgba(46,174,108,.35);
   }
-  .btnCurrent{
-    background:#168455;
-    border-color:#168455;
+  .btnCurrent,
+  .btnAction.btnCurrent{
+    background:#168455 !important;
+    border-color:#168455 !important;
+    color:#ffffff !important;
+  }
+  .btnCurrent:hover,
+  .btnAction.btnCurrent:hover{
+    background:#126e46 !important;
+    border-color:#126e46 !important;
+    color:#ffffff !important;
+  }
+  .btnOpen svg,
+  .btnOpen span,
+  .btnCurrent svg,
+  .btnCurrent span{
+    color:#ffffff !important;
+    stroke:currentColor;
   }
   .btnArchive:hover{
     border-color:#f0c9cc;

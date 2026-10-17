@@ -79,12 +79,6 @@
         </svg>
         <span>Adicionar nova fase</span>
       </button>
-      <div class="muted phaseToolbarHint" style="display:inline-flex;align-items:center;gap:6px">
-        <svg class="academicSvg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--orange);" aria-hidden="true">
-          <path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-7 7c0 2.5 1.5 4.5 3 6h8c1.5-1.5 3-3.5 3-6a7 7 0 0 0-7-7z"/>
-        </svg>
-        <span>Use a barra de rolagem horizontal abaixo dos cards para navegar no fluxo sequencial.</span>
-      </div>
     </div>
   </div>
 
@@ -93,9 +87,6 @@
     <div class="phasesHeaderRow">
       <div>
         <div class="cardTitle">Fluxo Contínuo de Fases e Triagem</div>
-        <div class="muted">
-          Sequência linear de progressão. Role horizontalmente da esquerda para a direita para ver todas as fases sem quebra de linha.
-        </div>
       </div>
 
       {#if phases.length > 2}

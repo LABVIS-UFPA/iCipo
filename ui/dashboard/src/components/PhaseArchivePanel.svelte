@@ -183,15 +183,22 @@
 
   function getCategoryInfo(record) {
     const categoryLabel = String(record?.categoryLabel || '').trim().toLowerCase();
-    if (!categoryLabel) return { color: '#A5ADBA', name: 'Sem categoria' };
-    const matched = categories.find(cat => {
-      const l = String(cat?.label || '').trim().toLowerCase();
-      const t = String(cat?.title || '').trim().toLowerCase();
-      return l === categoryLabel || t === categoryLabel;
-    });
+    let matched = null;
+    if (categoryLabel) {
+      matched = categories.find(cat => {
+        const l = String(cat?.label || '').trim().toLowerCase();
+        const t = String(cat?.title || '').trim().toLowerCase();
+        return l === categoryLabel || t === categoryLabel;
+      });
+    }
+    if (!matched) {
+      const normOutcome = normalizeMetricType(record?.outcome, 'pending');
+      matched = categories.find(cat => normalizeCategoryMetricType(cat?.metricType, inferMetricTypeFromCategory(cat)) === normOutcome)
+        || categories[0];
+    }
     return {
-      color: normalizeHexColor(matched?.color, '#A5ADBA'),
-      name: matched?.title || matched?.label || record.categoryLabel || 'Sem categoria'
+      color: normalizeHexColor(matched?.color, '#2eae6c'),
+      name: matched?.title || matched?.label || 'Pendente'
     };
   }
 
@@ -248,15 +255,15 @@
         {activePhaseObj.title || `Fase ${index + 1}`} · Artigos
       </h3>
 
-      <p class="phaseArchiveDescription">
-        {#if isActivePhase}
-          Fase em condução: avalie artigos individualmente ou em lote para incluir, excluir ou definir como pendente. Metadados e Snowballing atualizados em tempo real.
-        {:else if isCompleted}
+      {#if isCompleted}
+        <p class="phaseArchiveDescription">
           Fase concluída e protegida: artigos avaliados nesta etapa gravados para integridade e auditoria metodológica.
-        {:else}
+        </p>
+      {:else if !isActivePhase}
+        <p class="phaseArchiveDescription">
           Fase planejada: gerencie artigos e critérios desta etapa.
-        {/if}
-      </p>
+        </p>
+      {/if}
     </div>
 
     <button
@@ -379,7 +386,8 @@
         <input
           type="text"
           class="phaseArchiveSearchInput"
-          placeholder="Buscar por título, autor, ano, tag, periódico ou id:X / parent:X..."
+          placeholder="Buscar..."
+          aria-label="Buscar artigos"
           value={searchQuery}
           on:input={handleSearchInput}
         />

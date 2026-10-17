@@ -21,7 +21,10 @@ import {
   mergePaperSourcesForBulk,
   createBulkClassifiedPaper,
   removePaperClassificationFromActivePhase,
-  isPhaseCompleted
+  isPhaseCompleted,
+  isDefaultCategory,
+  getPapersForCategory,
+  getCategoryDeletionBlockReason
 } from './dashboardHelpers.js';
 
 
@@ -141,6 +144,7 @@ export const isHistoryModalOpenStore = writable(false);
 export const bulkCategoryModalStore = writable(null); // { outcome, categories, selectedCount }
 export const isBulkCategoryModalOpenStore = writable(false);
 export const articleTutorialOpenStore = writable(false);
+export const articleTutorialRequiredStore = writable(false);
 export const serverStatusStore = writable('Conectado');
 
 export const activePhaseLabelStore = derived(projectStore, ($project) => {
@@ -288,6 +292,7 @@ export async function loadDashboardState() {
       dashboardIntroRequiredStore.set(false);
       categoryCreationRequiredStore.set(false);
       articleTutorialOpenStore.set(false);
+      articleTutorialRequiredStore.set(false);
       return;
     }
 
@@ -331,16 +336,77 @@ export async function loadDashboardState() {
       }
     }
 
-    const phaseReq = !hasPhases;
-    const introReq = phaseReq && !hasSeenDashboardIntro(project.id);
-    const savedTutorialStage = getTutorialStage(project.id);
-    const catReq = !phaseReq && !hasCategories && ['category-pending', 'category-required'].includes(savedTutorialStage);
-    const artReq = !phaseReq && hasCategories && savedTutorialStage === 'articles-open';
+    // Assegura que todas as fases tenham as categorias padrão ativadas por padrão
+    const defaultCategoryLabels = (project.categories || [])
+      .filter(c => isDefaultCategory(c.label) || ['included', 'excluded', 'pending'].includes(normalizeCategoryMetricType(c.metricType, inferMetricTypeFromCategory(c))))
+      .map(c => c.label);
+
+    if (defaultCategoryLabels.length > 0 && Array.isArray(project.phases) && project.phases.length > 0) {
+      let phaseCategoriesUpdated = false;
+      for (const ph of project.phases) {
+        if (!Array.isArray(ph.categories)) ph.categories = [];
+        const missingDefaults = defaultCategoryLabels.filter(dl => !ph.categories.includes(dl));
+        if (missingDefaults.length > 0) {
+          ph.categories = [...ph.categories, ...missingDefaults];
+          phaseCategoriesUpdated = true;
+        }
+      }
+      if (phaseCategoriesUpdated) {
+        try {
+          const projectInstance = project instanceof Project ? project : Project.fromJSON(project);
+          projectInstance.phases = project.phases;
+          await storage.saveProject(projectInstance);
+        } catch (err) {
+          console.warn('Erro ao sincronizar categorias padrão nas fases:', err);
+        }
+      }
+    }
+
+    let savedTutorialStage = getTutorialStage(project.id);
+    if (hasPhases && !savedTutorialStage) {
+      setTutorialStage('complete', project.id);
+      savedTutorialStage = 'complete';
+    }
+
+    const isComplete = savedTutorialStage === 'complete';
+    const introSeen = hasSeenDashboardIntro(project.id);
+
+    let phaseReq = false;
+    let introReq = false;
+    let catReq = false;
+    let artReq = false;
+
+    if (!isComplete) {
+      if (!hasPhases) {
+        if (!introSeen) {
+          introReq = true;
+          phaseReq = true;
+        } else {
+          phaseReq = true;
+          openPhasePanel(null);
+        }
+      } else if (savedTutorialStage === 'category-required') {
+        catReq = true;
+        openCategoryPanel(null);
+      } else if (savedTutorialStage === 'articles-open') {
+        artReq = true;
+      } else {
+        if (!hasCategories) {
+          catReq = true;
+          openCategoryPanel(null);
+        } else {
+          artReq = true;
+        }
+      }
+    } else {
+      phaseReq = !hasPhases;
+    }
 
     phaseCreationRequiredStore.set(phaseReq);
     dashboardIntroRequiredStore.set(introReq);
     categoryCreationRequiredStore.set(catReq);
     articleTutorialOpenStore.set(artReq);
+    articleTutorialRequiredStore.set(artReq);
     accessStateStore.set('ready');
 
     // Determina a visualização ativa respeitando a página atual ou salva pelo usuário
@@ -471,12 +537,15 @@ export function setActiveView(view) {
   const introReq = get(dashboardIntroRequiredStore);
   const phaseReq = get(phaseCreationRequiredStore);
   const catReq = get(categoryCreationRequiredStore);
+  const artReq = get(articleTutorialRequiredStore);
 
   const allowedView = introReq
     ? 'overview'
     : (phaseReq
       ? 'phases'
-      : (catReq ? 'categories' : view));
+      : (catReq
+        ? 'categories'
+        : (artReq ? 'phases' : view)));
 
   persistDashboardView(allowedView);
   activeViewStore.set(allowedView);
@@ -623,16 +692,31 @@ export function closeHistoryModal() {
   historyModalPaperStore.set(null);
 }
 
-export function openArticleTutorial() {
+export function openArticleTutorial({ mandatory = false } = {}) {
+  articleTutorialRequiredStore.set(Boolean(mandatory));
   articleTutorialOpenStore.set(true);
 }
 
-export function closeArticleTutorial() {
+export async function closeArticleTutorial({ markComplete = false } = {}) {
   articleTutorialOpenStore.set(false);
+  articleTutorialRequiredStore.set(false);
+  const project = get(projectStore);
+  if (markComplete && project?.id) {
+    setTutorialStage('complete', project.id);
+    await loadDashboardState();
+  }
+}
+
+export function completeCategoryTutorialStep() {
   const project = get(projectStore);
   if (project?.id) {
-    setTutorialStage('complete', project.id);
+    setTutorialStage('articles-open', project.id);
   }
+  categoryCreationRequiredStore.set(false);
+  isCategoryPanelOpenStore.set(false);
+  editingCategoryStore.set(null);
+  setActiveView('phases');
+  openArticleTutorial({ mandatory: true });
 }
 
 export function closePaperBulkCategoryModal() {
@@ -887,11 +971,13 @@ export function dismissIntroModal() {
   const project = get(projectStore);
   if (project?.id) {
     markDashboardIntroSeen(project.id);
+    setTutorialStage('phase-required', project.id);
   }
   dashboardIntroRequiredStore.set(false);
   const phaseReq = get(phaseCreationRequiredStore);
   if (phaseReq) {
     setActiveView('phases');
+    openPhasePanel(null);
   }
 }
 
@@ -929,10 +1015,21 @@ export async function savePhaseAction(phasePayload, phaseEditingLabel = null) {
   const project = get(projectStore);
   if (!project?.id) throw new Error('Abra um projeto antes de salvar fases.');
 
+  // Assegura que as categorias padrão da pesquisa estejam sempre ativadas por padrão na fase
+  const defaultLabels = (project.categories || [])
+    .filter(c => isDefaultCategory(c.label) || ['included', 'excluded', 'pending'].includes(normalizeCategoryMetricType(c.metricType, inferMetricTypeFromCategory(c))))
+    .map(c => c.label);
+
+  const mergedCategories = [...new Set([...defaultLabels, ...(phasePayload.categories || [])])];
+  const payloadWithDefaults = {
+    ...phasePayload,
+    categories: mergedCategories
+  };
+
   if (phaseEditingLabel) {
-    await storage.updatePhase(project.id, phaseEditingLabel, phasePayload);
+    await storage.updatePhase(project.id, phaseEditingLabel, payloadWithDefaults);
   } else {
-    await storage.savePhase(project.id, phasePayload);
+    await storage.savePhase(project.id, payloadWithDefaults);
   }
 
   await loadDashboardState();
@@ -1001,6 +1098,154 @@ export async function saveCategoryAction(categoryData, editingCategoryLabel = nu
 
   await storage.saveProject(projectInstance);
   await updateScholarContextMenu();
+  await loadDashboardState();
+}
+
+export const categoryMigrationModalStore = writable({
+  isOpen: false,
+  categoryToDelete: null,
+  linkedPapers: [],
+  targetCategoryLabel: null
+});
+
+export function closeCategoryMigrationModal() {
+  categoryMigrationModalStore.set({
+    isOpen: false,
+    categoryToDelete: null,
+    linkedPapers: [],
+    targetCategoryLabel: null
+  });
+}
+
+export async function requestCategoryDeletionAction(category) {
+  const rawProject = get(projectStore);
+  if (!rawProject?.id) throw new Error("Nenhum projeto ativo.");
+  if (!category || !category.label) return;
+
+  const categoryLabel = category.label;
+  if (isDefaultCategory(categoryLabel)) {
+    alert("As categorias padrão (Incluir, Excluir, Pendente) não podem ser excluídas.");
+    return;
+  }
+
+  const deletionBlockReason = getCategoryDeletionBlockReason(rawProject, categoryLabel);
+  if (deletionBlockReason) {
+    alert(deletionBlockReason);
+    return;
+  }
+
+  const allPapers = get(papersStore);
+  const linkedPapers = getPapersForCategory(allPapers, categoryLabel);
+
+  if (linkedPapers.length > 0) {
+    categoryMigrationModalStore.set({
+      isOpen: true,
+      categoryToDelete: category,
+      linkedPapers,
+      targetCategoryLabel: null
+    });
+    closeCategoryPanel();
+    return;
+  }
+
+  if (!confirm(`Excluir a categoria "${category.title || category.label}"?`)) return;
+
+  await deleteCategoryAction(categoryLabel);
+  closeCategoryPanel();
+}
+
+export async function migrateAndFinalizeCategoryDeletionAction(sourceLabel, targetLabel) {
+  const rawProject = get(projectStore);
+  if (!rawProject?.id) throw new Error("Nenhum projeto ativo.");
+
+  const targetCategory = (rawProject.categories || []).find(c => c.label === targetLabel);
+  if (!targetCategory) throw new Error("Selecione uma categoria de destino válida para a migração.");
+
+  const allPapers = get(papersStore);
+  const affectedPapers = getPapersForCategory(allPapers, sourceLabel);
+  const targetMetricType = normalizeCategoryMetricType(targetCategory.metricType, inferMetricTypeFromCategory(targetCategory));
+  const targetColor = normalizeHexColor(targetCategory.color, targetCategory.color || "");
+
+  let rawContext = {};
+  try {
+    rawContext = await storage.get(["highlightedLinks", "svat_papers"]);
+  } catch {}
+  const highlightedLinks = rawContext?.highlightedLinks && typeof rawContext.highlightedLinks === "object"
+    ? { ...rawContext.highlightedLinks }
+    : {};
+  let scopedPapers = Array.isArray(rawContext?.svat_papers) ? [...rawContext.svat_papers] : [];
+
+  for (const paper of affectedPapers) {
+    const nextPaper = { ...paper };
+    const prevClassifications = nextPaper.classifications && typeof nextPaper.classifications === "object" && !Array.isArray(nextPaper.classifications)
+      ? { ...nextPaper.classifications }
+      : {};
+
+    let classificationChanged = false;
+    for (const [phaseKey, classif] of Object.entries(prevClassifications)) {
+      if (classif && String(classif.categoryLabel || "").trim().toLowerCase() === String(sourceLabel).trim().toLowerCase()) {
+        prevClassifications[phaseKey] = {
+          ...classif,
+          categoryLabel: targetCategory.label,
+          outcome: targetMetricType,
+          classifiedAt: new Date().toISOString()
+        };
+        classificationChanged = true;
+      }
+    }
+    if (classificationChanged) {
+      nextPaper.classifications = prevClassifications;
+    }
+
+    if (String(nextPaper.categoryLabel || "").trim().toLowerCase() === String(sourceLabel).trim().toLowerCase()) {
+      nextPaper.categoryLabel = targetCategory.label;
+      nextPaper.status = targetMetricType;
+      nextPaper.highlightedColor = targetColor;
+    }
+
+    if (Array.isArray(nextPaper.tags)) {
+      nextPaper.tags = nextPaper.tags.map(t => (
+        String(t).trim().toLowerCase() === String(sourceLabel).trim().toLowerCase() ? targetCategory.label : t
+      ));
+      nextPaper.tags = [...new Set(nextPaper.tags)];
+    }
+
+    const history = Array.isArray(nextPaper.history) ? [...nextPaper.history] : [];
+    history.push({
+      ts: new Date().toISOString(),
+      action: "migrate_category",
+      details: {
+        fromCategory: sourceLabel,
+        toCategory: targetCategory.label,
+        metricType: targetMetricType,
+        source: "category_deletion_migration"
+      }
+    });
+    nextPaper.history = history;
+    nextPaper.updatedAt = new Date().toISOString();
+
+    await storage.savePaper(nextPaper);
+
+    const scopedIdx = scopedPapers.findIndex(p => p.id === nextPaper.id || p.url === nextPaper.url);
+    if (scopedIdx >= 0) scopedPapers[scopedIdx] = nextPaper;
+
+    if (nextPaper.url) {
+      highlightedLinks[nextPaper.url] = targetColor;
+    }
+  }
+
+  try {
+    await storage.set({ highlightedLinks, svat_papers: scopedPapers });
+  } catch (err) {
+    console.warn("Erro ao salvar highlightedLinks no storage:", err);
+  }
+
+  const projectInstance = rawProject instanceof Project ? rawProject : Project.fromJSON(rawProject);
+  projectInstance.removeCategory(sourceLabel);
+
+  await storage.saveProject(projectInstance);
+  await updateScholarContextMenu();
+  closeCategoryMigrationModal();
   await loadDashboardState();
 }
 

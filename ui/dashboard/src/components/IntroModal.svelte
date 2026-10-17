@@ -34,11 +34,11 @@
       >
         <div>
           <strong>Fases</strong>
-          <span>Estruturam as etapas sequenciais da revisão (ex.: Títulos/Resumos e Leitura Completa).</span>
+          <span>Estruturam as etapas sequenciais da revisão. As categorias padrão vêm <b>ativadas por padrão</b> em todas as fases para triagem imediata.</span>
         </div>
         <div>
           <strong>Categorias Padrão & Personalizadas</strong>
-          <span>Utilize as categorias padrão (<b>Incluir</b>, <b>Excluir</b> e <b>Pendente</b>) ou crie categorias personalizadas vinculadas a qualquer uma das três métricas.</span>
+          <span>As 3 categorias padrão (<b>Incluir</b>, <b>Excluir</b> e <b>Pendente</b>) já vêm ativadas por padrão em todas as fases. Você também pode criar categorias personalizadas adicionais vinculadas a qualquer uma das três métricas.</span>
         </div>
         <div>
           <strong>Visão Geral & Triagem</strong>
@@ -48,7 +48,7 @@
 
       <div class="dashboardIntroNextStep">
         <strong>Primeiro passo</strong>
-        <span>Crie a primeira fase para definir como os artigos serão avaliados.</span>
+        <span>Crie a primeira fase para iniciar. As categorias padrão já estarão ativadas por padrão para você começar a triagem.</span>
       </div>
 
       <div class="dashboardIntroActions">

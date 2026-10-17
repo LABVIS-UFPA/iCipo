@@ -6,17 +6,22 @@
     isPhasePanelOpenStore,
     editingPhaseStore,
     phaseCreationRequiredStore,
+    categoryCreationRequiredStore,
     closePhasePanel,
     savePhaseAction,
     deletePhaseAction,
+    openCategoryPanel,
     openArticleTutorial,
+    setActiveView,
     setTutorialStage
   } from '../dashboardStore.js';
   import {
     canDeletePhaseLabel,
     getPhaseStats,
     normalizeCategoryMetricType,
-    isPhaseCompleted
+    inferMetricTypeFromCategory,
+    isPhaseCompleted,
+    isDefaultCategory
   } from '../dashboardHelpers.js';
 
   let title = '';
@@ -34,6 +39,9 @@
   $: phaseCreationRequired = $phaseCreationRequiredStore;
   $: project = $projectStore || {};
   $: projectCategories = Array.isArray(project.categories) ? project.categories : [];
+  $: defaultCategoryLabels = projectCategories
+    .filter(c => isDefaultCategory(c.label) || ['included', 'excluded', 'pending'].includes(normalizeCategoryMetricType(c.metricType, inferMetricTypeFromCategory(c))))
+    .map(c => c.label);
   $: phases = Array.isArray(project.phases) ? project.phases : [];
   $: activePhaseLabel = $activePhaseLabelStore;
 
@@ -51,7 +59,8 @@
     if (editingPhase) {
       title = editingPhase.title || '';
       description = editingPhase.desc ?? editingPhase.description ?? '';
-      selectedCategories = Array.isArray(editingPhase.categories) ? [...editingPhase.categories] : [];
+      const existingCats = Array.isArray(editingPhase.categories) ? editingPhase.categories : [];
+      selectedCategories = [...new Set([...existingCats, ...defaultCategoryLabels])];
       status = isPhaseCompleted(editingPhase) ? 'done' : 'pending';
     } else {
       title = '';
@@ -65,7 +74,9 @@
   }
   function handleClose() {
     if (phaseCreationRequired) {
-      window.location.href = '../projects/projects.html';
+      if (confirm('O tutorial é obrigatório para configurar o projeto. Deseja sair e voltar para a lista de projetos?')) {
+        window.location.href = '../projects/projects.html';
+      }
       return;
     }
     closePhasePanel();
@@ -73,7 +84,15 @@
 
   async function handleCloseWithAutoSave() {
     if (phaseCreationRequired) {
-      window.location.href = '../projects/projects.html';
+      const cleanTitle = title.trim();
+      const cleanDesc = description.trim();
+      if (cleanTitle && cleanDesc) {
+        try {
+          await handleSave();
+        } catch (err) {
+          console.warn('Falha no auto-save ao fechar:', err);
+        }
+      }
       return;
     }
 
@@ -95,6 +114,10 @@
   }
 
   function toggleCategory(catLabel) {
+    if (defaultCategoryLabels.includes(catLabel)) {
+      // Categorias padrão vêm ativadas por padrão em todas as fases
+      return;
+    }
     if (selectedCategories.includes(catLabel)) {
       selectedCategories = selectedCategories.filter(l => l !== catLabel);
     } else {
@@ -108,8 +131,9 @@
     categoriesError = '';
   }
 
-  function deselectAllCategories() {
-    selectedCategories = [];
+  function selectOnlyDefaultCategories() {
+    selectedCategories = [...defaultCategoryLabels];
+    categoriesError = '';
   }
 
   function handleSetStatus(newStatus) {
@@ -169,11 +193,13 @@
       normalizeCategoryMetricType(cat?.metricType, 'pending') === 'pending'
     ));
 
+    const allCategoriesToSave = [...new Set([...selectedCategories, ...defaultCategoryLabels])];
+
     const phasePayload = {
       title: cleanTitle,
       description: cleanDesc,
       completed: status === 'done',
-      categories: selectedCategories,
+      categories: allCategoriesToSave,
       inheritanceCategoryLabel: inheritanceCategory?.label || null,
       criteria: isEditing ? (editingPhase.criteria || []) : []
     };
@@ -184,8 +210,10 @@
       await savePhaseAction(phasePayload, isEditing ? editingPhase.label : null);
       closePhasePanel();
       if (isCreatingFirstPhase && project?.id) {
-        setTutorialStage('articles-open', project.id);
-        openArticleTutorial();
+        setTutorialStage('category-required', project.id);
+        categoryCreationRequiredStore.set(true);
+        setActiveView('categories');
+        openCategoryPanel(null);
       }
     } catch (err) {
       console.warn('Falha ao salvar fase:', err);
@@ -288,7 +316,7 @@
           <span class="requiredStepLabel">Tutorial · Etapa 2 de 4</span>
           <strong>Crie a primeira fase da sua revisão</strong>
           <span>
-            As fases dividem a seleção em etapas progressivas. As três categorias padrão (<b>Incluir</b>, <b>Excluir</b> e <b>Pendente</b>) já virão vinculadas automaticamente nesta fase para iniciar a triagem de imediato.
+            As fases dividem a seleção em etapas progressivas. As categorias padrão (<b>Incluir</b>, <b>Excluir</b> e <b>Pendente</b>) já vêm <b>ativadas por padrão</b> nesta e em todas as fases para iniciar a triagem de imediato, garantindo o fluxo contínuo de avaliação.
           </span>
         </div>
       {/if}
@@ -343,7 +371,7 @@
               Categorias Ativas nesta Fase
             </span>
             <div class="phaseDrawerFieldHint">
-              Apenas as categorias marcadas estarão disponíveis na marcação do Google Scholar.
+              As categorias padrão vêm ativadas por padrão em todas as fases. Você pode associar categorias personalizadas adicionais para esta etapa.
             </div>
           </div>
           {#if projectCategories.length > 0}
@@ -352,7 +380,7 @@
                 type="button"
                 class="fastActionBtn"
                 on:click={selectAllCategories}
-                title="Selecionar todas as categorias"
+                title="Selecionar todas as categorias cadastradas"
               >
                 Todas
               </button>
@@ -360,10 +388,10 @@
               <button
                 type="button"
                 class="fastActionBtn"
-                on:click={deselectAllCategories}
-                title="Desmarcar todas as categorias"
+                on:click={selectOnlyDefaultCategories}
+                title="Manter apenas as categorias padrão ativadas"
               >
-                Nenhuma
+                Apenas padrão
               </button>
             </div>
           {/if}
@@ -384,16 +412,20 @@
           {:else}
             {#each projectCategories as cat (cat.label || cat.id)}
               {@const isChecked = selectedCategories.includes(cat.label)}
+              {@const isDefault = defaultCategoryLabels.includes(cat.label)}
               {@const normMetric = normalizeCategoryMetricType(cat.metricType, 'pending')}
               <label
                 class="phaseCategoryCardRow"
                 class:selected={isChecked}
+                class:isDefaultRow={isDefault}
+                title={isDefault ? 'Categoria padrão: ativada por padrão em todas as fases da pesquisa' : ''}
               >
                 <div class="categoryCheckCol">
                   <input
                     type="checkbox"
                     value={cat.label}
                     checked={isChecked}
+                    disabled={isDefault}
                     on:change={() => toggleCategory(cat.label)}
                   />
                   <span
@@ -404,7 +436,12 @@
                 </div>
 
                 <div class="categoryDetailsCol">
-                  <span class="categoryName">{cat.title || cat.label}</span>
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <span class="categoryName">{cat.title || cat.label}</span>
+                    {#if isDefault}
+                      <span class="defaultCategoryPhaseTag">Padrão da Fase</span>
+                    {/if}
+                  </div>
                   {#if cat.description}
                     <span class="categorySubDesc">{cat.description}</span>
                   {/if}

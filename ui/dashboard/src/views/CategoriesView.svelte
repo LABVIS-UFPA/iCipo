@@ -24,7 +24,7 @@
       <h2>Categorias</h2>
     </div>
     <p>
-      Gerencie as categorias padrão (<b>Incluir</b>, <b>Excluir</b> e <b>Pendente</b>) e crie categorias personalizadas com desfecho vinculado às métricas da pesquisa.
+      Gerencie as categorias padrão (<b>Incluir</b>, <b>Excluir</b> e <b>Pendente</b>), que vêm ativadas por padrão em todas as fases, e crie categorias personalizadas com desfecho vinculado às métricas da pesquisa.
     </p>
   </div>
 

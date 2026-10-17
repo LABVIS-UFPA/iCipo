@@ -238,8 +238,20 @@ export function getPaperCategory(paper, projectCategories = [], highlightedLinks
     }
   }
 
-  if (!resolvedColor) return null;
-  return categories.find(cat => normalizeHexColor(cat?.color) === resolvedColor) || null;
+  if (resolvedColor) {
+    const matchedByColor = categories.find(cat => normalizeHexColor(cat?.color) === resolvedColor);
+    if (matchedByColor) return matchedByColor;
+  }
+
+  // Fallback seguro: vincula à categoria padrão correspondente ao status (nunca fica sem categoria)
+  if (categories.length > 0) {
+    const metricType = normalizeMetricType(classification?.outcome ?? paper?.status, "pending");
+    return categories.find(cat => normalizeCategoryMetricType(cat?.metricType, inferMetricTypeFromCategory(cat)) === metricType)
+      || categories.find(cat => isDefaultCategory(cat?.label))
+      || categories[0];
+  }
+
+  return null;
 }
 
 export function getPaperCategoryKey(category) {
@@ -328,6 +340,14 @@ export function getPaperCategoryForPhase(paper, phaseLabel, projectCategories = 
     }) || null;
   }
 
+  // Fallback seguro: vincula à categoria padrão correspondente ao outcome da fase
+  if (categories.length > 0) {
+    const metricType = normalizeMetricType(classification.outcome ?? paper?.status, "pending");
+    return categories.find(cat => normalizeCategoryMetricType(cat?.metricType, inferMetricTypeFromCategory(cat)) === metricType)
+      || categories.find(cat => isDefaultCategory(cat?.label))
+      || categories[0];
+  }
+
   return null;
 }
 
@@ -392,18 +412,19 @@ export function buildCategoryDistribution(papers = [], projectCategories = [], h
     count: 0,
   })).filter(entry => entry.key);
   const byKey = new Map(entries.map(entry => [entry.key, entry]));
-  let uncategorized = 0;
 
   const phaseLabel = resolveOverviewPhaseLabel(scope, activePhaseLabel);
   for (const paper of papers) {
-    const category = getPaperCategoryForPhase(paper, phaseLabel, projectCategories, highlightedLinks);
+    let category = getPaperCategoryForPhase(paper, phaseLabel, projectCategories, highlightedLinks);
+    if (!category) {
+      const metricType = getOverviewMetricType(paper, scope, activePhaseLabel, projectCategories, highlightedLinks) || "pending";
+      category = categories.find(c => normalizeCategoryMetricType(c.metricType, inferMetricTypeFromCategory(c)) === metricType)
+        || categories[0];
+    }
     const key = getPaperCategoryKey(category);
-    if (key && byKey.has(key)) byKey.get(key).count += 1;
-    else uncategorized += 1;
-  }
-
-  if (uncategorized > 0 || entries.length === 0) {
-    entries.push({ key: "uncategorized", label: "Sem categoria", color: "#A5ADBA", count: uncategorized });
+    if (key && byKey.has(key)) {
+      byKey.get(key).count += 1;
+    }
   }
 
   return entries;
@@ -739,6 +760,29 @@ export function getCategoryDeletionBlockReason(project, categoryLabel) {
   return "";
 }
 
+export function getPapersForCategory(papers = [], categoryLabel) {
+  if (!categoryLabel) return [];
+  const normTarget = String(categoryLabel).trim().toLowerCase();
+  return (Array.isArray(papers) ? papers : []).filter(paper => {
+    if (!paper) return false;
+    const topLevelCat = String(paper.categoryLabel || "").trim().toLowerCase();
+    if (topLevelCat === normTarget) return true;
+
+    if (Array.isArray(paper.tags) && paper.tags.some(t => String(t).trim().toLowerCase() === normTarget)) {
+      return true;
+    }
+
+    const classifications = paper.classifications;
+    if (classifications && typeof classifications === "object" && !Array.isArray(classifications)) {
+      return Object.values(classifications).some(c => 
+        String(c?.categoryLabel || "").trim().toLowerCase() === normTarget
+      );
+    }
+
+    return false;
+  });
+}
+
 export function getPaperPhaseLabels(paper) {
   const labels = new Set();
   const classifications = paper?.classifications;
@@ -797,14 +841,14 @@ export function paperMatchesFilters(paper, filters = {}, projectCategories = [],
   }
 
   if (filters.category && filters.category !== "all") {
-    const categoryKey = getPaperCategoryKey(category) || "uncategorized";
+    const categoryKey = getPaperCategoryKey(category);
     if (categoryKey !== filters.category) return false;
   }
 
   if (!filters.q) return true;
 
   const normalizedQuery = normalizeStr(filters.q);
-  const categoryText = category ? `${category.title || ""} ${category.label || ""}` : "sem categoria";
+  const categoryText = category ? `${category.title || ""} ${category.label || ""}` : "";
   const metricText = getPaperMetricLabel(getPaperMetricTypeForPhase(paper, filters.phase, projectCategories, highlightedLinks));
   const phaseText = getPaperPhaseDisplay(paper, filters.phases || []);
   const hay = normalizeStr(`${paper.title || ""} ${paper.authorsRaw || ""} ${(paper.tags || []).join(" ")} ${paper.year || ""} ${paper.url || ""} ${categoryText} ${metricText} ${phaseText}`);

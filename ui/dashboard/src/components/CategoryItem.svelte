@@ -2,7 +2,7 @@
   import {
     projectStore,
     openCategoryPanel,
-    deleteCategoryAction
+    requestCategoryDeletionAction
   } from '../dashboardStore.js';
   import {
     normalizeHexColor,
@@ -30,14 +30,8 @@
   }
 
   async function handleDelete() {
-    if (deletionBlockReason) {
-      alert(deletionBlockReason);
-      return;
-    }
-    if (!confirm(`Excluir a categoria "${category.title || category.label}"?`)) return;
-
     try {
-      await deleteCategoryAction(category.label);
+      await requestCategoryDeletionAction(category);
     } catch (err) {
       console.warn('Falha ao excluir categoria:', err);
       alert(err?.message || 'Falha ao excluir categoria.');

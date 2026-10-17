@@ -7,7 +7,9 @@
     closeCategoryPanel,
     saveCategoryAction,
     deleteCategoryAction,
-    createDefaultCategoriesAction
+    requestCategoryDeletionAction,
+    createDefaultCategoriesAction,
+    completeCategoryTutorialStep
   } from '../dashboardStore.js';
   import {
     getCategoryDeletionBlockReason,
@@ -94,9 +96,16 @@
     defaultCategoriesError = '';
   }
 
+  $: projectCategories = Array.isArray(project.categories) ? project.categories : [];
+  $: hasAllDefaults = ['included', 'excluded', 'pending'].every(m =>
+    projectCategories.some(c => normalizeCategoryMetricType(c?.metricType, inferMetricTypeFromCategory(c || {})) === m)
+  );
+
   function handleClose() {
     if (categoryCreationRequired) {
-      window.location.href = '../projects/projects.html';
+      if (confirm('O tutorial é obrigatório para configurar o projeto. Deseja sair e voltar para a lista de projetos?')) {
+        window.location.href = '../projects/projects.html';
+      }
       return;
     }
     closeCategoryPanel();
@@ -104,7 +113,14 @@
 
   async function handleCloseWithAutoSave() {
     if (categoryCreationRequired) {
-      window.location.href = '../projects/projects.html';
+      const cleanTitle = title.trim();
+      if (cleanTitle) {
+        try {
+          await handleSave();
+        } catch (err) {
+          console.warn('Falha no auto-save da categoria ao fechar:', err);
+        }
+      }
       return;
     }
 
@@ -129,6 +145,10 @@
 
     // Se for uma nova categoria sem título preenchido, fecha diretamente sem salvar
     closeCategoryPanel();
+  }
+
+  function handleAdvanceToTutorialStage4() {
+    completeCategoryTutorialStep();
   }
 
   async function handleKeydown(event) {
@@ -170,7 +190,6 @@
     isCreatingDefaults = true;
     try {
       await createDefaultCategoriesAction();
-      closeCategoryPanel();
     } catch (err) {
       console.warn('Falha ao criar categorias padrão:', err);
       defaultCategoriesError = err?.message || 'Não foi possível criar as categorias padrão.';
@@ -207,7 +226,14 @@
     isSaving = true;
     try {
       await saveCategoryAction(data, isEditing ? editingCategory.label : null);
-      closeCategoryPanel();
+      if (categoryCreationRequired) {
+        title = '';
+        description = '';
+        criteria = [];
+        newCriterion = '';
+      } else {
+        closeCategoryPanel();
+      }
     } catch (err) {
       console.warn('Falha ao salvar categoria:', err);
       titleError = err?.message || 'Não foi possível salvar a categoria.';
@@ -219,12 +245,10 @@
 
   async function handleDelete() {
     if (!isEditing || deletionBlockReason) return;
-    if (!confirm(`Excluir a categoria "${title}"?`)) return;
 
     isDeleting = true;
     try {
-      await deleteCategoryAction(editingCategory.label);
-      closeCategoryPanel();
+      await requestCategoryDeletionAction(editingCategory);
     } catch (err) {
       console.warn('Falha ao excluir categoria:', err);
       alert(err?.message || 'Falha ao excluir categoria.');
@@ -314,43 +338,75 @@
           <span class="requiredStepLabel">Tutorial · Etapa 3 de 4</span>
           <strong>Categorias Padrão e Personalizadas</strong>
           <span>
-            O iCipó organiza a triagem através de 3 categorias padrão essenciais: <b>Incluir</b>, <b>Excluir</b> e <b>Pendente</b>.
+            O iCipó organiza a triagem através de 3 categorias padrão essenciais: <b>Incluir</b>, <b>Excluir</b> e <b>Pendente</b>, que já vêm <b>ativadas por padrão em todas as fases</b>.
             Você pode utilizá-las diretamente ou criar categorias personalizadas adicionais para detalhar critérios específicos, associando cada uma à sua respectiva métrica.
           </span>
         </div>
 
-        <div id="defaultCategoriesSuggestion" class="defaultCategoriesSuggestion">
-          <div class="defaultCategoriesSuggestionHeader">
-            <div>
-              <span class="tutorialEyebrow">Sugestão do iCipó</span>
-              <strong>Categorias essenciais para começar</strong>
+        {#if hasAllDefaults}
+          <div id="defaultCategoriesSuggestion" class="defaultCategoriesSuggestion defaultCategoriesSuggestion--ready">
+            <div class="defaultCategoriesSuggestionHeader">
+              <div>
+                <span class="tutorialEyebrow" style="color:var(--good,#16a34a)">Configuração Pronta</span>
+                <strong>Categorias padrão essenciais ativas</strong>
+              </div>
+              <span class="defaultCategoriesSuggestionBadge" style="background:rgba(34,197,94,0.14);color:#15803d;border:1px solid rgba(34,197,94,0.3)">✓ 3 Ativas nas Fases</span>
             </div>
-            <span class="defaultCategoriesSuggestionBadge">1 clique</span>
-          </div>
-          <p>
-            Crie automaticamente as três categorias necessárias para o fluxo de
-            triagem. Você poderá editar nome, descrição, cor e critérios depois.
-          </p>
-          <div class="defaultCategoriesPreview" aria-label="Categorias padrão sugeridas">
-            <span><i class="defaultCategoryDot defaultCategoryDotIncluded"></i>Incluir</span>
-            <span><i class="defaultCategoryDot defaultCategoryDotExcluded"></i>Excluir</span>
-            <span><i class="defaultCategoryDot defaultCategoryDotPending"></i>Pendente</span>
-          </div>
-          <button
-            id="btnCreateDefaultCategories"
-            type="button"
-            class="btn defaultCategoriesButton"
-            disabled={isCreatingDefaults}
-            on:click={handleCreateDefaults}
-          >
-            {isCreatingDefaults ? 'Criando categorias...' : 'Criar categorias padrão'}
-          </button>
-          {#if defaultCategoriesError}
-            <div id="defaultCategoriesError" class="fieldError visible" aria-live="polite">
-              {defaultCategoriesError}
+            <p>
+              O seu projeto já possui as 3 categorias padrão essenciais ativadas por padrão em todas as fases para a triagem e cálculo das métricas:
+            </p>
+            <div class="defaultCategoriesPreview" aria-label="Categorias padrão configuradas">
+              <span><i class="defaultCategoryDot defaultCategoryDotIncluded"></i><b>Incluir</b> (Avança de fase)</span>
+              <span><i class="defaultCategoryDot defaultCategoryDotExcluded"></i><b>Excluir</b> (Descartado)</span>
+              <span><i class="defaultCategoryDot defaultCategoryDotPending"></i><b>Pendente</b> (Em análise)</span>
             </div>
-          {/if}
-        </div>
+
+            <div class="tutorialCategoryActionRow" style="margin-top: 16px;">
+              <button
+                id="btnAdvanceToArticlesTutorial"
+                type="button"
+                class="btn btn-primary"
+                style="width: 100%; padding: 12px 18px; font-weight: 750; font-size: 14.5px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;"
+                on:click={handleAdvanceToTutorialStage4}
+              >
+                <span>Confirmar categorias e avançar para Etapa 4 →</span>
+              </button>
+            </div>
+          </div>
+        {:else}
+          <div id="defaultCategoriesSuggestion" class="defaultCategoriesSuggestion">
+            <div class="defaultCategoriesSuggestionHeader">
+              <div>
+                <span class="tutorialEyebrow">Sugestão do iCipó</span>
+                <strong>Categorias essenciais para começar</strong>
+              </div>
+              <span class="defaultCategoriesSuggestionBadge">1 clique</span>
+            </div>
+            <p>
+              Crie automaticamente as três categorias essenciais, que virão ativadas por padrão em todas as fases para o fluxo de
+              triagem. Você poderá editar nome, descrição, cor e critérios depois.
+            </p>
+            <div class="defaultCategoriesPreview" aria-label="Categorias padrão sugeridas">
+              <span><i class="defaultCategoryDot defaultCategoryDotIncluded"></i>Incluir</span>
+              <span><i class="defaultCategoryDot defaultCategoryDotExcluded"></i>Excluir</span>
+              <span><i class="defaultCategoryDot defaultCategoryDotPending"></i>Pendente</span>
+            </div>
+            <button
+              id="btnCreateDefaultCategories"
+              type="button"
+              class="btn defaultCategoriesButton"
+              disabled={isCreatingDefaults}
+              on:click={handleCreateDefaults}
+            >
+              {isCreatingDefaults ? 'Criando categorias...' : 'Criar categorias padrão'}
+            </button>
+            {#if defaultCategoriesError}
+              <div id="defaultCategoriesError" class="fieldError visible" aria-live="polite">
+                {defaultCategoriesError}
+              </div>
+            {/if}
+          </div>
+        {/if}
 
         <div class="categoryManualDivider">
           <span>ou crie uma categoria personalizada</span>
@@ -532,9 +588,6 @@
                 {metricType === 'included' ? 'Avança p/ próxima etapa' : (metricType === 'excluded' ? 'Descartado da revisão' : 'Aguardando decisão')}
               </strong>
             </div>
-            <span class="categoryDefaultImpactHint">
-              Esta categoria padrão alimenta os indicadores globais do método PRISMA e orienta as decisões da equipe.
-            </span>
           </div>
         {/if}
 

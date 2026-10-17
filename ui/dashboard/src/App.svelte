@@ -11,9 +11,14 @@
   import PaperHistoryModal from "./components/PaperHistoryModal.svelte";
   import PaperBulkCategoryModal from "./components/PaperBulkCategoryModal.svelte";
   import ArticleTutorialPanel from "./components/ArticleTutorialPanel.svelte";
+  import CategoryMigrationModal from "./components/CategoryMigrationModal.svelte";
   import {
     activeViewStore,
     accessStateStore,
+    dashboardIntroRequiredStore,
+    phaseCreationRequiredStore,
+    categoryCreationRequiredStore,
+    articleTutorialRequiredStore,
     loadDashboardState,
     bindStorageSync,
     unbindStorageSync,
@@ -45,6 +50,13 @@
   });
 </script>
 
+<svelte:body
+  class:dashboardIntroRequired={$dashboardIntroRequiredStore}
+  class:phaseCreationRequired={$phaseCreationRequiredStore}
+  class:categoryCreationRequired={$categoryCreationRequiredStore}
+  class:articleTutorialRequired={$articleTutorialRequiredStore}
+/>
+
 <div class="app">
   <Sidebar />
 
@@ -71,6 +83,8 @@
     <PaperBulkCategoryModal />
 
     <ArticleTutorialPanel />
+
+    <CategoryMigrationModal />
   </main>
 
   <div
