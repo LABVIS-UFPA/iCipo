@@ -1,41 +1,34 @@
 <script>
   import {
     projectStore,
-    openCategoryPanel,
-    requestCategoryDeletionAction
+    papersStore,
+    openCategoryPanel
   } from '../dashboardStore.js';
   import {
     normalizeHexColor,
     normalizeCategoryMetricType,
     inferMetricTypeFromCategory,
     getReadableCategoryTextColor,
-    getCategoryDeletionBlockReason,
     isDefaultCategory,
+    getPapersForCategory,
     PAPER_METRIC_LABELS
   } from '../dashboardHelpers.js';
 
   export let category = {};
 
   $: project = $projectStore || {};
+  $: allPapers = $papersStore || [];
+  $: categoryPapers = getPapersForCategory(allPapers, category.label);
+  $: paperCount = categoryPapers.length;
   $: isDefault = isDefaultCategory(category.label);
   $: color = normalizeHexColor(category.color, '#4CAF50');
   $: textColor = getReadableCategoryTextColor(color);
   $: usesDarkText = textColor === '#101828';
   $: metricType = normalizeCategoryMetricType(category.metricType, inferMetricTypeFromCategory(category));
   $: metricLabel = PAPER_METRIC_LABELS[metricType] || 'Pendente';
-  $: deletionBlockReason = getCategoryDeletionBlockReason(project, category.label);
 
   function handleEdit() {
     openCategoryPanel(category);
-  }
-
-  async function handleDelete() {
-    try {
-      await requestCategoryDeletionAction(category);
-    } catch (err) {
-      console.warn('Falha ao excluir categoria:', err);
-      alert(err?.message || 'Falha ao excluir categoria.');
-    }
   }
 </script>
 
@@ -49,6 +42,9 @@
     <div style="min-width: 0;">
       <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
         <span class="title">{category.title || category.label}</span>
+        <span class="categoryPaperCountBadge" title="{paperCount} {paperCount === 1 ? 'artigo classificado' : 'artigos classificados'} nesta categoria">
+          {paperCount} {paperCount === 1 ? 'artigo' : 'artigos'}
+        </span>
         {#if isDefault}
           <span class="categoryKindBadge categoryKindBadge--default" title="Categoria padrão do iCipó">Padrão</span>
         {:else}
@@ -72,18 +68,6 @@
         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
       </svg>
       <span>Editar</span>
-    </button>
-    <button
-      type="button"
-      disabled={Boolean(deletionBlockReason)}
-      title={deletionBlockReason || `Excluir a categoria ${category.title || category.label}`}
-      on:click={handleDelete}
-    >
-      <svg class="academicSvg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polyline points="3 6 5 6 21 6"/>
-        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-      </svg>
-      <span>Excluir</span>
     </button>
   </div>
 </li>

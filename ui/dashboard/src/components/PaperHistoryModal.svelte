@@ -92,6 +92,7 @@
   function getSourceDescription(source) {
     if (source === "articles_toolbar") return "pela barra de ferramentas de artigos";
     if (source === "bulk_modal") return "pelo assistente de triagem em lote";
+    if (source === "category_transfer_tool") return "pelo recurso de transferência entre categorias";
     if (source === "context_menu") return "pelo menu de contexto";
     if (source === "scholar") return "durante a navegação no Google Scholar";
     if (!source) return "na interface da pesquisa";
@@ -232,6 +233,7 @@
     if (key === "source") {
       if (s === "articles_toolbar") return "Barra de Ferramentas de Artigos";
       if (s === "bulk_modal") return "Assistente de Lote";
+      if (s === "category_transfer_tool") return "Transferência entre Categorias";
       if (s === "context_menu") return "Menu de Contexto";
       if (s === "scholar") return "Google Scholar";
     }

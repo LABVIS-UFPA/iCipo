@@ -4078,6 +4078,23 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
   letter-spacing:.025em;
   white-space:nowrap;
 }
+.phaseValidatedBadge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:4px 10px;
+  background:#ecfdf5;
+  color:#15803d;
+  border:1px solid #bbf7d0;
+  border-radius:999px;
+  font-size:10.5px;
+  font-weight:750;
+  letter-spacing:.03em;
+  text-transform:uppercase;
+  white-space:nowrap;
+  user-select:none;
+  box-shadow:0 1px 2px rgba(21,128,61,.08);
+}
 .phaseCardTriageButtons{
   display:inline-flex;
   align-items:center;
@@ -6439,6 +6456,495 @@ a.phaseArchiveArticleTitle:hover{color:#146fd1;text-decoration:underline}
   align-items: center;
   gap: 6px;
   text-decoration: none;
+}
+
+/* ==========================================================================
+   CATEGORY TRANSFER & RECLASSIFICATION STYLES
+   ========================================================================== */
+.categoryPaperCountBadge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  color: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  display: inline-flex;
+  align-items: center;
+  line-height: 1.2;
+}
+
+.categoryItem[data-category-tone="light"] .categoryPaperCountBadge {
+  background: rgba(0, 0, 0, 0.07);
+  border-color: rgba(0, 0, 0, 0.15);
+}
+
+.categoryItem .btnTransferArticles {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.categoryItem .btnTransferArticles:hover {
+  background: #f8fafc;
+  border-color: #0284c7;
+  color: #0284c7;
+}
+
+.categoryPanelTransferCard {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.transferCardInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 200px;
+}
+
+.transferCardTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: #166534;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.transferCardDesc {
+  font-size: 12px;
+  color: #15803d;
+  line-height: 1.4;
+}
+
+.categoryTransferOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 10000;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 0 16px 32px;
+  overflow-y: auto;
+}
+
+.categoryTransferCard {
+  width: 100%;
+  max-width: 680px;
+  background: #ffffff;
+  border-radius: 0 0 18px 18px;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.35), 0 0 0 1px rgba(15, 23, 42, 0.08);
+  animation: slideCardFromTop 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  margin-top: 0;
+  max-height: 90vh;
+}
+
+.transferAccentBar {
+  height: 5px;
+  background: linear-gradient(90deg, #3b82f6, #6366f1, #8b5cf6);
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.transferHeader {
+  padding: 20px 24px 14px;
+  background: #ffffff;
+  border-bottom: 1px solid #f1f5f9;
+  flex-shrink: 0;
+}
+
+.transferHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.transferBadgeRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.transferBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.1);
+  color: #1d4ed8;
+  border: 1px solid rgba(37, 99, 235, 0.25);
+}
+
+.transferCountBadge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.transferCloseBtn {
+  background: transparent;
+  border: none;
+  font-size: 16px;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  line-height: 1;
+  transition: all 0.15s ease;
+}
+
+.transferCloseBtn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.transferTitle {
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 6px 0;
+  line-height: 1.3;
+}
+
+.transferDescription {
+  font-size: 13px;
+  color: #475569;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.transferBody {
+  padding: 18px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow-y: auto;
+  max-height: calc(90vh - 180px);
+}
+
+.transferErrorBanner {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.transferSuccessBanner {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #16a34a;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.transferFormGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.transferFormField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.transferFormField--full {
+  grid-column: 1 / -1;
+}
+
+.transferFormLabel {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.transferSelect {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  font-size: 13.5px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #0f172a;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.transferSelect:focus {
+  outline: none;
+  border-color: #2563eb;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.transferMovementPreview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 16px;
+  flex-wrap: wrap;
+}
+
+.transferPreviewCol {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 150px;
+}
+
+.previewColLabel {
+  font-size: 10.5px;
+  font-weight: 750;
+  text-transform: uppercase;
+  color: #64748b;
+  letter-spacing: 0.04em;
+}
+
+.previewPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: #0f172a;
+}
+
+.previewPill--target {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.previewDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.previewMetricBadge {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: auto;
+}
+
+.previewMetricBadge.metric-included {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.previewMetricBadge.metric-excluded {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.previewMetricBadge.metric-pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.previewArrowCol {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+.previewArrow {
+  font-size: 18px;
+  font-weight: 800;
+  color: #2563eb;
+}
+
+.transferImpactNotice {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  color: #1e40af;
+  line-height: 1.4;
+}
+
+.transferPapersSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.transferPapersToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.transferPapersTitle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.transferToolbarActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btnLink {
+  background: transparent;
+  border: none;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #2563eb;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.btnLink:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.btnLink:disabled {
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.dividerDot {
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.transferSearchBox {
+  margin-bottom: 2px;
+}
+
+.transferSearchInput {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  font-size: 12.5px;
+  background: #f8fafc;
+}
+
+.transferSearchInput:focus {
+  outline: none;
+  border-color: #2563eb;
+  background: #ffffff;
+}
+
+.transferPapersList {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.transferPaperCard {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+
+.transferPaperCard:hover {
+  border-color: #cbd5e1;
+}
+
+.transferPaperCard--selected {
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.paperCheckbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #16a34a;
+}
+
+.transferEmptyPapers {
+  padding: 24px 16px;
+  text-align: center;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.transferFooter {
+  padding: 14px 24px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 

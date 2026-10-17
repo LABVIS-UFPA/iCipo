@@ -781,10 +781,80 @@ export function isDefaultCategory(categoryLabel) {
   return DEFAULT_TUTORIAL_CATEGORIES.some(c => c.label === norm);
 }
 
-export function getCategoryDeletionBlockReason(project, categoryLabel) {
+export function isCategoryLinkedToInheritedOrPriorPhasePapers(categoryLabel, papers = [], phases = []) {
+  if (!categoryLabel || !Array.isArray(papers) || !papers.length) return false;
+  const normTarget = String(categoryLabel).trim().toLowerCase();
+
+  const phaseIndexMap = new Map();
+  (Array.isArray(phases) ? phases : []).forEach((p, idx) => {
+    if (p?.label) phaseIndexMap.set(p.label, idx);
+    if (p?.id) phaseIndexMap.set(p.id, idx);
+  });
+
+  for (const paper of papers) {
+    if (!paper) continue;
+
+    const isPaperInherited = paper.inherited === true
+      || String(paper.entryType || "").toLowerCase() === "inherited"
+      || Boolean(paper.inheritedFromPhaseLabel);
+
+    const classifications = paper.classifications;
+    if (classifications && typeof classifications === "object" && !Array.isArray(classifications)) {
+      for (const [phaseKey, classif] of Object.entries(classifications)) {
+        if (!classif) continue;
+        const cat = String(classif.categoryLabel || "").trim().toLowerCase();
+        if (cat === normTarget) {
+          if (
+            classif.inherited === true
+            || String(classif.entryType || "").toLowerCase() === "inherited"
+            || Boolean(classif.inheritedFromPhaseLabel)
+          ) {
+            return true;
+          }
+          if (isPaperInherited) {
+            return true;
+          }
+          if (phases.length > 1 && phaseIndexMap.has(phaseKey)) {
+            const idx = phaseIndexMap.get(phaseKey);
+            if (idx < phases.length - 1) {
+              return true;
+            }
+          }
+        }
+      }
+    }
+
+    const topCat = String(paper.categoryLabel || "").trim().toLowerCase();
+    const paperPhase = paper.phaseLabel || paper.phaseId || paper.iterationId;
+    if (topCat === normTarget) {
+      if (isPaperInherited) return true;
+      if (phases.length > 1 && paperPhase && phaseIndexMap.has(paperPhase)) {
+        const idx = phaseIndexMap.get(paperPhase);
+        if (idx < phases.length - 1) {
+          return true;
+        }
+      }
+    }
+
+    if (isPaperInherited && Array.isArray(paper.history)) {
+      const hadCatInHistory = paper.history.some(h => 
+        String(h?.details?.category || h?.details?.previousCategory || "").trim().toLowerCase() === normTarget
+      );
+      if (hadCatInHistory) return true;
+    }
+  }
+
+  return false;
+}
+
+export function getCategoryDeletionBlockReason(project, categoryLabel, papers = []) {
   const categories = Array.isArray(project?.categories) ? project.categories : [];
   if (categories.length <= 1) {
     return "O projeto deve manter pelo menos uma categoria.";
+  }
+
+  if (isCategoryLinkedToInheritedOrPriorPhasePapers(categoryLabel, papers, project?.phases)) {
+    return "Esta categoria está vinculada a artigos validados e herdados de fases anteriores. Ela não pode ser excluída para preservar o histórico metodológico, podendo apenas ser desativada na marcação das fases.";
   }
 
   const blockingPhases = (Array.isArray(project?.phases) ? project.phases : [])
@@ -974,6 +1044,9 @@ export function getLatestRemainingClassification(classifications, phases = []) {
 
 export function removePaperClassificationFromActivePhase(paper, activePhaseLabel, projectCategories = [], phases = []) {
   if (!paper || !activePhaseLabel) return null;
+  if (isPaperLockedInActivePhase(paper, activePhaseLabel)) {
+    return paper;
+  }
 
   const classifications = getPaperClassificationsMap(paper);
   delete classifications[activePhaseLabel];
@@ -1155,12 +1228,25 @@ export function createBulkClassifiedPaper(previousPaper, category, phaseLabel, c
 }
 
 export function isPaperLockedInActivePhase(paper, activePhaseLabel) {
-  if (!paper || !activePhaseLabel) return false;
-  const classification = getPaperClassificationForPhase(paper, activePhaseLabel);
-  if (!classification) return false;
-  return classification.inherited === true
-    || String(classification.entryType || "").toLowerCase() === "inherited"
-    || Boolean(classification.inheritedFromPhaseLabel);
+  if (!paper) return false;
+
+  if (activePhaseLabel) {
+    const classification = getPaperClassificationForPhase(paper, activePhaseLabel);
+    if (classification) {
+      return classification.inherited === true
+        || String(classification.entryType || "").toLowerCase() === "inherited"
+        || Boolean(classification.inheritedFromPhaseLabel);
+    }
+    if (paper.phaseLabel === activePhaseLabel || paper.iterationId === activePhaseLabel) {
+      return paper.inherited === true
+        || String(paper.entryType || "").toLowerCase() === "inherited"
+        || Boolean(paper.inheritedFromPhaseLabel);
+    }
+  }
+
+  return paper.inherited === true
+    || String(paper.entryType || "").toLowerCase() === "inherited"
+    || Boolean(paper.inheritedFromPhaseLabel);
 }
 
 

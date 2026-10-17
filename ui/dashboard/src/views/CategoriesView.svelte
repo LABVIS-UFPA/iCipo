@@ -1,5 +1,10 @@
 <script>
-  import { projectStore, openCategoryPanel, openArticleTutorial } from '../dashboardStore.js';
+  import {
+    projectStore,
+    openCategoryPanel,
+    openArticleTutorial,
+    openCategoryTransferModal
+  } from '../dashboardStore.js';
   import CategoryItem from '../components/CategoryItem.svelte';
   import CategoryPanel from '../components/CategoryPanel.svelte';
 
@@ -37,6 +42,16 @@
         </svg>
         <span>Criar categoria personalizada</span>
       </button>
+      <button class="btn secondary" type="button" on:click={() => openCategoryTransferModal()}>
+        <svg class="academicSvg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="16 3 21 3 21 8"/>
+          <line x1="4" y1="20" x2="21" y2="3"/>
+          <polyline points="21 16 21 21 16 21"/>
+          <line x1="15" y1="15" x2="21" y2="21"/>
+          <line x1="4" y1="4" x2="9" y2="9"/>
+        </svg>
+        <span>Mover artigos entre categorias</span>
+      </button>
       <button class="btn ghost" type="button" on:click={openArticleTutorial}>
         <svg class="academicSvg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
@@ -59,8 +74,7 @@
       <span>Lista de categorias</span>
     </div>
     <div class="muted" style="margin-bottom:8px">
-      Use <b>Editar</b> para ajustar a finalidade da categoria ou
-      <b>Excluir</b> para removê-la.
+      Use <b>Editar</b> para gerenciar o nome, cor, critérios ou remover a categoria.
     </div>
 
     <div class="tableWrap" style="margin-top:8px">

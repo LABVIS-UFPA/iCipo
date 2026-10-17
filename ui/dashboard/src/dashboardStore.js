@@ -783,11 +783,21 @@ export async function applyPaperBulkCategoryAction(category, requestedOutcome, t
 
   const selectedIds = get(selectedPaperIdsStore);
   const papers = get(papersStore);
-  const selectedPapers = papers.filter(p => selectedIds.has(String(p.id)));
+  let selectedPapers = papers.filter(p => selectedIds.has(String(p.id)));
 
   if (!selectedPapers.length) {
     alert("Selecione pelo menos 1 artigo.");
     return;
+  }
+
+  const lockedPapers = selectedPapers.filter(p => isPaperLockedInActivePhase(p, targetPhase.label));
+  if (lockedPapers.length > 0) {
+    if (lockedPapers.length === selectedPapers.length) {
+      alert("Artigos herdados de fases anteriores são validados e não podem ter sua categoria trocada.");
+      closePaperBulkCategoryModal();
+      return;
+    }
+    selectedPapers = selectedPapers.filter(p => !isPaperLockedInActivePhase(p, targetPhase.label));
   }
 
   setBulkStatus("Atualizando a classificação e as métricas da fase…", "loading", false);
@@ -900,10 +910,20 @@ export async function bulkDeleteMarkedSelectedAction(targetPhaseLabel = null) {
   const phases = Array.isArray(project.phases) ? project.phases : [];
   const targetPhase = phases.find(p => p.label === targetLabel) || { label: targetLabel, title: targetLabel };
 
-  if (!confirm(`Retirar ${selectedIds.size} artigo(s) selecionado(s) da fase “${targetPhase.title || targetPhase.label}”? Essa ação remove a marcação desta fase.`)) return;
-
   const papers = get(papersStore);
-  const selectedPapers = papers.filter(p => selectedIds.has(String(p.id)));
+  let selectedPapers = papers.filter(p => selectedIds.has(String(p.id)));
+
+  const lockedPapers = selectedPapers.filter(p => isPaperLockedInActivePhase(p, targetLabel));
+  if (lockedPapers.length > 0) {
+    if (lockedPapers.length === selectedPapers.length) {
+      alert("Artigos herdados de fases anteriores são validados e não podem ser removidos.");
+      return;
+    }
+    selectedPapers = selectedPapers.filter(p => !isPaperLockedInActivePhase(p, targetLabel));
+  }
+
+  if (!confirm(`Retirar ${selectedPapers.length} artigo(s) selecionado(s) da fase “${targetPhase.title || targetPhase.label}”? Essa ação remove a marcação desta fase.`)) return;
+
   const selectedUrls = new Set(
     selectedPapers.map(p => p.url).filter(Boolean).map(normalizeUrl)
   );
@@ -954,12 +974,24 @@ export async function bulkDeleteMarkedSelectedAction(targetPhaseLabel = null) {
 
 export function classifySinglePaperAction(paper, outcome, targetPhaseLabel = null) {
   if (!paper || (!paper.id && paper.id !== 0)) return;
+  const project = get(projectStore);
+  const targetLabel = targetPhaseLabel || project?.activePhaseLabel;
+  if (isPaperLockedInActivePhase(paper, targetLabel)) {
+    alert("Artigos herdados de fases anteriores são validados e não podem ter sua categoria trocada.");
+    return;
+  }
   selectedPaperIdsStore.set(new Set([String(paper.id)]));
   requestPaperBulkOutcomeAction(outcome, targetPhaseLabel);
 }
 
 export async function unmarkSinglePaperAction(paper, targetPhaseLabel = null) {
   if (!paper || (!paper.id && paper.id !== 0)) return;
+  const project = get(projectStore);
+  const targetLabel = targetPhaseLabel || project?.activePhaseLabel;
+  if (isPaperLockedInActivePhase(paper, targetLabel)) {
+    alert("Artigos herdados de fases anteriores são validados e não podem ser removidos.");
+    return;
+  }
   selectedPaperIdsStore.set(new Set([String(paper.id)]));
   await bulkDeleteMarkedSelectedAction(targetPhaseLabel);
 }
@@ -1173,13 +1205,13 @@ export async function requestCategoryDeletionAction(category) {
     return;
   }
 
-  const deletionBlockReason = getCategoryDeletionBlockReason(rawProject, categoryLabel);
+  const allPapers = get(papersStore);
+  const deletionBlockReason = getCategoryDeletionBlockReason(rawProject, categoryLabel, allPapers);
   if (deletionBlockReason) {
     alert(deletionBlockReason);
     return;
   }
 
-  const allPapers = get(papersStore);
   const linkedPapers = getPapersForCategory(allPapers, categoryLabel);
 
   if (linkedPapers.length > 0) {
@@ -1203,10 +1235,15 @@ export async function migrateAndFinalizeCategoryDeletionAction(sourceLabel, targ
   const rawProject = get(projectStore);
   if (!rawProject?.id) throw new Error("Nenhum projeto ativo.");
 
+  const allPapers = get(papersStore);
+  const deletionBlockReason = getCategoryDeletionBlockReason(rawProject, sourceLabel, allPapers);
+  if (deletionBlockReason) {
+    throw new Error(deletionBlockReason);
+  }
+
   const targetCategory = (rawProject.categories || []).find(c => c.label === targetLabel);
   if (!targetCategory) throw new Error("Selecione uma categoria de destino válida para a migração.");
 
-  const allPapers = get(papersStore);
   const affectedPapers = getPapersForCategory(allPapers, sourceLabel);
   const targetMetricType = normalizeCategoryMetricType(targetCategory.metricType, inferMetricTypeFromCategory(targetCategory));
   const targetColor = normalizeHexColor(targetCategory.color, targetCategory.color || "");
@@ -1294,9 +1331,210 @@ export async function migrateAndFinalizeCategoryDeletionAction(sourceLabel, targ
   await loadDashboardState();
 }
 
+export const isCategoryTransferModalOpenStore = writable(false);
+export const categoryTransferInitialSourceStore = writable(null);
+
+export function openCategoryTransferModal(sourceCategoryLabel = null) {
+  categoryTransferInitialSourceStore.set(sourceCategoryLabel);
+  isCategoryTransferModalOpenStore.set(true);
+}
+
+export function closeCategoryTransferModal() {
+  isCategoryTransferModalOpenStore.set(false);
+  categoryTransferInitialSourceStore.set(null);
+}
+
+export async function transferPapersBetweenCategoriesAction(
+  sourceCategoryLabel,
+  targetCategoryLabel,
+  { phaseLabel = null, paperIds = null } = {}
+) {
+  const rawProject = get(projectStore);
+  if (!rawProject?.id) throw new Error("Nenhum projeto ativo.");
+
+  if (!sourceCategoryLabel || !targetCategoryLabel) {
+    throw new Error("Selecione a categoria de origem e a categoria de destino.");
+  }
+  if (sourceCategoryLabel === targetCategoryLabel) {
+    throw new Error("A categoria de destino deve ser diferente da categoria de origem.");
+  }
+
+  const sourceCategory = (rawProject.categories || []).find(c => c.label === sourceCategoryLabel);
+  const targetCategory = (rawProject.categories || []).find(c => c.label === targetCategoryLabel);
+  if (!targetCategory) throw new Error("Categoria de destino inválida.");
+
+  const allPapers = get(papersStore);
+  let affectedPapers = getPapersForCategory(allPapers, sourceCategoryLabel);
+
+  if (phaseLabel) {
+    affectedPapers = affectedPapers.filter(p => {
+      const classif = p.classifications?.[phaseLabel];
+      if (classif && String(classif.categoryLabel || "").trim().toLowerCase() === String(sourceCategoryLabel).trim().toLowerCase()) {
+        return true;
+      }
+      return String(p.categoryLabel || "").trim().toLowerCase() === String(sourceCategoryLabel).trim().toLowerCase() &&
+        (p.phaseLabel === phaseLabel || p.iterationId === phaseLabel);
+    });
+  }
+
+  if (Array.isArray(paperIds) && paperIds.length > 0) {
+    const idSet = new Set(paperIds.map(String));
+    affectedPapers = affectedPapers.filter(p => idSet.has(String(p.id)));
+  }
+
+  const lockedCount = affectedPapers.filter(p => {
+    if (phaseLabel && isPaperLockedInActivePhase(p, phaseLabel)) return true;
+    if (p.inherited === true || String(p.entryType || "").toLowerCase() === "inherited" || Boolean(p.inheritedFromPhaseLabel)) return true;
+    const classifs = p.classifications;
+    if (classifs && typeof classifs === "object") {
+      return Object.values(classifs).some(c =>
+        (c?.inherited === true || String(c?.entryType || "").toLowerCase() === "inherited" || Boolean(c?.inheritedFromPhaseLabel))
+        && String(c?.categoryLabel || "").trim().toLowerCase() === String(sourceCategoryLabel).trim().toLowerCase()
+      );
+    }
+    return false;
+  }).length;
+
+  affectedPapers = affectedPapers.filter(p => {
+    if (phaseLabel && isPaperLockedInActivePhase(p, phaseLabel)) return false;
+    if (p.inherited === true || String(p.entryType || "").toLowerCase() === "inherited" || Boolean(p.inheritedFromPhaseLabel)) return false;
+    const classifs = p.classifications;
+    if (classifs && typeof classifs === "object") {
+      const hasInheritedWithSource = Object.values(classifs).some(c =>
+        (c?.inherited === true || String(c?.entryType || "").toLowerCase() === "inherited" || Boolean(c?.inheritedFromPhaseLabel))
+        && String(c?.categoryLabel || "").trim().toLowerCase() === String(sourceCategoryLabel).trim().toLowerCase()
+      );
+      if (hasInheritedWithSource) return false;
+    }
+    return true;
+  });
+
+  if (affectedPapers.length === 0) {
+    if (lockedCount > 0) {
+      throw new Error("Os artigos desta categoria foram herdados de fases anteriores (validados) e não podem ter sua categoria trocada.");
+    }
+    throw new Error("Nenhum artigo encontrado para transferir.");
+  }
+
+  const targetMetricType = normalizeCategoryMetricType(targetCategory.metricType, inferMetricTypeFromCategory(targetCategory));
+  const targetColor = normalizeHexColor(targetCategory.color, targetCategory.color || "#2563eb");
+  const classifiedAt = new Date().toISOString();
+
+  let rawContext = {};
+  try {
+    rawContext = await storage.get(["highlightedLinks", "svat_papers"]);
+  } catch {}
+  const highlightedLinks = rawContext?.highlightedLinks && typeof rawContext.highlightedLinks === "object"
+    ? { ...rawContext.highlightedLinks }
+    : {};
+  let scopedPapers = Array.isArray(rawContext?.svat_papers) ? [...rawContext.svat_papers] : [];
+
+  for (const paper of affectedPapers) {
+    const nextPaper = { ...paper };
+    const prevClassifications = nextPaper.classifications && typeof nextPaper.classifications === "object" && !Array.isArray(nextPaper.classifications)
+      ? { ...nextPaper.classifications }
+      : {};
+
+    const prevStatus = nextPaper.status || "pending";
+    let classificationChanged = false;
+
+    if (phaseLabel) {
+      if (prevClassifications[phaseLabel]) {
+        prevClassifications[phaseLabel] = {
+          ...prevClassifications[phaseLabel],
+          categoryLabel: targetCategory.label,
+          outcome: targetMetricType,
+          classifiedAt
+        };
+        classificationChanged = true;
+      }
+      if (String(nextPaper.phaseLabel || nextPaper.iterationId || "").trim() === String(phaseLabel).trim()) {
+        nextPaper.categoryLabel = targetCategory.label;
+        nextPaper.status = targetMetricType;
+        nextPaper.highlightedColor = targetColor;
+      }
+    } else {
+      for (const [pKey, classif] of Object.entries(prevClassifications)) {
+        if (classif && String(classif.categoryLabel || "").trim().toLowerCase() === String(sourceCategoryLabel).trim().toLowerCase()) {
+          prevClassifications[pKey] = {
+            ...classif,
+            categoryLabel: targetCategory.label,
+            outcome: targetMetricType,
+            classifiedAt
+          };
+          classificationChanged = true;
+        }
+      }
+      if (String(nextPaper.categoryLabel || "").trim().toLowerCase() === String(sourceCategoryLabel).trim().toLowerCase()) {
+        nextPaper.categoryLabel = targetCategory.label;
+        nextPaper.status = targetMetricType;
+        nextPaper.highlightedColor = targetColor;
+      }
+    }
+
+    if (classificationChanged) {
+      nextPaper.classifications = prevClassifications;
+    }
+
+    if (Array.isArray(nextPaper.tags)) {
+      nextPaper.tags = nextPaper.tags.map(t => (
+        String(t).trim().toLowerCase() === String(sourceCategoryLabel).trim().toLowerCase() ? targetCategory.label : t
+      ));
+      nextPaper.tags = [...new Set(nextPaper.tags)];
+    }
+
+    const history = Array.isArray(nextPaper.history) ? [...nextPaper.history] : [];
+    history.push({
+      ts: classifiedAt,
+      action: "bulk_reclassify",
+      details: {
+        category: targetCategory.label,
+        metricType: targetMetricType,
+        phaseLabel: phaseLabel || nextPaper.phaseLabel || null,
+        previousCategory: sourceCategoryLabel,
+        previousStatus: prevStatus,
+        source: "category_transfer_tool"
+      }
+    });
+    nextPaper.history = history;
+    nextPaper.updatedAt = classifiedAt;
+
+    await storage.savePaper(nextPaper);
+
+    const scopedIdx = scopedPapers.findIndex(p => p.id === nextPaper.id || p.url === nextPaper.url);
+    if (scopedIdx >= 0) scopedPapers[scopedIdx] = nextPaper;
+    else scopedPapers.push(nextPaper);
+
+    const canonicalUrl = normalizeUrl(nextPaper.url || "");
+    if (canonicalUrl) {
+      for (const storedUrl of Object.keys(highlightedLinks)) {
+        if (normalizeUrl(storedUrl) === canonicalUrl) delete highlightedLinks[storedUrl];
+      }
+      highlightedLinks[nextPaper.url] = targetColor;
+    }
+  }
+
+  try {
+    await storage.set({ highlightedLinks, svat_papers: scopedPapers });
+  } catch (err) {
+    console.warn("Erro ao salvar highlightedLinks no storage:", err);
+  }
+
+  await updateScholarContextMenu();
+  closeCategoryTransferModal();
+  await loadDashboardState();
+  return affectedPapers.length;
+}
+
 export async function deleteCategoryAction(categoryLabel) {
   const rawProject = get(projectStore);
   if (!rawProject?.id) throw new Error("Nenhum projeto ativo.");
+
+  const allPapers = get(papersStore);
+  const deletionBlockReason = getCategoryDeletionBlockReason(rawProject, categoryLabel, allPapers);
+  if (deletionBlockReason) {
+    throw new Error(deletionBlockReason);
+  }
 
   const projectInstance = rawProject instanceof Project ? rawProject : Project.fromJSON(rawProject);
   projectInstance.removeCategory(categoryLabel);

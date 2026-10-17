@@ -1,10 +1,12 @@
 <script>
   import {
     projectStore,
+    papersStore,
     isCategoryPanelOpenStore,
     editingCategoryStore,
     categoryCreationRequiredStore,
     closeCategoryPanel,
+    openCategoryTransferModal,
     saveCategoryAction,
     deleteCategoryAction,
     requestCategoryDeletionAction,
@@ -16,7 +18,8 @@
     normalizeHexColor,
     normalizeCategoryMetricType,
     inferMetricTypeFromCategory,
-    isDefaultCategory
+    isDefaultCategory,
+    getPapersForCategory
   } from '../dashboardHelpers.js';
 
   const PRESET_COLORS = [
@@ -65,13 +68,21 @@
 
   $: isEditing = Boolean(editingCategory && editingCategory.label);
   $: isDefault = isEditing && isDefaultCategory(editingCategory?.label);
+  $: allPapers = $papersStore || [];
+  $: linkedPaperCount = (isEditing && editingCategory?.label) ? getPapersForCategory(allPapers, editingCategory.label).length : 0;
   $: deletionBlockReason = isEditing
-    ? getCategoryDeletionBlockReason(project, editingCategory.label)
+    ? getCategoryDeletionBlockReason(project, editingCategory.label, allPapers)
     : '';
   $: cannotDelete = isEditing && (Boolean(deletionBlockReason) || isDeleting || isDefault);
   $: deleteTooltip = isDefault
     ? 'As 3 categorias padrão (Incluir, Excluir, Pendente) não podem ser excluídas para manter a consistência do fluxo de triagem.'
     : (deletionBlockReason || 'Excluir categoria');
+
+  function handleOpenTransferFromPanel() {
+    const label = editingCategory?.label;
+    closeCategoryPanel();
+    openCategoryTransferModal(label);
+  }
 
   // Synchronize form when editingCategory changes or panel opens
   $: if (isOpen) {
@@ -685,6 +696,34 @@
           Cancelar
         </button>
       </div>
+
+      <!-- Transferência de Artigos da Categoria -->
+      {#if isEditing && linkedPaperCount > 0}
+        <div class="categoryPanelTransferCard">
+          <div class="transferCardInfo">
+            <span class="transferCardTitle">
+              <svg class="academicSvg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="16 3 21 3 21 8"/>
+                <line x1="4" y1="20" x2="21" y2="3"/>
+                <polyline points="21 16 21 21 16 21"/>
+                <line x1="15" y1="15" x2="21" y2="21"/>
+                <line x1="4" y1="4" x2="9" y2="9"/>
+              </svg>
+              Transferir artigos desta categoria
+            </span>
+            <span class="transferCardDesc">
+              Esta categoria possui <strong>{linkedPaperCount} {linkedPaperCount === 1 ? 'artigo classificado' : 'artigos classificados'}</strong>. Você pode movê-los para outra categoria do projeto.
+            </span>
+          </div>
+          <button
+            type="button"
+            class="btn secondary small"
+            on:click={handleOpenTransferFromPanel}
+          >
+            Mover artigos ➔
+          </button>
+        </div>
+      {/if}
 
       <!-- Zona de Exclusão / Proteção Segura -->
       {#if isEditing}

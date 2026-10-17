@@ -12,6 +12,7 @@
   import PaperBulkCategoryModal from "./components/PaperBulkCategoryModal.svelte";
   import ArticleTutorialPanel from "./components/ArticleTutorialPanel.svelte";
   import CategoryMigrationModal from "./components/CategoryMigrationModal.svelte";
+  import CategoryTransferModal from "./components/CategoryTransferModal.svelte";
   import {
     activeViewStore,
     accessStateStore,
@@ -85,6 +86,8 @@
     <ArticleTutorialPanel />
 
     <CategoryMigrationModal />
+
+    <CategoryTransferModal />
   </main>
 
   <div

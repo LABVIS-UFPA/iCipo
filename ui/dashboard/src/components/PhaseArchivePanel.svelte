@@ -10,7 +10,8 @@
     isPhaseCompleted,
     normalizeCategoryMetricType,
     inferMetricTypeFromCategory,
-    normalizeStr
+    normalizeStr,
+    isPaperLockedInActivePhase
   } from '../dashboardHelpers.js';
   import {
     projectStore,
@@ -150,12 +151,20 @@
       alert("Esta fase está marcada como concluída. Reabra a fase em 'Editar' para alterar a triagem.");
       return;
     }
+    if (isPaperLockedInActivePhase(paper, activePhaseObj?.label)) {
+      alert("Artigos herdados de fases anteriores já foram validados e não podem ser reclassificados.");
+      return;
+    }
     classifySinglePaperAction(paper, outcome, activePhaseObj.label);
   }
 
   function handleSinglePaperUnmark(paper) {
     if (isCompleted) {
       alert("Esta fase está marcada como concluída. Reabra a fase em 'Editar' para alterar a triagem.");
+      return;
+    }
+    if (isPaperLockedInActivePhase(paper, activePhaseObj?.label)) {
+      alert("Artigos herdados de fases anteriores são validados e não podem ser removidos.");
       return;
     }
     unmarkSinglePaperAction(paper, activePhaseObj.label);
@@ -203,8 +212,8 @@
   }
 
   function getOutcomeInfo(record) {
-    if (record.inherited) {
-      return { label: 'Herdado', cls: 'outcome--inherited', icon: '📥' };
+    if (record.inherited || isPaperLockedInActivePhase(record.paper, activePhaseObj?.label)) {
+      return { label: 'Validado', cls: 'outcome--included', icon: '✓' };
     }
     const norm = normalizeMetricType(record.outcome, 'pending');
     if (norm === 'included') {
@@ -516,6 +525,7 @@
               {@const outcomeInfo = getOutcomeInfo(record)}
               {@const isSnowballActive = $currentSnowballParentIdStore === String(record.paper?.id)}
               {@const paperId = record.paper?.id}
+              {@const isLocked = Boolean(record.inherited || isPaperLockedInActivePhase(record.paper, activePhaseObj?.label))}
 
               <tr style={catInfo.color ? `--row-cat-color:${catInfo.color}` : ""}>
 
@@ -576,47 +586,51 @@
 
                 <!-- Coluna de Botões Diretos de Triagem Individual na Tabela -->
                 <td class="phaseTableCellTriage">
-                  <div class="phaseTableTriageGroup">
-                    <button
-                      type="button"
-                      class="phaseTableTriageBtn phaseTableTriageBtn--included"
-                      class:active={outcomeInfo.label === 'Aprovado'}
-                      disabled={isCompleted}
-                      title="Classificar artigo como Incluído (Aprovado)"
-                      on:click={() => handleSinglePaperOutcome(record.paper, 'included')}
-                    >
-                      ✓
-                    </button>
-                    <button
-                      type="button"
-                      class="phaseTableTriageBtn phaseTableTriageBtn--excluded"
-                      class:active={outcomeInfo.label === 'Excluído' || outcomeInfo.label === 'Duplicado'}
-                      disabled={isCompleted}
-                      title="Classificar artigo como Excluído"
-                      on:click={() => handleSinglePaperOutcome(record.paper, 'excluded')}
-                    >
-                      ×
-                    </button>
-                    <button
-                      type="button"
-                      class="phaseTableTriageBtn phaseTableTriageBtn--pending"
-                      class:active={outcomeInfo.label === 'Pendente'}
-                      disabled={isCompleted}
-                      title="Classificar artigo como Pendente"
-                      on:click={() => handleSinglePaperOutcome(record.paper, 'pending')}
-                    >
-                      ⏳
-                    </button>
-                    <button
-                      type="button"
-                      class="phaseTableTriageBtn phaseTableTriageBtn--unmark"
-                      disabled={isCompleted}
-                      title="Remover marcação deste artigo desta fase"
-                      on:click={() => handleSinglePaperUnmark(record.paper)}
-                    >
-                      🗑
-                    </button>
-                  </div>
+                  {#if isLocked}
+                    <span class="phaseValidatedBadge" title="Artigo validado e herdado da fase anterior">Validado</span>
+                  {:else}
+                    <div class="phaseTableTriageGroup">
+                      <button
+                        type="button"
+                        class="phaseTableTriageBtn phaseTableTriageBtn--included"
+                        class:active={outcomeInfo.label === 'Aprovado'}
+                        disabled={isCompleted}
+                        title="Classificar artigo como Incluído (Aprovado)"
+                        on:click={() => handleSinglePaperOutcome(record.paper, 'included')}
+                      >
+                        ✓
+                      </button>
+                      <button
+                        type="button"
+                        class="phaseTableTriageBtn phaseTableTriageBtn--excluded"
+                        class:active={outcomeInfo.label === 'Excluído' || outcomeInfo.label === 'Duplicado'}
+                        disabled={isCompleted}
+                        title="Classificar artigo como Excluído"
+                        on:click={() => handleSinglePaperOutcome(record.paper, 'excluded')}
+                      >
+                        ×
+                      </button>
+                      <button
+                        type="button"
+                        class="phaseTableTriageBtn phaseTableTriageBtn--pending"
+                        class:active={outcomeInfo.label === 'Pendente'}
+                        disabled={isCompleted}
+                        title="Classificar artigo como Pendente"
+                        on:click={() => handleSinglePaperOutcome(record.paper, 'pending')}
+                      >
+                        ⏳
+                      </button>
+                      <button
+                        type="button"
+                        class="phaseTableTriageBtn phaseTableTriageBtn--unmark"
+                        disabled={isCompleted}
+                        title="Remover marcação deste artigo desta fase"
+                        on:click={() => handleSinglePaperUnmark(record.paper)}
+                      >
+                        🗑
+                      </button>
+                    </div>
+                  {/if}
                 </td>
 
                 <td class="phaseTableCellActions">
@@ -669,6 +683,7 @@
           {@const venue = record.paper?.venue || record.paper?.journal || record.paper?.publisher}
           {@const paperId = record.paper?.id}
           {@const isSnowballActive = $currentSnowballParentIdStore === String(paperId)}
+          {@const isLocked = Boolean(record.inherited || isPaperLockedInActivePhase(record.paper, activePhaseObj?.label))}
 
           <article
             class="phaseArchiveArticleCard"
@@ -765,51 +780,56 @@
 
             <!-- Botões Diretos de Triagem Individual no Card (Incluir, Excluir, Pendente, Remover Marcado) -->
             <div class="phaseCardTriageRow">
-              <span class="phaseCardTriageLabel">Triar artigo:</span>
-              <div class="phaseCardTriageButtons">
-                <button
-                  type="button"
-                  class="phaseTriageBtn phaseTriageBtn--included"
-                  class:active={outcomeInfo.label === 'Aprovado'}
-                  disabled={isCompleted}
-                  title={isCompleted ? "Fase concluída" : "Classificar este artigo como Incluído (Aprovado)"}
-                  on:click={() => handleSinglePaperOutcome(record.paper, 'included')}
-                >
-                  <span aria-hidden="true">✓</span> Incluir
-                </button>
+              {#if isLocked}
+                <span class="phaseCardTriageLabel">Decisão:</span>
+                <span class="phaseValidatedBadge" title="Artigo validado e herdado da fase anterior">Validado</span>
+              {:else}
+                <span class="phaseCardTriageLabel">Triar artigo:</span>
+                <div class="phaseCardTriageButtons">
+                  <button
+                    type="button"
+                    class="phaseTriageBtn phaseTriageBtn--included"
+                    class:active={outcomeInfo.label === 'Aprovado'}
+                    disabled={isCompleted}
+                    title={isCompleted ? "Fase concluída" : "Classificar este artigo como Incluído (Aprovado)"}
+                    on:click={() => handleSinglePaperOutcome(record.paper, 'included')}
+                  >
+                    <span aria-hidden="true">✓</span> Incluir
+                  </button>
 
-                <button
-                  type="button"
-                  class="phaseTriageBtn phaseTriageBtn--excluded"
-                  class:active={outcomeInfo.label === 'Excluído' || outcomeInfo.label === 'Duplicado'}
-                  disabled={isCompleted}
-                  title={isCompleted ? "Fase concluída" : "Classificar este artigo como Excluído"}
-                  on:click={() => handleSinglePaperOutcome(record.paper, 'excluded')}
-                >
-                  <span aria-hidden="true">×</span> Excluir
-                </button>
+                  <button
+                    type="button"
+                    class="phaseTriageBtn phaseTriageBtn--excluded"
+                    class:active={outcomeInfo.label === 'Excluído' || outcomeInfo.label === 'Duplicado'}
+                    disabled={isCompleted}
+                    title={isCompleted ? "Fase concluída" : "Classificar este artigo como Excluído"}
+                    on:click={() => handleSinglePaperOutcome(record.paper, 'excluded')}
+                  >
+                    <span aria-hidden="true">×</span> Excluir
+                  </button>
 
-                <button
-                  type="button"
-                  class="phaseTriageBtn phaseTriageBtn--pending"
-                  class:active={outcomeInfo.label === 'Pendente'}
-                  disabled={isCompleted}
-                  title={isCompleted ? "Fase concluída" : "Classificar este artigo como Pendente"}
-                  on:click={() => handleSinglePaperOutcome(record.paper, 'pending')}
-                >
-                  <span aria-hidden="true">⏳</span> Pendente
-                </button>
+                  <button
+                    type="button"
+                    class="phaseTriageBtn phaseTriageBtn--pending"
+                    class:active={outcomeInfo.label === 'Pendente'}
+                    disabled={isCompleted}
+                    title={isCompleted ? "Fase concluída" : "Classificar este artigo como Pendente"}
+                    on:click={() => handleSinglePaperOutcome(record.paper, 'pending')}
+                  >
+                    <span aria-hidden="true">⏳</span> Pendente
+                  </button>
 
-                <button
-                  type="button"
-                  class="phaseTriageBtn phaseTriageBtn--unmark"
-                  disabled={isCompleted}
-                  title={isCompleted ? "Fase concluída" : "Remover a marcação deste artigo desta fase"}
-                  on:click={() => handleSinglePaperUnmark(record.paper)}
-                >
-                  <span aria-hidden="true">🗑</span> Remover marcado
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    class="phaseTriageBtn phaseTriageBtn--unmark"
+                    disabled={isCompleted}
+                    title={isCompleted ? "Fase concluída" : "Remover a marcação deste artigo desta fase"}
+                    on:click={() => handleSinglePaperUnmark(record.paper)}
+                  >
+                    <span aria-hidden="true">🗑</span> Remover marcado
+                  </button>
+                </div>
+              {/if}
             </div>
 
             <!-- Ações no Rodapé do Card -->
