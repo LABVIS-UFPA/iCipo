@@ -3795,31 +3795,32 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
   accent-color:#2eae6c;
 }
 
-/* Colunas Proporcionais e Adaptadas (sem estourar largura) */
+/* Colunas Proporcionais e Adaptadas (com espaçamento generoso e sem estourar largura) */
 .phaseColTitle{
   width:auto;
 }
 .phaseColYear{
-  width:52px;
+  width:56px;
   text-align:center;
 }
 .phaseColOutcome{
-  width:94px;
+  width:98px;
   text-align:center;
 }
 .phaseColCategory{
-  width:112px;
+  width:118px;
 }
 .phaseColTags{
-  width:98px;
+  width:104px;
 }
 .phaseColTriage{
-  width:116px;
+  width:160px;
   text-align:center;
 }
 .phaseColActions{
-  width:88px;
-  text-align:right;
+  width:124px;
+  text-align:center;
+  border-left:1px solid #e2e8f0;
 }
 
 .phaseTableCellTitle{
@@ -3863,8 +3864,8 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
 }
 .phaseInlineYear{
   width:100%!important;
-  max-width:44px;
-  padding:3px 2px!important;
+  max-width:46px;
+  padding:4px 2px!important;
   font-size:11.5px!important;
   text-align:center;
   border:1px solid #cbd5e1;
@@ -3885,8 +3886,8 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
 .phaseTableCellOutcome .phaseArchiveOutcome{
   max-width:100%;
   box-sizing:border-box;
-  font-size:8.5px;
-  padding:2px 5px;
+  font-size:9px;
+  padding:3px 6px;
 }
 
 .phaseTableCellCategory{
@@ -3895,8 +3896,8 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
 .phaseTableCellCategory .phaseArchiveCategoryBadge{
   max-width:100%;
   box-sizing:border-box;
-  font-size:8.5px;
-  padding:2px 5px;
+  font-size:9px;
+  padding:3px 6px;
 }
 .phaseTableCellCategory .phaseArchiveCategoryBadge span{
   overflow:hidden;
@@ -3910,7 +3911,7 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
 .phaseInlineTags{
   width:100%!important;
   min-width:0!important;
-  padding:3px 5px!important;
+  padding:4px 6px!important;
   font-size:11px!important;
   border:1px solid #cbd5e1;
   border-radius:6px;
@@ -3925,14 +3926,15 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
 .phaseTableCellTriage{
   text-align:center;
   white-space:nowrap;
+  padding:7px 10px;
 }
 .phaseTableTriageGroup{
   display:inline-flex;
   align-items:center;
-  gap:2px;
+  gap:5px;
   background:#f8fafc;
-  padding:2px 3px;
-  border-radius:6px;
+  padding:3px 6px;
+  border-radius:8px;
   border:1px solid #e2e8f0;
   box-sizing:border-box;
 }
@@ -3940,42 +3942,45 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  width:22px;
-  height:22px;
-  border-radius:5px;
+  width:26px;
+  height:26px;
+  border-radius:6px;
   border:1px solid transparent;
   background:#ffffff;
-  font-size:11px;
+  font-size:12px;
   font-weight:700;
   cursor:pointer;
   transition:all .15s ease;
-  box-shadow:0 1px 2px rgba(0,0,0,.03);
+  box-shadow:0 1px 2px rgba(0,0,0,.04);
 }
 
 .phaseTableCellActions{
-  text-align:right;
+  text-align:center;
   white-space:nowrap;
+  border-left:1px solid #f1f5f9;
+  padding:7px 10px;
 }
 .phaseTableActionButtons{
   display:inline-flex;
   align-items:center;
-  justify-content:flex-end;
-  gap:3px;
+  justify-content:center;
+  gap:6px;
 }
 .phaseMiniIconBtn{
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  width:24px;
-  height:24px;
-  border-radius:6px;
+  width:27px;
+  height:27px;
+  border-radius:7px;
   border:1px solid #cbd5e1;
   background:#ffffff;
   color:#475569;
-  font-size:11px;
+  font-size:12px;
   cursor:pointer;
   transition:all .15s ease;
   text-decoration:none;
+  box-shadow:0 1px 2px rgba(0,0,0,.03);
 }
 .phaseMiniIconBtn:hover{
   background:#f1f5f9;
