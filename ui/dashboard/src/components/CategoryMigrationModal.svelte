@@ -189,24 +189,36 @@
           </div>
 
           <div class="migrationCategoryGrid" role="radiogroup" aria-label="Categorias de destino disponíveis">
-            {#each destinationCategories as targetCat (targetCat.label)}
-              {@const isSelected = selectedTargetLabel === targetCat.label}
-              {@const catColor = normalizeHexColor(targetCat.color, '#2563eb')}
-              {@const normMetric = normalizeCategoryMetricType(targetCat.metricType, inferMetricTypeFromCategory(targetCat))}
-              {@const isDefault = isDefaultCategory(targetCat.label)}
-              <button
-                type="button"
-                class="migrationCategoryOption"
-                class:selected={isSelected}
-                role="radio"
-                aria-checked={isSelected}
-                disabled={isMigrating}
-                on:click={() => handleSelectTarget(targetCat.label)}
-              >
-                <div class="catOptionLeft">
-                  <span class="catColorCircle" style="background-color: {catColor};"></span>
+            {#if destinationCategories.length === 0}
+              <div class="migrationNoCategories">
+                Nenhuma outra categoria disponível para receber os artigos.
+              </div>
+            {:else}
+              {#each destinationCategories as targetCat (targetCat.label)}
+                {@const isSelected = selectedTargetLabel === targetCat.label}
+                {@const catColor = normalizeHexColor(targetCat.color, '#2563eb')}
+                {@const normMetric = normalizeCategoryMetricType(targetCat.metricType, inferMetricTypeFromCategory(targetCat))}
+                {@const isDefault = isDefaultCategory(targetCat.label)}
+                <button
+                  type="button"
+                  class="migrationCategoryOption"
+                  class:selected={isSelected}
+                  role="radio"
+                  aria-checked={isSelected}
+                  disabled={isMigrating}
+                  on:click={() => handleSelectTarget(targetCat.label)}
+                >
+                  <div class="catOptionRadioCol">
+                    <div class="migrationRadioIndicator" class:checked={isSelected}>
+                      {#if isSelected}
+                        <span class="radioDot"></span>
+                      {/if}
+                    </div>
+                    <span class="catColorCircle" style="background-color: {catColor};" aria-hidden="true"></span>
+                  </div>
+
                   <div class="catOptionTexts">
-                    <div style="display:flex;align-items:center;gap:6px">
+                    <div class="catOptionTitleRow">
                       <strong class="catOptionName">{targetCat.title || targetCat.label}</strong>
                       {#if isDefault}
                         <span class="migrationDefaultTag">Padrão</span>
@@ -216,25 +228,19 @@
                       <span class="catOptionDesc">{targetCat.description}</span>
                     {/if}
                   </div>
-                </div>
 
-                <div class="catOptionRight">
-                  {#if normMetric === 'included'}
-                    <span class="catMetricBadge metricIncluded">Incluído</span>
-                  {:else if normMetric === 'excluded'}
-                    <span class="catMetricBadge metricExcluded">Excluído</span>
-                  {:else}
-                    <span class="catMetricBadge metricPending">Pendente</span>
-                  {/if}
-
-                  <div class="migrationRadioIndicator" class:checked={isSelected}>
-                    {#if isSelected}
-                      <span class="radioDot"></span>
+                  <div class="catOptionRight">
+                    {#if normMetric === 'included'}
+                      <span class="catMetricBadge metricIncluded">Incluído</span>
+                    {:else if normMetric === 'excluded'}
+                      <span class="catMetricBadge metricExcluded">Excluído</span>
+                    {:else}
+                      <span class="catMetricBadge metricPending">Pendente</span>
                     {/if}
                   </div>
-                </div>
-              </button>
-            {/each}
+                </button>
+              {/each}
+            {/if}
           </div>
 
           <!-- Dica ou confirmação visual de seleção -->

@@ -5307,89 +5307,130 @@ a.phaseArchiveArticleTitle:hover{color:#146fd1;text-decoration:underline}
 }
 
 .migrationCategoryGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
+  max-height: 250px;
+  overflow-y: auto;
+  padding: 2px 2px 2px 0;
 }
 
-@media (max-width: 600px) {
-  .migrationCategoryGrid {
-    grid-template-columns: 1fr;
-  }
+.migrationCategoryGrid::-webkit-scrollbar {
+  width: 6px;
+}
+
+.migrationCategoryGrid::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.migrationCategoryGrid::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.migrationCategoryGrid::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.migrationNoCategories {
+  padding: 14px 16px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #64748b;
+  text-align: center;
 }
 
 .migrationCategoryOption {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid #cbd5e1;
-  border-radius: 9px;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
   background: #ffffff;
   cursor: pointer;
   text-align: left;
   transition: all 0.15s ease;
   user-select: none;
+  box-sizing: border-box;
 }
 
 .migrationCategoryOption:hover:not(:disabled) {
   background: #f8fafc;
-  border-color: #94a3b8;
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
 }
 
 .migrationCategoryOption.selected {
   border-color: #2563eb;
   background: #eff6ff;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.22);
+  box-shadow: 0 0 0 1.5px #2563eb, 0 2px 6px rgba(37, 99, 235, 0.12);
 }
 
-.catOptionLeft {
+.catOptionRadioCol {
   display: flex;
   align-items: center;
-  gap: 9px;
-  min-width: 0;
-  flex: 1;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 .catColorCircle {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.25);
 }
 
 .catOptionTexts {
   display: flex;
   flex-direction: column;
+  flex: 1;
   min-width: 0;
+  gap: 2px;
+}
+
+.catOptionTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .catOptionName {
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 700;
   color: #1e293b;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.3;
+}
+
+.migrationCategoryOption.selected .catOptionName {
+  color: #1d4ed8;
 }
 
 .catOptionDesc {
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: #64748b;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.4;
+  word-break: break-word;
 }
 
 .migrationDefaultTag {
-  font-size: 9.5px;
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.03em;
   color: #0284c7;
   background: rgba(2, 132, 199, 0.1);
-  border-radius: 3px;
-  padding: 1px 4px;
+  border: 1px solid rgba(2, 132, 199, 0.25);
+  border-radius: 4px;
+  padding: 1px 6px;
+  line-height: 1.2;
 }
 
 .catOptionRight {
@@ -5397,13 +5438,15 @@ a.phaseArchiveArticleTitle:hover{color:#146fd1;text-decoration:underline}
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  margin-left: 8px;
 }
 
 .catMetricBadge {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
-  padding: 2px 6px;
+  padding: 3px 9px;
   border-radius: 999px;
+  line-height: 1.2;
 }
 
 .migrationRadioIndicator {
