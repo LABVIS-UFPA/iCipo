@@ -2,11 +2,9 @@
   import {
     projectStore,
     openCategoryPanel,
-    openArticleTutorial,
     openCategoryTransferModal
   } from '../dashboardStore.js';
   import CategoryItem from '../components/CategoryItem.svelte';
-  import CategoryPanel from '../components/CategoryPanel.svelte';
 
   $: project = $projectStore || {};
   $: rawCategories = Array.isArray(project.categories) ? project.categories : [];
@@ -52,13 +50,6 @@
         </svg>
         <span>Mover artigos entre categorias</span>
       </button>
-      <button class="btn ghost" type="button" on:click={openArticleTutorial}>
-        <svg class="academicSvg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
-          <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
-        </svg>
-        <span>Como funciona a triagem</span>
-      </button>
       <div class="muted" style="margin-left:auto">
         Categorias personalizadas somam automaticamente no indicador ao qual foram associadas.
       </div>
@@ -92,5 +83,3 @@
     </div>
   </div>
 </section>
-
-<CategoryPanel />

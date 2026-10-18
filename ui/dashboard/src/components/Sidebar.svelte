@@ -2,10 +2,8 @@
   import {
     projectStore,
     activeViewStore,
-    dashboardIntroRequiredStore,
-    phaseCreationRequiredStore,
-    categoryCreationRequiredStore,
-    articleTutorialRequiredStore,
+    tutorialStageStore,
+    isTutorialOpenStore,
     setActiveView
   } from '../dashboardStore.js';
   import { formatResearchers } from '../dashboardHelpers.js';
@@ -15,16 +13,13 @@
   $: objective = project.objective || project.description || '—';
   $: projectId = project.id || '—';
 
-  $: requiredView = $dashboardIntroRequiredStore
-    ? '__intro__'
-    : ($phaseCreationRequiredStore
-      ? 'phases'
-      : ($categoryCreationRequiredStore
-        ? 'categories'
-        : ($articleTutorialRequiredStore ? '__tutorial__' : null)));
-
   function isLocked(view) {
-    return Boolean(requiredView && (requiredView === '__intro__' || requiredView === '__tutorial__' || view !== requiredView));
+    if ($isTutorialOpenStore && $tutorialStageStore !== 'complete') {
+      if ($tutorialStageStore === 'overview') return view !== 'overview';
+      if ($tutorialStageStore === 'categories') return view !== 'categories';
+      if ($tutorialStageStore === 'phases') return view !== 'phases';
+    }
+    return false;
   }
 
   function handleNav(view) {
@@ -77,6 +72,24 @@
 
     <button
       class="navBtn"
+      class:active={$activeViewStore === 'categories'}
+      class:tutorialLocked={isLocked('categories')}
+      class:phaseLocked={isLocked('categories')}
+      aria-disabled={isLocked('categories')}
+      data-view="categories"
+      on:click={() => handleNav('categories')}
+    >
+      <span class="navIcon" aria-hidden="true">
+        <svg class="academicSvg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+          <line x1="7" y1="7" x2="7.01" y2="7"/>
+        </svg>
+      </span>
+      <span>Categorias</span>
+    </button>
+
+    <button
+      class="navBtn"
       class:active={$activeViewStore === 'phases'}
       class:tutorialLocked={isLocked('phases')}
       class:phaseLocked={isLocked('phases')}
@@ -93,24 +106,6 @@
         </svg>
       </span>
       <span>Fases</span>
-    </button>
-
-    <button
-      class="navBtn"
-      class:active={$activeViewStore === 'categories'}
-      class:tutorialLocked={isLocked('categories')}
-      class:phaseLocked={isLocked('categories')}
-      aria-disabled={isLocked('categories')}
-      data-view="categories"
-      on:click={() => handleNav('categories')}
-    >
-      <span class="navIcon" aria-hidden="true">
-        <svg class="academicSvg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
-          <line x1="7" y1="7" x2="7.01" y2="7"/>
-        </svg>
-      </span>
-      <span>Categorias</span>
     </button>
   </nav>
 
@@ -138,12 +133,11 @@
         </svg>
         <span>Projetos</span>
       </button>
-      <button id="btnOptions" class="ghost" on:click={goToOptions} title="Abrir configurações">
-        <svg class="academicSvg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <button id="btnOptions" class="ghost" on:click={goToOptions} title="Configurações" aria-label="Configurações">
+        <svg class="academicSvg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="3"/>
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
         </svg>
-        <span>Configurações</span>
       </button>
     </div>
   </div>

@@ -1,4 +1,6 @@
 <script>
+  import { fly, fade } from 'svelte/transition';
+  import { cubicOut } from 'svelte/easing';
   import {
     getPhaseArchiveRecords,
     normalizeMetricType,
@@ -236,6 +238,7 @@
   class="sideOverlay open phaseArchiveOverlay"
   on:click={handleClose}
   aria-hidden="true"
+  transition:fade={{ duration: 320 }}
 ></div>
 
 <div
@@ -243,6 +246,7 @@
   role="dialog"
   aria-modal="true"
   aria-labelledby="phaseArchiveMainTitle"
+  transition:fly={{ x: 1200, duration: 400, opacity: 1, easing: cubicOut }}
 >
   <!-- Cabeçalho da Gaveta com Etapa, Status e Fechar -->
   <div class="phaseArchiveHeader">

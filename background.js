@@ -487,6 +487,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
     const data = await storage.get(["highlightedLinks", "svat_project", "svat_papers", "svat_current_snowball_parent"]);
     const color = selectedCategory.color || "yellow";
+    const categoryName = selectedCategory.title || selectedCategory.name || selectedCategory.label || "";
     const rawUrl = String(info.linkUrl || "").replace(/([?&])casa_token=[^&#]*/gi, "$1").replace(/[?&]+$/g, "");
     const canonicalUrl = normalizeArticleUrl(rawUrl);
     if (!canonicalUrl) return;
@@ -497,17 +498,18 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     let previousHighlightColor = "";
     for (const existingUrl of Object.keys(highlightedLinks)) {
       if (normalizeArticleUrl(existingUrl) !== canonicalUrl) continue;
-      previousHighlightColor = highlightedLinks[existingUrl] || previousHighlightColor;
+      const prevData = highlightedLinks[existingUrl];
+      previousHighlightColor = (typeof prevData === 'object' && prevData ? prevData.color : prevData) || previousHighlightColor;
       if (existingUrl !== rawUrl) delete highlightedLinks[existingUrl];
     }
-    highlightedLinks[rawUrl] = color;
+    highlightedLinks[rawUrl] = { color, categoryName };
 
     // Highlight visually before metadata extraction so the response is immediate.
     if (tab?.id) {
       chrome.scripting.executeScript({
         target: { tabId: tab.id },
         function: highlightLink,
-        args: [rawUrl, color]
+        args: [rawUrl, color, categoryName]
       }).catch(() => undefined);
     }
 
@@ -738,10 +740,46 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 });
 
-function highlightLink(linkUrl, color) {
+function highlightLink(linkUrl, color, categoryName) {
+  function getBadgeContrast(hex) {
+    if (!hex || typeof hex !== 'string') return '#ffffff';
+    let clean = hex.replace('#', '');
+    if (clean.length === 3) clean = clean.split('').map(c => c + c).join('');
+    if (clean.length !== 6) return '#ffffff';
+    const r = parseInt(clean.substr(0, 2), 16);
+    const g = parseInt(clean.substr(2, 2), 16);
+    const b = parseInt(clean.substr(4, 2), 16);
+    const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+    return yiq >= 160 ? '#111827' : '#ffffff';
+  }
+
   document.querySelectorAll(`a[href^='${linkUrl}']`).forEach(link => {
     link.classList.add('ic-highlighted-link');
     link.style.backgroundColor = color;
+    const existing = link.nextElementSibling;
+    if (existing && existing.classList?.contains('ic-category-badge')) {
+      existing.remove();
+    }
+    if (categoryName) {
+      const badge = document.createElement('span');
+      badge.className = 'ic-category-badge';
+      badge.setAttribute('data-icipo-badge', 'true');
+      badge.textContent = categoryName;
+      badge.style.display = 'inline-block';
+      badge.style.marginLeft = '6px';
+      badge.style.padding = '1px 6px';
+      badge.style.fontSize = '11px';
+      badge.style.fontWeight = '600';
+      badge.style.lineHeight = '14px';
+      badge.style.borderRadius = '10px';
+      badge.style.backgroundColor = color;
+      badge.style.color = getBadgeContrast(color);
+      badge.style.verticalAlign = 'middle';
+      badge.style.boxShadow = '0 1px 2px rgba(0,0,0,0.15)';
+      badge.style.pointerEvents = 'none';
+      badge.style.userSelect = 'none';
+      link.insertAdjacentElement('afterend', badge);
+    }
   });
 }
 
@@ -749,5 +787,9 @@ function removeHighlight(linkUrl) {
   document.querySelectorAll(`a[href^='${linkUrl}']`).forEach(link => {
     link.classList.remove('ic-highlighted-link');
     link.style.backgroundColor = "";
+    const next = link.nextElementSibling;
+    if (next && next.classList?.contains('ic-category-badge')) {
+      next.remove();
+    }
   });
 }

@@ -33,6 +33,15 @@ body{
 }
 
 .app{
+  position:relative;
+  width:100%;
+  height:100vh;
+  max-height:100vh;
+  overflow:hidden;
+  background:#050e18;
+}
+
+.appContentShiftWrapper{
   display:grid;
   grid-template-columns:224px minmax(0,1fr);
   grid-template-rows:100vh;
@@ -41,6 +50,23 @@ body{
   width:100%;
   overflow:hidden;
   background:var(--workspace);
+  transform-origin:right center;
+  transition:transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+             filter 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+             border-radius 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+             box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change:transform;
+}
+
+.app.hasSidePanelOpen .appContentShiftWrapper,
+body.hasSidePanelOpen .appContentShiftWrapper{
+  transform:translateX(-180px) scale(0.985);
+  border-radius:18px;
+  overflow:hidden;
+  filter:brightness(0.91) contrast(1.02);
+  box-shadow:-20px 0 60px rgba(0,0,0,0.52);
+  pointer-events:none;
+  user-select:none;
 }
 
 
@@ -870,18 +896,17 @@ button:disabled{
   right:0;
   top:0;
   height:100%;
-  width:440px;
+  width:540px;
   max-width:96vw;
   background:#ffffff;
   color:var(--text);
   border-left:1px solid var(--border);
-  box-shadow:-18px 0 48px rgba(5,17,29,0.20);
-  transform: translateX(110%);
-  transition: transform .28s cubic-bezier(0.4, 0, 0.2, 1);
-  z-index:60;
+  box-shadow:-20px 0 60px rgba(5,17,29,0.28);
+  z-index:200;
   display:flex;
   flex-direction:column;
   padding:20px;
+  box-sizing:border-box;
 }
 .sidePanel.open{transform: translateX(0)}
 .sidePanelHeader{display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -922,11 +947,11 @@ button:disabled{
 .sideOverlay{
   position:fixed;
   inset:0;
-  background: rgba(0,0,0,0.35);
-  z-index:50; /* below panel (60) */
-  opacity:0;
-  pointer-events:none;
-  transition: opacity .18s ease;
+  background:rgba(3, 10, 18, 0.48);
+  backdrop-filter:blur(3px);
+  -webkit-backdrop-filter:blur(3px);
+  z-index:190; /* below panel (200) */
+  pointer-events:auto;
 }
 .sideOverlay.open{opacity:1;pointer-events:auto}
 
@@ -1049,87 +1074,7 @@ body.categoryCreationRequired #categoryPanel{
   border-left-color:rgba(255,209,102,0.38);
   box-shadow:-20px 0 70px rgba(0,0,0,0.72);
 }
-body.articleTutorialRequired .sideOverlay{
-  background:rgba(3,6,12,0.78);
-  backdrop-filter:blur(3px);
-}
-.articleTutorialPanel{width:460px}
-.articleTutorialPanel.mandatoryTutorialPanel{
-  border-left:2px solid rgba(22,163,74,0.45);
-  box-shadow:-20px 0 70px rgba(0,0,0,0.75);
-}
-.tutorialStepBadge--mandatory{
-  display:inline-flex;
-  align-items:center;
-  gap:4px;
-  padding:3px 9px;
-  border-radius:999px;
-  background:rgba(22,163,74,0.12);
-  border:1px solid rgba(22,163,74,0.32);
-  color:#15803d;
-  font-size:11px;
-  font-weight:800;
-  letter-spacing:.04em;
-  text-transform:uppercase;
-}
-.articleTutorialCompleteBtn{
-  box-shadow:0 6px 18px rgba(22,163,74,0.3);
-  transition:all .18s ease;
-}
-.articleTutorialCompleteBtn:hover{
-  transform:translateY(-1px);
-  box-shadow:0 8px 24px rgba(22,163,74,0.42);
-}
-.tutorialEyebrow{
-  margin-bottom:4px;
-  color:var(--accent);
-  font-size:11px;
-  font-weight:900;
-  letter-spacing:.08em;
-  text-transform:uppercase;
-}
-.articleTutorialIntro{
-  margin:0 0 4px;
-  color:var(--muted);
-  font-size:13px;
-  line-height:1.55;
-}
-.articleTutorialStep{
-  display:grid;
-  grid-template-columns:34px minmax(0,1fr);
-  gap:11px;
-  align-items:start;
-  padding:12px;
-  border:1px solid var(--border);
-  border-radius:14px;
-  background:rgba(255,255,255,.045);
-}
-.articleTutorialStep > div{display:flex;flex-direction:column;gap:4px}
-.articleTutorialStep strong{font-size:13px}
-.articleTutorialStep span:not(.articleTutorialNumber){color:var(--muted);font-size:12px;line-height:1.45}
-.articleTutorialNumber{
-  width:30px;
-  height:30px;
-  display:grid;
-  place-items:center;
-  border-radius:10px;
-  background:linear-gradient(135deg,rgba(110,168,255,.28),rgba(170,110,255,.24));
-  border:1px solid rgba(110,168,255,.32);
-  font-size:12px;
-  font-weight:900;
-}
-.articleTutorialTip{
-  display:flex;
-  flex-direction:column;
-  gap:5px;
-  padding:13px 14px;
-  border:1px solid rgba(59,225,155,.25);
-  border-radius:14px;
-  background:rgba(59,225,155,.08);
-}
-.articleTutorialTip strong{color:var(--good);font-size:13px}
-.articleTutorialTip span{color:var(--muted);font-size:12px;line-height:1.45}
-@media (max-width:720px){.articleTutorialPanel{width:100%}}
+
 
 /* =========================================================
    DASHBOARD 2026 — visão geral inspirada no mockup aprovado
@@ -1249,26 +1194,43 @@ body{
   font-size:11.5px;
 }
 .sidebarFooterActions{
-  display:grid;
-  grid-template-columns:repeat(2,minmax(0,1fr));
-  align-items:stretch;
+  display:flex;
+  align-items:center;
   gap:8px;
+}
+.sidebarFooterActions #btnProjects{
+  flex:1 1 auto;
+}
+.sidebarFooterActions #btnOptions{
+  flex:0 0 38px;
+  width:38px;
+  min-width:38px;
+  height:36px;
+  padding:0;
+  display:inline-flex;
+  justify-content:center;
+  align-items:center;
 }
 .sidebarFooterActions .ghost{
   display:flex;
   justify-content:center;
   align-items:center;
   gap:6px;
-  width:100%;
-  min-width:0;
   min-height:36px;
-  padding:8px 4px;
+  padding:8px 8px;
   border-radius:8px;
-  font-size:11.5px;
+  font-size:12px;
+  font-weight:700;
   line-height:1.15;
   text-align:center;
   white-space:nowrap;
   background:rgba(255,255,255,.035);
+  cursor:pointer;
+  transition:all .18s ease;
+}
+.sidebarFooterActions .ghost:hover{
+  background:rgba(255,255,255,.09);
+  color:#ffffff;
 }
 
 .main{
@@ -2798,6 +2760,7 @@ button.phaseCategoryBadgeItem:disabled{
 
 @media (max-width:980px){
   .app{grid-template-columns:200px minmax(0,1fr)}
+  .appContentShiftWrapper{grid-template-columns:200px minmax(0,1fr)}
   .sidebar{position:relative;top:auto;z-index:auto}
   .main > .view, .viewContainer > .view, .view{padding:20px}
   .topbar{padding-inline:20px}
@@ -2807,6 +2770,12 @@ button.phaseCategoryBadgeItem:disabled{
 @media (max-width:768px){
   html,body{overflow:auto}
   .app{display:block;height:auto;min-height:100%}
+  .appContentShiftWrapper{display:block;height:auto;min-height:100%}
+  .app.hasSidePanelOpen .appContentShiftWrapper,
+  body.hasSidePanelOpen .appContentShiftWrapper{
+    transform:translateX(-48px) scale(0.975);
+    border-radius:12px;
+  }
   .sidebar{position:relative;min-height:auto}
   .brandModern{min-height:58px;padding:12px 16px}
   .nav{display:grid;grid-template-columns:repeat(4,1fr);padding:8px 10px;gap:6px;overflow:visible}
@@ -2814,7 +2783,7 @@ button.phaseCategoryBadgeItem:disabled{
   .navIcon{display:grid;width:18px;height:18px;font-size:16px}
   .sideFooterModern{display:flex;padding:0 12px 12px;gap:8px}
   .sidebarProjectSummary{display:none}
-  .sidebarFooterActions{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .sidebarFooterActions{width:100%;display:flex;align-items:center;gap:8px}
   .sidebarFooterActions .ghost{min-height:38px;padding:8px;font-size:12px;justify-content:center}
   .main{height:auto;min-height:calc(100vh - 120px)}
   .topbar{min-height:58px;padding:10px 16px}
@@ -2827,103 +2796,7 @@ button.phaseCategoryBadgeItem:disabled{
   .categoryLegend{width:100%}
 }
 
-/* Dashboard introduction — first onboarding step */
-.dashboardIntroModal{
-  position:fixed;
-  inset:0;
-  z-index:120;
-  display:grid;
-  place-items:center;
-  padding:24px;
-  background:rgba(5,15,28,.72);
-  backdrop-filter:blur(7px);
-}
-.dashboardIntroModal.hidden{display:none}
-.dashboardIntroCard{
-  width:min(560px,100%);
-  padding:30px;
-  border:1px solid rgba(148,163,184,.28);
-  border-radius:22px;
-  background:#fff;
-  color:#0f172a;
-  box-shadow:0 28px 90px rgba(2,8,23,.38);
-  text-align:center;
-}
-.dashboardIntroEyebrow{
-  color:#168455;
-  font-size:11px;
-  font-weight:900;
-  letter-spacing:.09em;
-  text-transform:uppercase;
-}
-.dashboardIntroIcon{
-  width:52px;
-  height:52px;
-  display:grid;
-  place-items:center;
-  margin:16px auto 12px;
-  border-radius:16px;
-  background:linear-gradient(145deg,#169b68,#35bd7e);
-  color:#fff;
-  font-size:25px;
-  box-shadow:0 12px 24px rgba(22,155,104,.24);
-}
-.dashboardIntroCard h2{margin:0;color:#0f172a;font-size:25px;line-height:1.2}
-.dashboardIntroCard>p{max-width:470px;margin:10px auto 20px;color:#5c687b;font-size:14px;line-height:1.6}
-.dashboardIntroFeatures{
-  display:grid;
-  grid-template-columns:repeat(3,minmax(0,1fr));
-  gap:10px;
-  text-align:left;
-}
-.dashboardIntroFeatures>div{
-  min-width:0;
-  padding:13px;
-  border:1px solid #e4e9f0;
-  border-radius:13px;
-  background:#f8fafc;
-}
-.dashboardIntroFeatures strong{display:block;margin-bottom:4px;color:#172033;font-size:12px}
-.dashboardIntroFeatures span{display:block;color:#68758a;font-size:10.5px;line-height:1.4}
-.dashboardIntroNextStep{
-  display:flex;
-  flex-direction:column;
-  gap:3px;
-  margin-top:14px;
-  padding:13px 15px;
-  border:1px solid rgba(22,155,104,.22);
-  border-radius:13px;
-  background:rgba(22,155,104,.07);
-  text-align:left;
-}
-.dashboardIntroNextStep strong{color:#127149;font-size:12px}
-.dashboardIntroNextStep span{color:#526075;font-size:11px;line-height:1.45}
-.dashboardIntroActions{display:flex;justify-content:flex-end;gap:9px;margin-top:20px}
-.dashboardIntroActions .btn{min-height:40px;padding:0 16px}
-.dashboardIntroPrimary{border-color:#168455!important;background:#168455!important;color:#fff!important}
-.dashboardIntroPrimary:hover{background:#117048!important}
-.dashboardIntroAttention .dashboardIntroCard{animation:dashboardIntroAttention .4s ease}
-@keyframes dashboardIntroAttention{
-  0%,100%{transform:scale(1)}
-  45%{transform:scale(1.015)}
-}
-body.dashboardIntroRequired .main,
-body.dashboardIntroRequired .sidebar{pointer-events:none}
-body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
-.requiredStepLabel{
-  color:var(--accent)!important;
-  font-size:10px!important;
-  font-weight:900;
-  letter-spacing:.07em;
-  text-transform:uppercase;
-}
-@media (max-width:620px){
-  .dashboardIntroModal{padding:14px}
-  .dashboardIntroCard{padding:22px 18px}
-  .dashboardIntroFeatures{grid-template-columns:1fr}
-  .dashboardIntroActions{flex-direction:column-reverse}
-  .dashboardIntroActions .btn{width:100%}
-}
+
 
 /* Exibe mais conteúdo do objetivo do projeto na barra lateral. */
 #sidebarObjective {
@@ -3504,11 +3377,7 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
 }
 .phaseArchivePanel[hidden]{display:none!important}
 .phaseArchivePanel.is-open{
-  animation:phaseArchiveReveal .18s ease-out both;
-}
-@keyframes phaseArchiveReveal{
-  from{opacity:0;transform:translateX(28px)}
-  to{opacity:1;transform:translateX(0)}
+  transform:translateX(0);
 }
 .phaseArchiveHeader{
   display:flex;

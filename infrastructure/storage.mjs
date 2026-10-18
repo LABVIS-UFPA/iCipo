@@ -730,19 +730,20 @@ class NodeFsStrategy {
     if (
       Array.isArray(existing.phases)
       && existing.phases.length > 0
-      && Array.isArray(project.phases)
-      && project.phases.length === 0
+      && (!Array.isArray(project.phases) || project.phases.length === 0)
     ) {
-      return { status: 'error', message: 'O projeto deve manter pelo menos uma fase.' };
+      project.phases = existing.phases;
+      if (!project.activePhaseLabel && existing.activePhaseLabel) {
+        project.activePhaseLabel = existing.activePhaseLabel;
+      }
     }
 
     if (
       Array.isArray(existing.categories)
       && existing.categories.length > 0
-      && Array.isArray(project.categories)
-      && project.categories.length === 0
+      && (!Array.isArray(project.categories) || project.categories.length === 0)
     ) {
-      return { status: 'error', message: 'O projeto deve manter pelo menos uma categoria.' };
+      project.categories = existing.categories;
     }
 
     // Merge: preserve existing properties, override/add with incoming projectData
@@ -1069,7 +1070,11 @@ class NodeFsStrategy {
 
       const rawUrl = String(paper.url || '').trim();
       if (!rawUrl) continue;
-      highlightedLinks[rawUrl] = category.color || 'yellow';
+      const categoryName = category.title || category.name || category.label || '';
+      highlightedLinks[rawUrl] = {
+        color: category.color || 'yellow',
+        categoryName
+      };
     }
 
     return {

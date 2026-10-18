@@ -12,9 +12,9 @@
   import {
     getPhaseStats,
     isPhaseCompleted,
-    isReorderablePlannedPhase
+    isReorderablePlannedPhase,
+    isDefaultCategory
   } from '../dashboardHelpers.js';
-  import PhaseArchivePanel from './PhaseArchivePanel.svelte';
 
   export let phase = {};
   export let index = 0;
@@ -63,7 +63,7 @@
 
   async function handleToggleCategory(ev, catLabel) {
     ev.stopPropagation();
-    if (isCompleted) return;
+    if (isCompleted || isDefaultCategory(catLabel)) return;
     try {
       await togglePhaseCategoryAction(label, catLabel);
     } catch (err) {
@@ -293,21 +293,26 @@
         </div>
         <div class="phaseCategoryBadges">
           {#each allCategories as cat}
-            {@const isCatActive = phaseCategoryLabels.includes(cat.label)}
+            {@const isDefault = isDefaultCategory(cat.label)}
+            {@const isCatActive = isDefault || phaseCategoryLabels.includes(cat.label)}
             <button
               type="button"
               class="phaseCategoryBadgeItem"
               class:isCatActive={isCatActive}
               class:isCatInactive={!isCatActive}
-              class:isReadOnly={isCompleted}
-              disabled={isCompleted}
-              on:click={(ev) => handleToggleCategory(ev, cat.label)}
-              title="{cat.title || cat.label}: {isCatActive ? 'Ativa na fase (destacada no navegador). Clique para desmarcar.' : 'Desmarcada (não destaca links no navegador). Clique para ativar.'}"
+              class:isReadOnly={isCompleted || isDefault}
+              disabled={isCompleted || isDefault}
+              on:click={(ev) => !isDefault && handleToggleCategory(ev, cat.label)}
+              title={isDefault ? `${cat.title || cat.label}: Categoria padrão obrigatória (sempre ativa nesta fase).` : `${cat.title || cat.label}: ${isCatActive ? 'Ativa na fase (destacada no navegador). Clique para desmarcar.' : 'Desmarcada (não destaca links no navegador). Clique para ativar.'}`}
               aria-pressed={isCatActive}
             >
               <span class="catColorDot" style="background: {isCatActive ? (cat.color || '#2eae6c') : '#94a3b8'};"></span>
               <span class="catName">{cat.title || cat.label}</span>
-              <span class="catCheckIcon" aria-hidden="true">{isCatActive ? '✓' : '○'}</span>
+              {#if isDefault}
+                <span class="catDefaultLock" title="Obrigatória" style="font-size:10px;margin-left:3px;opacity:0.85">🔒</span>
+              {:else}
+                <span class="catCheckIcon" aria-hidden="true">{isCatActive ? '✓' : '○'}</span>
+              {/if}
             </button>
           {/each}
         </div>
@@ -362,13 +367,4 @@
       </div>
     </div>
   </div>
-
-  {#if isExpanded}
-    <PhaseArchivePanel
-      phase={phases.find(p => p.label === phase.label) || phase}
-      {index}
-      {totalPhases}
-      {isActivePhase}
-    />
-  {/if}
 </div>

@@ -6,7 +6,6 @@
     reorderPhasesAction
   } from '../dashboardStore.js';
   import PhaseCard from '../components/PhaseCard.svelte';
-  import PhasePanel from '../components/PhasePanel.svelte';
 
   $: project = $projectStore || {};
   $: phases = Array.isArray(project.phases) ? project.phases : [];
@@ -64,6 +63,7 @@
       </p>
     </div>
   </div>
+
 
   <div class="toolbar">
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;width:100%">
@@ -175,5 +175,3 @@
     </div>
   </div>
 </section>
-
-<PhasePanel />

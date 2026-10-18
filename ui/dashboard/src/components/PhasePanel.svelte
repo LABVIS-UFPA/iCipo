@@ -1,4 +1,6 @@
 <script>
+  import { fly, fade } from 'svelte/transition';
+  import { cubicOut } from 'svelte/easing';
   import {
     projectStore,
     papersStore,
@@ -6,14 +8,9 @@
     isPhasePanelOpenStore,
     editingPhaseStore,
     phaseCreationRequiredStore,
-    categoryCreationRequiredStore,
     closePhasePanel,
     savePhaseAction,
-    deletePhaseAction,
-    openCategoryPanel,
-    openArticleTutorial,
-    setActiveView,
-    setTutorialStage
+    deletePhaseAction
   } from '../dashboardStore.js';
   import {
     canDeletePhaseLabel,
@@ -83,29 +80,10 @@
     lastOpenedEditingPhase = undefined;
   }
   function handleClose() {
-    if (phaseCreationRequired) {
-      if (confirm('O tutorial é obrigatório para configurar o projeto. Deseja sair e voltar para a lista de projetos?')) {
-        window.location.href = '../projects/projects.html';
-      }
-      return;
-    }
     closePhasePanel();
   }
 
   async function handleCloseWithAutoSave() {
-    if (phaseCreationRequired) {
-      const cleanTitle = title.trim();
-      const cleanDesc = description.trim();
-      if (cleanTitle && cleanDesc) {
-        try {
-          await handleSave();
-        } catch (err) {
-          console.warn('Falha no auto-save ao fechar:', err);
-        }
-      }
-      return;
-    }
-
     const cleanTitle = title.trim();
     const cleanDesc = description.trim();
 
@@ -119,16 +97,14 @@
       }
     }
 
-    // Se campos estiverem vazios ou não permitirem salvar, fecha diretamente
     closePhasePanel();
   }
 
   function toggleCategory(catLabel) {
+    if (isDefaultCategory(catLabel) || defaultCategoryLabels.includes(catLabel)) {
+      return; // Categorias padrão são obrigatórias
+    }
     if (selectedCategories.includes(catLabel)) {
-      if (selectedCategories.length <= 1) {
-        categoriesError = 'A fase deve manter pelo menos uma categoria ativa.';
-        return;
-      }
       selectedCategories = selectedCategories.filter(l => l !== catLabel);
     } else {
       selectedCategories = [...selectedCategories, catLabel];
@@ -208,7 +184,8 @@
       normalizeCategoryMetricType(cat?.metricType, 'pending') === 'pending'
     ));
 
-    const allCategoriesToSave = [...new Set(selectedCategories)];
+    const mandatoryLabels = defaultCategoryLabels.filter(Boolean);
+    const allCategoriesToSave = [...new Set([...mandatoryLabels, ...selectedCategories])];
 
     const phasePayload = {
       title: cleanTitle,
@@ -221,15 +198,8 @@
 
     isSaving = true;
     try {
-      const isCreatingFirstPhase = !isEditing && phases.length === 0;
       await savePhaseAction(phasePayload, isEditing ? editingPhase.label : null);
       closePhasePanel();
-      if (isCreatingFirstPhase && project?.id) {
-        setTutorialStage('category-required', project.id);
-        categoryCreationRequiredStore.set(true);
-        setActiveView('categories');
-        openCategoryPanel(null);
-      }
     } catch (err) {
       console.warn('Falha ao salvar fase:', err);
       alert(err?.message || 'Falha ao salvar fase.');
@@ -269,15 +239,16 @@
     class="sideOverlay open"
     on:click={handleCloseWithAutoSave}
     aria-hidden="true"
+    transition:fade={{ duration: 320 }}
   ></div>
 
   <div
     id="phasePanel"
-    class="sidePanel phaseDrawerPanel"
-    class:open={isOpen}
+    class="sidePanel phaseDrawerPanel open"
     class:phaseCreationRequiredPanel={phaseCreationRequired}
     role="dialog"
     aria-labelledby="phasePanelTitle"
+    transition:fly={{ x: 650, duration: 400, opacity: 1, easing: cubicOut }}
   >
     <!-- Header com título, etapa e badges de status -->
     <div class="sidePanelHeader phaseDrawerHeader">
@@ -292,12 +263,12 @@
             {:else}
               <span class="statusBadge badgePlanned">⏱ Planejada</span>
             {/if}
-          {:else if !phaseCreationRequired}
+          {:else}
             <span class="phaseDrawerStepPill">Etapa {phases.length + 1} (Nova)</span>
           {/if}
         </div>
         <h2 id="phasePanelTitle" class="phaseDrawerTitle">
-          {phaseCreationRequired ? 'Crie a primeira fase' : (isEditing ? 'Editar Fase' : 'Nova Fase')}
+          {isEditing ? 'Editar Fase' : 'Nova Fase'}
         </h2>
         <span class="phaseDrawerSubtitle">
           {#if isEditing}
@@ -313,7 +284,7 @@
         class="btn phaseDrawerCloseBtn"
         type="button"
         on:click={handleCloseWithAutoSave}
-        title={phaseCreationRequired ? 'Voltar aos projetos' : 'Fechar painel (Esc)'}
+        title="Fechar painel (Esc)"
         aria-label="Fechar painel"
       >
         ✕
@@ -321,20 +292,6 @@
     </div>
 
     <div class="sidePanelBody u-scroll-y phaseDrawerBody">
-      {#if phaseCreationRequired}
-        <div
-          id="phaseRequiredNotice"
-          class="phaseRequiredNotice"
-          role="alert"
-          aria-live="assertive"
-        >
-          <span class="requiredStepLabel">Tutorial · Etapa 2 de 4</span>
-          <strong>Crie a primeira fase da sua revisão</strong>
-          <span>
-            As fases dividem a seleção em etapas progressivas. As categorias padrão (<b>Incluir</b>, <b>Excluir</b> e <b>Pendente</b>) já vêm <b>ativadas por padrão</b> nesta e em todas as fases para iniciar a triagem de imediato, garantindo o fluxo contínuo de avaliação.
-          </span>
-        </div>
-      {/if}
 
 
       <!-- Campo Título -->
@@ -426,20 +383,22 @@
             </div>
           {:else}
             {#each projectCategories as cat (cat.label || cat.id)}
-              {@const isChecked = selectedCategories.includes(cat.label)}
-              {@const isDefault = defaultCategoryLabels.includes(cat.label)}
+              {@const isDefault = defaultCategoryLabels.includes(cat.label) || isDefaultCategory(cat.label)}
+              {@const isChecked = isDefault || selectedCategories.includes(cat.label)}
               {@const normMetric = normalizeCategoryMetricType(cat.metricType, 'pending')}
               <label
                 class="phaseCategoryCardRow"
                 class:selected={isChecked}
-                title={isDefault ? 'Categoria padrão (clique para marcar ou desmarcar nesta fase)' : (isChecked ? 'Categoria ativa nesta fase' : 'Categoria desmarcada')}
+                class:isDefaultRow={isDefault}
+                title={isDefault ? 'Categoria padrão obrigatória (sempre ativa em todas as fases)' : (isChecked ? 'Categoria ativa nesta fase' : 'Categoria desmarcada')}
               >
                 <div class="categoryCheckCol">
                   <input
                     type="checkbox"
                     value={cat.label}
                     checked={isChecked}
-                    on:change={() => toggleCategory(cat.label)}
+                    disabled={isDefault}
+                    on:change={() => !isDefault && toggleCategory(cat.label)}
                   />
                   <span
                     class="categoryCircleDot"
@@ -452,7 +411,7 @@
                   <div style="display:flex;align-items:center;gap:6px">
                     <span class="categoryName">{cat.title || cat.label}</span>
                     {#if isDefault}
-                      <span class="defaultCategoryPhaseTag">Padrão da Fase</span>
+                      <span class="defaultCategoryPhaseTag" style="background: rgba(37,99,235,0.12); color: #2563eb; font-weight:700;">Obrigatória</span>
                     {/if}
                   </div>
                   {#if cat.description}

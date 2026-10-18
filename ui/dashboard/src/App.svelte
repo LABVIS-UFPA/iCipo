@@ -4,28 +4,46 @@
   import "../dashboard.css";
   import Sidebar from "./components/Sidebar.svelte";
   import Topbar from "./components/Topbar.svelte";
-  import IntroModal from "./components/IntroModal.svelte";
+  import TutorialDropdownCard from "./components/TutorialDropdownCard.svelte";
   import OverviewView from "./views/OverviewView.svelte";
   import PhasesView from "./views/PhasesView.svelte";
   import CategoriesView from "./views/CategoriesView.svelte";
   import PaperHistoryModal from "./components/PaperHistoryModal.svelte";
   import PaperBulkCategoryModal from "./components/PaperBulkCategoryModal.svelte";
-  import ArticleTutorialPanel from "./components/ArticleTutorialPanel.svelte";
   import CategoryMigrationModal from "./components/CategoryMigrationModal.svelte";
   import CategoryTransferModal from "./components/CategoryTransferModal.svelte";
+  import CategoryPanel from "./components/CategoryPanel.svelte";
+  import PhasePanel from "./components/PhasePanel.svelte";
+  import PhaseArchivePanel from "./components/PhaseArchivePanel.svelte";
   import {
     activeViewStore,
     accessStateStore,
     dashboardIntroRequiredStore,
     phaseCreationRequiredStore,
     categoryCreationRequiredStore,
-    articleTutorialRequiredStore,
+    isPhasePanelOpenStore,
+    isCategoryPanelOpenStore,
+    expandedCompletedPhaseStore,
+    projectStore,
+    activePhaseLabelStore,
     loadDashboardState,
     bindStorageSync,
     unbindStorageSync,
     setActiveView,
     DASHBOARD_VIEWS
   } from "./dashboardStore.js";
+
+  $: allPhases = Array.isArray($projectStore?.phases) ? $projectStore.phases : [];
+  $: activeArchiveLabel = $expandedCompletedPhaseStore;
+  $: archivePhaseIndex = allPhases.findIndex((p) => p.label === activeArchiveLabel);
+  $: archivePhase = archivePhaseIndex >= 0 ? allPhases[archivePhaseIndex] : null;
+  $: isArchivePhaseActive = archivePhase ? ($activePhaseLabelStore === archivePhase.label) : false;
+
+  $: isAnySidePanelOpen = Boolean(
+    $isPhasePanelOpenStore ||
+    $isCategoryPanelOpenStore ||
+    Boolean($expandedCompletedPhaseStore)
+  );
 
   function handleHashChange() {
     if (typeof window === "undefined") return;
@@ -55,40 +73,51 @@
   class:dashboardIntroRequired={$dashboardIntroRequiredStore}
   class:phaseCreationRequired={$phaseCreationRequiredStore}
   class:categoryCreationRequired={$categoryCreationRequiredStore}
-  class:articleTutorialRequired={$articleTutorialRequiredStore}
+  class:hasSidePanelOpen={isAnySidePanelOpen}
 />
 
-<div class="app">
-  <Sidebar />
+<div class="app" class:hasSidePanelOpen={isAnySidePanelOpen}>
+  <div class="appContentShiftWrapper">
+    <Sidebar />
 
-  <main class="main">
-    <Topbar />
+    <main class="main">
+      <Topbar />
 
-    <IntroModal />
+      <TutorialDropdownCard />
 
-    <div class="viewContainer" class:hidden={$activeViewStore !== 'overview'}>
-      <OverviewView />
-    </div>
+      <div class="viewContainer" class:hidden={$activeViewStore !== 'overview'}>
+        <OverviewView />
+      </div>
 
+      <div class="viewContainer" class:hidden={$activeViewStore !== 'categories'}>
+        <CategoriesView />
+      </div>
 
-    <div class="viewContainer" class:hidden={$activeViewStore !== 'categories'}>
-      <CategoriesView />
-    </div>
+      <div class="viewContainer" class:hidden={$activeViewStore !== 'phases'}>
+        <PhasesView />
+      </div>
 
-    <div class="viewContainer" class:hidden={$activeViewStore !== 'phases'}>
-      <PhasesView />
-    </div>
+      <PaperHistoryModal />
 
-    <PaperHistoryModal />
+      <PaperBulkCategoryModal />
 
-    <PaperBulkCategoryModal />
+      <CategoryMigrationModal />
 
-    <ArticleTutorialPanel />
+      <CategoryTransferModal />
+    </main>
+  </div>
 
-    <CategoryMigrationModal />
-
-    <CategoryTransferModal />
-  </main>
+  <!-- Abas / Gavetas Laterais com animação de arrastar todo o conteúdo da tela -->
+  <CategoryPanel />
+  <PhasePanel />
+  {#if archivePhase}
+    <PhaseArchivePanel
+      phase={archivePhase}
+      index={archivePhaseIndex}
+      totalPhases={allPhases.length}
+      isActivePhase={isArchivePhaseActive}
+    />
+  {/if}
 
   <div
     id="noActiveProjectNotice"
@@ -134,5 +163,20 @@
 
   .viewContainer.hidden {
     display: none !important;
+  }
+
+  .viewContainer:not(.hidden) {
+    animation: viewContainerSlideIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  @keyframes viewContainerSlideIn {
+    from {
+      opacity: 0;
+      transform: translateX(18px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
   }
 </style>

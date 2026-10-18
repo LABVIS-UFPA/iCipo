@@ -103,6 +103,7 @@ export function persistDashboardView(view) {
 }
 
 export const activeViewStore = writable(getSavedDashboardView()); // 'overview' | 'phases' | 'categories'
+export const tutorialStageStore = writable(null); // 'overview' | 'categories' | 'phases' | 'complete'
 export const phaseCreationRequiredStore = writable(false);
 export const dashboardIntroRequiredStore = writable(false);
 export const categoryCreationRequiredStore = writable(false);
@@ -143,6 +144,7 @@ export const historyModalPaperStore = writable(null);
 export const isHistoryModalOpenStore = writable(false);
 export const bulkCategoryModalStore = writable(null); // { outcome, categories, selectedCount }
 export const isBulkCategoryModalOpenStore = writable(false);
+export const isTutorialOpenStore = writable(false);
 export const articleTutorialOpenStore = writable(false);
 export const articleTutorialRequiredStore = writable(false);
 export const serverStatusStore = writable('Conectado');
@@ -359,71 +361,58 @@ export async function loadDashboardState(silent = false) {
       }
     }
 
+    const hasCustomCat = (project.categories || []).some(c => !isDefaultCategory(c.label));
     let savedTutorialStage = getTutorialStage(project.id);
-    if (hasPhases && !savedTutorialStage) {
+    if (hasPhases && hasCustomCat && !savedTutorialStage) {
       setTutorialStage('complete', project.id);
       savedTutorialStage = 'complete';
     }
 
     const isComplete = savedTutorialStage === 'complete';
-    const introSeen = hasSeenDashboardIntro(project.id);
+    let currentStage = isComplete ? 'complete' : (savedTutorialStage || 'overview');
+    if (!isComplete && !['overview', 'categories', 'phases'].includes(currentStage)) {
+      currentStage = 'overview';
+    }
 
     let phaseReq = false;
     let introReq = false;
     let catReq = false;
-    let artReq = false;
 
     if (!isComplete) {
-      if (!hasPhases) {
-        if (!introSeen) {
-          introReq = true;
-          phaseReq = true;
-        } else {
-          phaseReq = true;
-          openPhasePanel(null);
-        }
-      } else if (savedTutorialStage === 'category-required') {
-        catReq = true;
-        openCategoryPanel(null);
-      } else if (savedTutorialStage === 'articles-open') {
-        artReq = true;
-      } else {
-        if (!hasCategories) {
-          catReq = true;
-          openCategoryPanel(null);
-        } else {
-          artReq = true;
-        }
+      if (currentStage === 'overview') {
+        introReq = true;
+      } else if (currentStage === 'categories') {
+        catReq = false;
+      } else if (currentStage === 'phases') {
+        phaseReq = !hasPhases;
       }
-    } else {
-      phaseReq = !hasPhases;
     }
 
+    tutorialStageStore.set(currentStage);
+    isTutorialOpenStore.set(!isComplete);
     phaseCreationRequiredStore.set(phaseReq);
     dashboardIntroRequiredStore.set(introReq);
     categoryCreationRequiredStore.set(catReq);
-    articleTutorialOpenStore.set(artReq);
-    articleTutorialRequiredStore.set(artReq);
+    articleTutorialOpenStore.set(false);
+    articleTutorialRequiredStore.set(false);
     accessStateStore.set('ready');
 
-    // Determina a visualização ativa respeitando a página atual ou salva pelo usuário
-    const currentView = get(activeViewStore);
-    const savedView = getSavedDashboardView();
-    const preferredView = currentView && DASHBOARD_VIEWS.includes(currentView)
-      ? currentView
-      : savedView;
-
-    let targetView = preferredView;
-    if (introReq) {
-      targetView = 'overview';
-    } else if (phaseReq) {
-      targetView = 'phases';
-    } else if (catReq) {
-      targetView = 'categories';
-    } else if (artReq) {
-      targetView = 'phases';
-    } else if (!DASHBOARD_VIEWS.includes(targetView)) {
-      targetView = 'overview';
+    // Determina a visualização ativa respeitando a ordem do tutorial se ativo
+    let targetView;
+    if (!isComplete) {
+      if (currentStage === 'overview') {
+        targetView = 'overview';
+      } else if (currentStage === 'categories') {
+        targetView = 'categories';
+      } else if (currentStage === 'phases') {
+        targetView = 'phases';
+      }
+    } else {
+      const currentView = get(activeViewStore);
+      const savedView = getSavedDashboardView();
+      targetView = currentView && DASHBOARD_VIEWS.includes(currentView)
+        ? currentView
+        : (savedView || 'overview');
     }
 
     persistDashboardView(targetView);
@@ -531,18 +520,15 @@ export function unbindStorageSync() {
 }
 
 export function setActiveView(view) {
-  const introReq = get(dashboardIntroRequiredStore);
-  const phaseReq = get(phaseCreationRequiredStore);
-  const catReq = get(categoryCreationRequiredStore);
-  const artReq = get(articleTutorialRequiredStore);
+  const isTutorialOpen = get(isTutorialOpenStore);
+  const stage = get(tutorialStageStore);
 
-  const allowedView = introReq
-    ? 'overview'
-    : (phaseReq
-      ? 'phases'
-      : (catReq
-        ? 'categories'
-        : (artReq ? 'phases' : view)));
+  let allowedView = view;
+  if (isTutorialOpen && stage !== 'complete') {
+    if (stage === 'overview') allowedView = 'overview';
+    else if (stage === 'categories') allowedView = 'categories';
+    else if (stage === 'phases') allowedView = 'phases';
+  }
 
   persistDashboardView(allowedView);
   activeViewStore.set(allowedView);
@@ -837,7 +823,10 @@ export async function applyPaperBulkCategoryAction(category, requestedOutcome, t
         for (const storedUrl of Object.keys(highlightedLinks)) {
           if (normalizeUrl(storedUrl) === canonicalUrl) delete highlightedLinks[storedUrl];
         }
-        highlightedLinks[nextPaper.url] = normalizeHexColor(category.color, category.color || "");
+        highlightedLinks[nextPaper.url] = {
+          color: normalizeHexColor(category.color, category.color || ""),
+          categoryName: category.title || category.name || category.label || ""
+        };
       }
     }
 
@@ -996,18 +985,63 @@ export async function unmarkSinglePaperAction(paper, targetPhaseLabel = null) {
   await bulkDeleteMarkedSelectedAction(targetPhaseLabel);
 }
 
-export function dismissIntroModal() {
+export function advanceTutorialToCategories() {
   const project = get(projectStore);
   if (project?.id) {
+    setTutorialStage('categories', project.id);
     markDashboardIntroSeen(project.id);
-    setTutorialStage('phase-required', project.id);
   }
   dashboardIntroRequiredStore.set(false);
-  const phaseReq = get(phaseCreationRequiredStore);
-  if (phaseReq) {
-    setActiveView('phases');
-    openPhasePanel(null);
+  categoryCreationRequiredStore.set(false);
+  tutorialStageStore.set('categories');
+  isTutorialOpenStore.set(true);
+  setActiveView('categories');
+}
+
+export function advanceTutorialToPhases() {
+  const project = get(projectStore);
+  const phases = project?.phases || [];
+  if (project?.id) {
+    setTutorialStage('phases', project.id);
   }
+  categoryCreationRequiredStore.set(false);
+  tutorialStageStore.set('phases');
+  phaseCreationRequiredStore.set(phases.length === 0);
+  isTutorialOpenStore.set(true);
+  setActiveView('phases');
+}
+
+export function completeTutorialAction() {
+  const project = get(projectStore);
+  if (project?.id) {
+    setTutorialStage('complete', project.id);
+  }
+  dashboardIntroRequiredStore.set(false);
+  categoryCreationRequiredStore.set(false);
+  phaseCreationRequiredStore.set(false);
+  tutorialStageStore.set('complete');
+  isTutorialOpenStore.set(false);
+}
+
+export function openGuidedTutorial(step = null) {
+  const stage = get(tutorialStageStore);
+  const isComplete = stage === 'complete';
+  const targetStep = step || (isComplete ? 'overview' : (stage || 'overview'));
+  if (!isComplete) {
+    tutorialStageStore.set(targetStep);
+  }
+  isTutorialOpenStore.set(true);
+  if (targetStep && DASHBOARD_VIEWS.includes(targetStep)) {
+    setActiveView(targetStep);
+  }
+}
+
+export function closeGuidedTutorial() {
+  isTutorialOpenStore.set(false);
+}
+
+export function dismissIntroModal() {
+  advanceTutorialToCategories();
 }
 
 export async function clearSnowballParent() {
@@ -1030,11 +1064,6 @@ export function openPhasePanel(phase = null) {
 }
 
 export function closePhasePanel() {
-  const phaseReq = get(phaseCreationRequiredStore);
-  if (phaseReq) {
-    // If phase creation is required, user cannot simply close without creating
-    return false;
-  }
   isPhasePanelOpenStore.set(false);
   editingPhaseStore.set(null);
   return true;
@@ -1048,16 +1077,9 @@ export async function savePhaseAction(phasePayload, phaseEditingLabel = null) {
     .filter(c => isDefaultCategory(c.label) || ['included', 'excluded', 'pending'].includes(normalizeCategoryMetricType(c.metricType, inferMetricTypeFromCategory(c))))
     .map(c => c.label);
 
-  let finalCategories;
-  if (Array.isArray(phasePayload.categories) && phasePayload.categories.length > 0) {
-    // Respeita as categorias ativadas/desmarcadas pelo usuário
-    finalCategories = [...new Set(phasePayload.categories)];
-  } else if (!phaseEditingLabel) {
-    // Nova fase: ativa por padrão as categorias padrão
-    finalCategories = defaultLabels.length ? [...defaultLabels] : (project.categories || []).map(c => c.label);
-  } else {
-    finalCategories = (project.categories || []).map(c => c.label);
-  }
+  // Categorias padrão são obrigatórias em todas as fases
+  const incomingCategories = Array.isArray(phasePayload.categories) ? phasePayload.categories : [];
+  const finalCategories = [...new Set([...defaultLabels, ...incomingCategories])];
 
   const payload = {
     ...phasePayload,
@@ -1068,12 +1090,19 @@ export async function savePhaseAction(phasePayload, phaseEditingLabel = null) {
     await storage.updatePhase(project.id, phaseEditingLabel, payload);
   } else {
     await storage.savePhase(project.id, payload);
+    phaseCreationRequiredStore.set(false);
   }
 
+  isPhasePanelOpenStore.set(false);
+  editingPhaseStore.set(null);
   await loadDashboardState(true);
 }
 
 export async function togglePhaseCategoryAction(phaseLabel, categoryLabel) {
+  if (isDefaultCategory(categoryLabel)) {
+    alert('As categorias padrão (Incluir, Excluir, Pendente) são obrigatórias e não podem ser desativadas.');
+    return;
+  }
   const project = get(projectStore);
   if (!project?.id) throw new Error('Abra um projeto antes de configurar categorias.');
   const phases = Array.isArray(project.phases) ? project.phases : [];
@@ -1145,8 +1174,6 @@ export function openCategoryPanel(category = null) {
 }
 
 export function closeCategoryPanel() {
-  const catReq = get(categoryCreationRequiredStore);
-  if (catReq) return false;
   isCategoryPanelOpenStore.set(false);
   editingCategoryStore.set(null);
   return true;
@@ -1171,10 +1198,13 @@ export async function saveCategoryAction(categoryData, editingCategoryLabel = nu
     projectInstance.updateCategory(editingCategoryLabel, categoryData);
   } else {
     projectInstance.addCategory(categoryData);
+    categoryCreationRequiredStore.set(false);
   }
 
   await storage.saveProject(projectInstance);
   await updateScholarContextMenu();
+  isCategoryPanelOpenStore.set(false);
+  editingCategoryStore.set(null);
   await loadDashboardState();
 }
 
@@ -1312,7 +1342,10 @@ export async function migrateAndFinalizeCategoryDeletionAction(sourceLabel, targ
     if (scopedIdx >= 0) scopedPapers[scopedIdx] = nextPaper;
 
     if (nextPaper.url) {
-      highlightedLinks[nextPaper.url] = targetColor;
+      highlightedLinks[nextPaper.url] = {
+        color: targetColor,
+        categoryName: targetCategory.title || targetCategory.name || targetCategory.label || ""
+      };
     }
   }
 
@@ -1510,7 +1543,10 @@ export async function transferPapersBetweenCategoriesAction(
       for (const storedUrl of Object.keys(highlightedLinks)) {
         if (normalizeUrl(storedUrl) === canonicalUrl) delete highlightedLinks[storedUrl];
       }
-      highlightedLinks[nextPaper.url] = targetColor;
+      highlightedLinks[nextPaper.url] = {
+        color: targetColor,
+        categoryName: targetCategory.title || targetCategory.name || targetCategory.label || ""
+      };
     }
   }
 

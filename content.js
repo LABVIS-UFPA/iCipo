@@ -78,7 +78,20 @@ function linkMatchesStoredUrl(anchorHref, storedUrl) {
   );
 }
 
+function getBadgeContrast(hex) {
+  if (!hex || typeof hex !== 'string') return '#ffffff';
+  let clean = hex.replace('#', '');
+  if (clean.length === 3) clean = clean.split('').map(c => c + c).join('');
+  if (clean.length !== 6) return '#ffffff';
+  const r = parseInt(clean.substr(0, 2), 16);
+  const g = parseInt(clean.substr(2, 2), 16);
+  const b = parseInt(clean.substr(4, 2), 16);
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 160 ? '#111827' : '#ffffff';
+}
+
 function paintHighlights() {
+  document.querySelectorAll('.ic-category-badge[data-icipo-badge="true"]').forEach((el) => el.remove());
   document.querySelectorAll('a.ic-highlighted-link').forEach((link) => {
     link.style.backgroundColor = '';
     link.classList.remove('ic-highlighted-link');
@@ -88,13 +101,37 @@ function paintHighlights() {
     return;
   }
 
-  for (const [linkUrl, color] of Object.entries(currentHighlights)) {
+  for (const [linkUrl, highlightData] of Object.entries(currentHighlights)) {
+    const color = typeof highlightData === 'object' && highlightData ? highlightData.color : highlightData;
+    const categoryName = typeof highlightData === 'object' && highlightData ? (highlightData.categoryName || '') : '';
+    if (!color) continue;
+
     // Evita seletor CSS com URL não escapada. A comparação por href também lida
     // melhor com URLs que contêm caracteres especiais.
     document.querySelectorAll('a[href]').forEach((link) => {
       if (linkMatchesStoredUrl(link.href, linkUrl)) {
         link.classList.add('ic-highlighted-link');
         link.style.backgroundColor = color;
+        if (categoryName) {
+          const badge = document.createElement('span');
+          badge.className = 'ic-category-badge';
+          badge.setAttribute('data-icipo-badge', 'true');
+          badge.textContent = categoryName;
+          badge.style.display = 'inline-block';
+          badge.style.marginLeft = '6px';
+          badge.style.padding = '1px 6px';
+          badge.style.fontSize = '11px';
+          badge.style.fontWeight = '600';
+          badge.style.lineHeight = '14px';
+          badge.style.borderRadius = '10px';
+          badge.style.backgroundColor = color;
+          badge.style.color = getBadgeContrast(color);
+          badge.style.verticalAlign = 'middle';
+          badge.style.boxShadow = '0 1px 2px rgba(0,0,0,0.15)';
+          badge.style.pointerEvents = 'none';
+          badge.style.userSelect = 'none';
+          link.insertAdjacentElement('afterend', badge);
+        }
       }
     });
   }

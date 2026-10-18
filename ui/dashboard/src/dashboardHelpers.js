@@ -89,7 +89,8 @@ export function getReadableCategoryTextColor(backgroundColor) {
 }
 
 export function normalizeHexColor(value, fallback = "") {
-  const color = String(value || "").trim();
+  const unwrapped = typeof value === 'object' && value ? (value.color || "") : value;
+  const color = String(unwrapped || "").trim();
   if (/^#[0-9a-f]{6}$/i.test(color)) return color.toUpperCase();
   if (/^#[0-9a-f]{3}$/i.test(color)) {
     return `#${color.slice(1).split("").map(ch => ch + ch).join("")}`.toUpperCase();

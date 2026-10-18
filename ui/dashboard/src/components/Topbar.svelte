@@ -1,5 +1,5 @@
 <script>
-  import { projectStore, serverStatusStore, openArticleTutorial } from '../dashboardStore.js';
+  import { projectStore, serverStatusStore, openGuidedTutorial } from '../dashboardStore.js';
   import { formatResearchers } from '../dashboardHelpers.js';
 
   $: project = $projectStore || {};
@@ -32,8 +32,8 @@
       id="btnOpenTutorial"
       class="btn ghost small"
       type="button"
-      title="Abrir o tutorial de triagem e categorias"
-      on:click={openArticleTutorial}
+      title="Abrir o tutorial do projeto (Visão Geral, Categorias e Fases)"
+      on:click={() => openGuidedTutorial('overview')}
     >
       <svg class="academicSvg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>

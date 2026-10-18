@@ -1,4 +1,6 @@
 <script>
+  import { fly, fade } from 'svelte/transition';
+  import { cubicOut } from 'svelte/easing';
   import {
     projectStore,
     papersStore,
@@ -10,8 +12,7 @@
     saveCategoryAction,
     deleteCategoryAction,
     requestCategoryDeletionAction,
-    createDefaultCategoriesAction,
-    completeCategoryTutorialStep
+    createDefaultCategoriesAction
   } from '../dashboardStore.js';
   import {
     getCategoryDeletionBlockReason,
@@ -113,27 +114,10 @@
   );
 
   function handleClose() {
-    if (categoryCreationRequired) {
-      if (confirm('O tutorial é obrigatório para configurar o projeto. Deseja sair e voltar para a lista de projetos?')) {
-        window.location.href = '../projects/projects.html';
-      }
-      return;
-    }
     closeCategoryPanel();
   }
 
   async function handleCloseWithAutoSave() {
-    if (categoryCreationRequired) {
-      const cleanTitle = title.trim();
-      if (cleanTitle) {
-        try {
-          await handleSave();
-        } catch (err) {
-          console.warn('Falha no auto-save da categoria ao fechar:', err);
-        }
-      }
-      return;
-    }
 
     const cleanTitle = title.trim();
 
@@ -156,10 +140,6 @@
 
     // Se for uma nova categoria sem título preenchido, fecha diretamente sem salvar
     closeCategoryPanel();
-  }
-
-  function handleAdvanceToTutorialStage4() {
-    completeCategoryTutorialStep();
   }
 
   async function handleKeydown(event) {
@@ -237,14 +217,7 @@
     isSaving = true;
     try {
       await saveCategoryAction(data, isEditing ? editingCategory.label : null);
-      if (categoryCreationRequired) {
-        title = '';
-        description = '';
-        criteria = [];
-        newCriterion = '';
-      } else {
-        closeCategoryPanel();
-      }
+      closeCategoryPanel();
     } catch (err) {
       console.warn('Falha ao salvar categoria:', err);
       titleError = err?.message || 'Não foi possível salvar a categoria.';
@@ -276,23 +249,22 @@
     class="sideOverlay open"
     on:click={handleCloseWithAutoSave}
     aria-hidden="true"
+    transition:fade={{ duration: 320 }}
   ></div>
 
   <div
     id="categoryPanel"
-    class="sidePanel phaseDrawerPanel categoryDrawerPanel"
-    class:open={isOpen}
+    class="sidePanel phaseDrawerPanel categoryDrawerPanel open"
     class:categoryCreationRequiredPanel={categoryCreationRequired}
     role="dialog"
     aria-labelledby="categoryPanelTitle"
+    transition:fly={{ x: 650, duration: 400, opacity: 1, easing: cubicOut }}
   >
     <!-- Header moderno e informativo -->
     <div class="sidePanelHeader phaseDrawerHeader">
       <div class="phaseDrawerHeaderInfo">
         <div class="phaseDrawerStepRow">
-          {#if categoryCreationRequired}
-            <span class="phaseDrawerStepPill">Tutorial · Etapa 3 de 4</span>
-          {:else if isEditing}
+          {#if isEditing}
             <span class="categoryKindBadge {isDefault ? 'categoryKindBadge--default' : 'categoryKindBadge--custom'}">
               {isDefault ? 'Categoria Padrão' : 'Categoria Personalizada'}
             </span>
@@ -307,9 +279,7 @@
           {/if}
         </div>
         <h2 id="categoryPanelTitle" class="phaseDrawerTitle">
-          {#if categoryCreationRequired}
-            Categorias da Triagem
-          {:else if isEditing}
+          {#if isEditing}
             {title ? title : (isDefault ? 'Editar Categoria Padrão' : 'Editar Categoria')}
           {:else}
             Nova Categoria Personalizada
@@ -331,7 +301,7 @@
         class="btn phaseDrawerCloseBtn"
         type="button"
         on:click={handleCloseWithAutoSave}
-        title={categoryCreationRequired ? 'Voltar aos projetos' : 'Fechar e salvar alterações (Esc)'}
+        title="Fechar e salvar alterações (Esc)"
         aria-label="Fechar painel"
       >
         ✕
@@ -339,90 +309,6 @@
     </div>
 
     <div class="sidePanelBody u-scroll-y phaseDrawerBody">
-      {#if categoryCreationRequired}
-        <div
-          id="categoryRequiredNotice"
-          class="phaseRequiredNotice"
-          role="alert"
-          aria-live="assertive"
-        >
-          <span class="requiredStepLabel">Tutorial · Etapa 3 de 4</span>
-          <strong>Categorias Padrão e Personalizadas</strong>
-          <span>
-            O iCipó organiza a triagem através de 3 categorias padrão essenciais: <b>Incluir</b>, <b>Excluir</b> e <b>Pendente</b>, que já vêm <b>ativadas por padrão em todas as fases</b>.
-            Você pode utilizá-las diretamente ou criar categorias personalizadas adicionais para detalhar critérios específicos, associando cada uma à sua respectiva métrica.
-          </span>
-        </div>
-
-        {#if hasAllDefaults}
-          <div id="defaultCategoriesSuggestion" class="defaultCategoriesSuggestion defaultCategoriesSuggestion--ready">
-            <div class="defaultCategoriesSuggestionHeader">
-              <div>
-                <span class="tutorialEyebrow" style="color:var(--good,#16a34a)">Configuração Pronta</span>
-                <strong>Categorias padrão essenciais ativas</strong>
-              </div>
-              <span class="defaultCategoriesSuggestionBadge" style="background:rgba(34,197,94,0.14);color:#15803d;border:1px solid rgba(34,197,94,0.3)">✓ 3 Ativas nas Fases</span>
-            </div>
-            <p>
-              O seu projeto já possui as 3 categorias padrão essenciais ativadas por padrão em todas as fases para a triagem e cálculo das métricas:
-            </p>
-            <div class="defaultCategoriesPreview" aria-label="Categorias padrão configuradas">
-              <span><i class="defaultCategoryDot defaultCategoryDotIncluded"></i><b>Incluir</b> (Avança de fase)</span>
-              <span><i class="defaultCategoryDot defaultCategoryDotExcluded"></i><b>Excluir</b> (Descartado)</span>
-              <span><i class="defaultCategoryDot defaultCategoryDotPending"></i><b>Pendente</b> (Em análise)</span>
-            </div>
-
-            <div class="tutorialCategoryActionRow" style="margin-top: 16px;">
-              <button
-                id="btnAdvanceToArticlesTutorial"
-                type="button"
-                class="btn btn-primary"
-                style="width: 100%; padding: 12px 18px; font-weight: 750; font-size: 14.5px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;"
-                on:click={handleAdvanceToTutorialStage4}
-              >
-                <span>Confirmar categorias e avançar para Etapa 4 →</span>
-              </button>
-            </div>
-          </div>
-        {:else}
-          <div id="defaultCategoriesSuggestion" class="defaultCategoriesSuggestion">
-            <div class="defaultCategoriesSuggestionHeader">
-              <div>
-                <span class="tutorialEyebrow">Sugestão do iCipó</span>
-                <strong>Categorias essenciais para começar</strong>
-              </div>
-              <span class="defaultCategoriesSuggestionBadge">1 clique</span>
-            </div>
-            <p>
-              Crie automaticamente as três categorias essenciais, que virão ativadas por padrão em todas as fases para o fluxo de
-              triagem. Você poderá editar nome, descrição, cor e critérios depois.
-            </p>
-            <div class="defaultCategoriesPreview" aria-label="Categorias padrão sugeridas">
-              <span><i class="defaultCategoryDot defaultCategoryDotIncluded"></i>Incluir</span>
-              <span><i class="defaultCategoryDot defaultCategoryDotExcluded"></i>Excluir</span>
-              <span><i class="defaultCategoryDot defaultCategoryDotPending"></i>Pendente</span>
-            </div>
-            <button
-              id="btnCreateDefaultCategories"
-              type="button"
-              class="btn defaultCategoriesButton"
-              disabled={isCreatingDefaults}
-              on:click={handleCreateDefaults}
-            >
-              {isCreatingDefaults ? 'Criando categorias...' : 'Criar categorias padrão'}
-            </button>
-            {#if defaultCategoriesError}
-              <div id="defaultCategoriesError" class="fieldError visible" aria-live="polite">
-                {defaultCategoriesError}
-              </div>
-            {/if}
-          </div>
-        {/if}
-
-        <div class="categoryManualDivider">
-          <span>ou crie uma categoria personalizada</span>
-        </div>
-      {/if}
 
       {#if isDefault}
         <div class="categoryDefaultNotice" role="note">
