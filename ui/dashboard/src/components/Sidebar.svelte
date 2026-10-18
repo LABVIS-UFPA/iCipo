@@ -15,7 +15,7 @@
 
   function isLocked(view) {
     if ($isTutorialOpenStore && $tutorialStageStore !== 'complete') {
-      if ($tutorialStageStore === 'overview') return view !== 'overview';
+      if ($tutorialStageStore === 'overview') return false;
       if ($tutorialStageStore === 'categories') return view !== 'categories';
       if ($tutorialStageStore === 'phases') return view !== 'phases';
       if ($tutorialStageStore === 'scholar') return false;
@@ -52,22 +52,22 @@
   <nav class="nav u-flex-fill-col u-scroll-y" aria-label="Navegação principal">
     <button
       class="navBtn"
-      class:active={$activeViewStore === 'overview'}
-      class:tutorialLocked={isLocked('overview')}
-      class:phaseLocked={isLocked('overview')}
-      aria-disabled={isLocked('overview')}
-      data-view="overview"
-      on:click={() => handleNav('overview')}
+      class:active={$activeViewStore === 'phases'}
+      class:tutorialLocked={isLocked('phases')}
+      class:phaseLocked={isLocked('phases')}
+      aria-disabled={isLocked('phases')}
+      data-view="phases"
+      on:click={() => handleNav('phases')}
     >
       <span class="navIcon" aria-hidden="true">
         <svg class="academicSvg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="3" width="7" height="9" rx="1.5"/>
-          <rect x="14" y="3" width="7" height="5" rx="1.5"/>
-          <rect x="14" y="12" width="7" height="9" rx="1.5"/>
-          <rect x="3" y="16" width="7" height="5" rx="1.5"/>
+          <path d="M4 6h16M4 12h16M4 18h16"/>
+          <circle cx="8" cy="6" r="2" fill="currentColor"/>
+          <circle cx="16" cy="12" r="2" fill="currentColor"/>
+          <circle cx="10" cy="18" r="2" fill="currentColor"/>
         </svg>
       </span>
-      <span>Visão Geral</span>
+      <span>Fases</span>
     </button>
 
     <button
@@ -86,26 +86,6 @@
         </svg>
       </span>
       <span>Categorias</span>
-    </button>
-
-    <button
-      class="navBtn"
-      class:active={$activeViewStore === 'phases'}
-      class:tutorialLocked={isLocked('phases')}
-      class:phaseLocked={isLocked('phases')}
-      aria-disabled={isLocked('phases')}
-      data-view="phases"
-      on:click={() => handleNav('phases')}
-    >
-      <span class="navIcon" aria-hidden="true">
-        <svg class="academicSvg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 6h16M4 12h16M4 18h16"/>
-          <circle cx="8" cy="6" r="2" fill="currentColor"/>
-          <circle cx="16" cy="12" r="2" fill="currentColor"/>
-          <circle cx="10" cy="18" r="2" fill="currentColor"/>
-        </svg>
-      </span>
-      <span>Fases</span>
     </button>
   </nav>
 

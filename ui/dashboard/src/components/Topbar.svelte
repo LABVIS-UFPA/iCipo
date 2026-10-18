@@ -32,7 +32,7 @@
       id="btnOpenTutorial"
       class="btn ghost small"
       type="button"
-      title="Abrir o tutorial do projeto (Visão Geral, Categorias e Fases)"
+      title="Abrir o tutorial do projeto (Apresentação, Categorias e Fases)"
       on:click={() => openGuidedTutorial('overview')}
     >
       <svg class="academicSvg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

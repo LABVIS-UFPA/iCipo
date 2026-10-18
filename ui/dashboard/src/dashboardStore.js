@@ -70,7 +70,7 @@ export const papersStore = writable([]);
 export const highlightedLinksStore = writable({});
 export const accessStateStore = writable('loading'); // 'loading' | 'ready' | 'project-required' | 'offline'
 
-export const DASHBOARD_VIEWS = ['overview', 'phases', 'categories'];
+export const DASHBOARD_VIEWS = ['phases', 'categories'];
 
 export function getSavedDashboardView() {
   if (typeof window !== 'undefined' && window.location.hash) {
@@ -83,7 +83,7 @@ export function getSavedDashboardView() {
       return saved.toLowerCase().trim();
     }
   } catch {}
-  return 'overview';
+  return 'phases';
 }
 
 export function persistDashboardView(view) {
@@ -472,20 +472,20 @@ export async function loadDashboardState(silent = false) {
     let targetView;
     if (!isComplete) {
       if (currentStage === 'overview') {
-        targetView = 'overview';
+        targetView = 'phases';
       } else if (currentStage === 'categories') {
         targetView = 'categories';
       } else if (currentStage === 'phases') {
         targetView = 'phases';
       } else if (currentStage === 'scholar') {
-        targetView = 'overview';
+        targetView = 'phases';
       }
     } else {
       const currentView = get(activeViewStore);
       const savedView = getSavedDashboardView();
       targetView = currentView && DASHBOARD_VIEWS.includes(currentView)
         ? currentView
-        : (savedView || 'overview');
+        : (savedView || 'phases');
     }
 
     persistDashboardView(targetView);

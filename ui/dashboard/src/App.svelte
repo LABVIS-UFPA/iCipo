@@ -5,7 +5,6 @@
   import Sidebar from "./components/Sidebar.svelte";
   import Topbar from "./components/Topbar.svelte";
   import TutorialDropdownCard from "./components/TutorialDropdownCard.svelte";
-  import OverviewView from "./views/OverviewView.svelte";
   import PhasesView from "./views/PhasesView.svelte";
   import CategoriesView from "./views/CategoriesView.svelte";
   import PaperHistoryModal from "./components/PaperHistoryModal.svelte";
@@ -97,16 +96,12 @@
 
       <TutorialDropdownCard />
 
-      <div class="viewContainer" class:hidden={$activeViewStore !== 'overview'}>
-        <OverviewView />
+      <div class="viewContainer" class:hidden={$activeViewStore !== 'phases'}>
+        <PhasesView />
       </div>
 
       <div class="viewContainer" class:hidden={$activeViewStore !== 'categories'}>
         <CategoriesView />
-      </div>
-
-      <div class="viewContainer" class:hidden={$activeViewStore !== 'phases'}>
-        <PhasesView />
       </div>
     </main>
   </div>

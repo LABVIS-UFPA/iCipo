@@ -45,7 +45,7 @@
   function handleSelectStep(step) {
     if (isCompleted) {
       selectedReviewStep = step;
-      if (step !== "scholar") {
+      if (step !== "scholar" && step !== "overview") {
         setActiveView(step);
       }
     }
@@ -217,7 +217,7 @@
         <div class="tutorialStepPane" id="tutorialPaneOverview">
           <div class="tutorialStepMeta">
             <span class="tutorialStepTag"
-              >Etapa 1 de 4 · Introdução & Visão</span
+              >Etapa 1 de 4 · Apresentação do Sistema</span
             >
             <span class="tutorialToolBrand">🌿 iCipó (LABVIS-UFPA)</span>
           </div>
