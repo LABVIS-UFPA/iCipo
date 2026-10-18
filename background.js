@@ -4,6 +4,8 @@ import {
   normalizeArticleUrl,
   normalizeCategoryMetricType,
   normalizeMetricType,
+  parseBooleanTags,
+  cleanPaperTags,
 } from './core/utils.mjs';
 import {storage} from './infrastructure/storage.mjs';
 import { wsManager } from './infrastructure/socketManager.mjs';
@@ -374,11 +376,7 @@ function removePaperFromPhase(paper, phaseLabel, project = null) {
       ? project.categories.map(category => category?.label).filter(Boolean)
       : []
   );
-  const categoryLabel = latestClassification?.categoryLabel || null;
-  const baseTags = Array.isArray(paper.tags)
-    ? paper.tags.filter(tag => !projectCategoryLabels.has(tag))
-    : [];
-  const tags = [...new Set([...baseTags, ...(categoryLabel ? [categoryLabel] : [])])];
+  const tags = cleanPaperTags(paper.tags, project?.categories);
 
   const status = normalizeMetricType(latestClassification?.outcome, 'pending');
 
@@ -598,11 +596,13 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     const projectCategoryLabels = new Set(
       activeProject.categories.map(category => category?.label).filter(Boolean)
     );
+    const phaseTags = Array.isArray(activePhase?.tags) && activePhase.tags.length > 0
+      ? activePhase.tags
+      : parseBooleanTags(activePhase?.tagsRaw || activePhase?.tags || []);
+    const cleanExisting = cleanPaperTags(previousPaper.tags, activeProject?.categories);
     const tags = [...new Set([
-      ...(Array.isArray(previousPaper.tags)
-        ? previousPaper.tags.filter(tag => !projectCategoryLabels.has(tag))
-        : []),
-      categoryLabel,
+      ...cleanExisting,
+      ...phaseTags,
     ])];
     const history = Array.isArray(previousPaper.history) ? [...previousPaper.history] : [];
     history.push({

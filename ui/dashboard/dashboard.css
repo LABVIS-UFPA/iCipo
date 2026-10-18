@@ -6845,4 +6845,171 @@ a.phaseArchiveArticleTitle:hover{color:#146fd1;text-decoration:underline}
   flex-shrink: 0;
 }
 
+/* ==========================================================================
+   Phase Tags UI Components (Preview, Card, and Archive Strip)
+   ========================================================================== */
+.phaseTagsPreviewRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.phaseTagPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  transition: all 0.15s ease;
+}
+
+.phaseCardTagsSection {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 7px 10px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.phaseCardTagsHeader {
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.phaseCardTagsBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.phaseCardTagBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  background: #e2e8f0;
+  color: #334155;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.phaseArchiveTagsStrip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 6px 12px;
+  background: rgba(46, 174, 108, 0.06);
+  border: 1px solid rgba(46, 174, 108, 0.22);
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.phaseArchiveTagsLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: #166534;
+  white-space: nowrap;
+}
+
+.phaseArchiveTagsList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.phaseArchiveTagBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #ffffff;
+  color: #166534;
+  border: 1px solid rgba(46, 174, 108, 0.3);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.phaseTagsTextarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12.5px !important;
+  line-height: 1.5 !important;
+  resize: vertical;
+}
+
+.phaseTagsCodeExample {
+  display: block;
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: #f1f5f9;
+  border-radius: 4px;
+  color: #1e293b;
+  font-size: 11.5px;
+  word-break: break-word;
+}
+
+.phaseTagsPreviewIntro {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #64748b;
+  align-self: center;
+}
+
+.phaseCardQuickTagsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 5px;
+  padding: 5px 8px;
+  background: rgba(241, 245, 249, 0.7);
+  border-radius: 6px;
+  border: 1px dashed #cbd5e1;
+}
+
+.phaseQuickTagBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 500;
+  background: #ffffff;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.phaseQuickTagBadge:hover {
+  border-color: #2eae6c;
+  color: #166534;
+}
+
+.phaseQuickTagBadge.isTagged {
+  background: #f0fdf4;
+  color: #166534;
+  border-color: #86efac;
+  font-weight: 600;
+}
+
+.phaseQuickTagBadge .quickTagCheck {
+  font-size: 10px;
+  font-weight: 700;
+}
+
 

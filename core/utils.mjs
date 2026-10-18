@@ -27,6 +27,60 @@ export function uniqueStrings(values) {
     return [...new Set(checkArray(values).filter(Boolean))];
 }
 
+export function parseBooleanTags(input) {
+    if (!input) return [];
+    if (Array.isArray(input)) {
+        return [...new Set(input.flatMap(item => parseBooleanTags(item)))];
+    }
+    const str = String(input).trim();
+    if (!str) return [];
+
+    const quotedMatches = [];
+    const quotedRegex = /["']([^"']+)["']/g;
+    let match;
+    while ((match = quotedRegex.exec(str)) !== null) {
+        const val = match[1].trim();
+        if (val) quotedMatches.push(val);
+    }
+
+    const tags = [...quotedMatches];
+    const withoutQuotes = str.replace(/["'][^"']+["']/g, ' ');
+
+    const chunks = withoutQuotes
+        .split(/\b(?:AND|OR|NOT|and|or|not)\b|[;,\n\r]/)
+        .map(chunk => chunk.replace(/[()&|]/g, ' ').trim())
+        .filter(chunk => chunk.length > 0 && !/^(AND|OR|NOT)$/i.test(chunk));
+
+    for (const chunk of chunks) {
+        if (chunk) tags.push(chunk);
+    }
+
+    const seen = new Set();
+    const result = [];
+    for (const tag of tags) {
+        const normalized = tag.toLowerCase().trim();
+        if (normalized && !seen.has(normalized)) {
+            seen.add(normalized);
+            result.push(tag.trim());
+        }
+    }
+
+    return result;
+}
+
+export function cleanPaperTags(tags = [], categories = []) {
+    const catSet = new Set([
+        'incluir', 'excluir', 'pendente',
+        ...checkArray(categories).flatMap(c => [c?.label, c?.title])
+    ].filter(Boolean).map(s => String(s).trim().toLowerCase()));
+
+    return [...new Set(
+        checkArray(tags)
+            .map(t => String(t).trim())
+            .filter(t => t.length > 0 && !catSet.has(t.toLowerCase()))
+    )];
+}
+
 export function replaceArrayItem(values, oldValue, newValue) {
     return uniqueStrings(checkArray(values).map(value => value === oldValue ? newValue : value));
 }

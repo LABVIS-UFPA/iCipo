@@ -20,11 +20,13 @@
     normalizeCategoryMetricType,
     inferMetricTypeFromCategory,
     isPhaseCompleted,
-    isDefaultCategory
+    isDefaultCategory,
+    parseBooleanTags
   } from '../dashboardHelpers.js';
 
   let title = '';
   let description = '';
+  let tagsInput = '';
   let selectedCategories = [];
   let status = 'pending'; // 'pending' | 'done'
   let titleError = '';
@@ -52,6 +54,7 @@
   $: canDelete = isEditing && canDeletePhaseLabel(editingPhase.label, phases, activePhaseLabel);
   $: stats = isEditing && editingPhase ? getPhaseStats(editingPhase, $papersStore) : null;
   $: pendingCount = stats ? stats.pending : 0;
+  $: parsedTags = parseBooleanTags(tagsInput);
 
   let lastOpenedEditingPhase = undefined;
   let wasOpen = false;
@@ -65,10 +68,14 @@
       description = editingPhase.desc ?? editingPhase.description ?? '';
       const existingCats = Array.isArray(editingPhase.categories) ? editingPhase.categories : [];
       selectedCategories = existingCats.length > 0 ? [...existingCats] : (defaultCategoryLabels.length ? [...defaultCategoryLabels] : projectCategories.map(c => c.label));
+      tagsInput = editingPhase.tagsRaw || (Array.isArray(editingPhase.tags) && editingPhase.tags.length > 0
+        ? editingPhase.tags.map(t => t.includes(' ') ? `"${t}"` : t).join(' OR ')
+        : '');
       status = isPhaseCompleted(editingPhase) ? 'done' : 'pending';
     } else {
       title = '';
       description = '';
+      tagsInput = '';
       selectedCategories = defaultCategoryLabels.length ? [...defaultCategoryLabels] : projectCategories.map(c => c.label);
       status = 'pending';
     }
@@ -185,6 +192,8 @@
       description: cleanDesc,
       completed: status === 'done',
       categories: allCategoriesToSave,
+      tagsRaw: tagsInput.trim(),
+      tags: parsedTags,
       inheritanceCategoryLabel: inheritanceCategory?.label || null,
       criteria: isEditing ? (editingPhase.criteria || []) : []
     };
@@ -334,6 +343,31 @@
         ></textarea>
         {#if descError}
           <div id="phaseDescError" class="fieldError visible" aria-live="polite">{descError}</div>
+        {/if}
+      </div>
+
+      <!-- Campo Tags da Pesquisa -->
+      <div class="phaseDrawerFieldGroup">
+        <label for="phaseTagsInput" class="phaseDrawerLabel">
+          🏷️ Tags da pesquisa
+        </label>
+        <textarea
+          id="phaseTagsInput"
+          class="input phaseDrawerTextarea phaseTagsTextarea"
+          rows="3"
+          placeholder='("adversarial machine learning" OR "AI security") AND ("evasion attack" OR "adversarial perturbation") AND ("adversarial training" OR "robustness")'
+          bind:value={tagsInput}
+        ></textarea>
+        {#if parsedTags.length > 0}
+          <div class="phaseTagsPreviewRow" aria-label="Pré-visualização das tags extraídas da string de busca">
+            <span class="phaseTagsPreviewIntro">Tags extraídas ({parsedTags.length}):</span>
+            {#each parsedTags as tag}
+              <span class="phaseTagPill">
+                <span class="tagIcon" aria-hidden="true">🏷️</span>
+                <span>{tag}</span>
+              </span>
+            {/each}
+          </div>
         {/if}
       </div>
 

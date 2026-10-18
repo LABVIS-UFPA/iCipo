@@ -105,6 +105,18 @@
     paperCategoryFilterStore.set('all');
   }
 
+  function handleToggleTag(paperId, currentPaper, tag) {
+    if (isCompleted) return;
+    const currentTags = Array.isArray(currentPaper?.tags) ? currentPaper.tags : [];
+    let nextTags;
+    if (currentTags.includes(tag)) {
+      nextTags = currentTags.filter(t => t !== tag);
+    } else {
+      nextTags = [...currentTags, tag];
+    }
+    updatePaperFieldAction(paperId, "tags", nextTags);
+  }
+
   // Filtragem inteligente de registros
   $: filteredRecords = records.filter(record => {
     // Filtro por desfecho
@@ -277,6 +289,17 @@
         <p class="phaseArchiveDescription">
           Fase planejada: gerencie artigos e critérios desta etapa.
         </p>
+      {/if}
+
+      {#if Array.isArray(activePhaseObj.tags) && activePhaseObj.tags.length > 0}
+        <div class="phaseArchiveTagsStrip" title="Tags da pesquisa vinculadas aos artigos desta fase">
+          <span class="phaseArchiveTagsLabel">🏷️ Tags da pesquisa:</span>
+          <div class="phaseArchiveTagsList">
+            {#each activePhaseObj.tags as ptag}
+              <span class="phaseArchiveTagBadge">{ptag}</span>
+            {/each}
+          </div>
+        </div>
       {/if}
     </div>
 
@@ -581,10 +604,10 @@
                 <td class="phaseTableCellTags">
                   <input
                     class="cellInput phaseInlineTags"
-                    value={Array.isArray(record.paper?.tags) ? record.paper.tags.join(";") : ""}
-                    placeholder="ex: vis;ml"
+                    value={Array.isArray(record.paper?.tags) ? record.paper.tags.join("; ") : ""}
+                    placeholder='ex: "adversarial machine learning"; "evasion attack"'
                     disabled={isCompleted}
-                    title="Editar tags (separadas por ponto-e-vírgula)"
+                    title="Editar tags do artigo (separadas por ponto-e-vírgula)"
                     on:change={(e) => updatePaperFieldAction(paperId, "tags", e.target.value)}
                   />
                 </td>
@@ -769,12 +792,31 @@
               <input
                 class="cellInput phaseInlineTags"
                 value={Array.isArray(record.paper?.tags) ? record.paper.tags.join("; ") : ""}
-                placeholder="ex: vis; interacao; ml"
+                placeholder='ex: "adversarial machine learning"; "evasion attack"'
                 disabled={isCompleted}
                 title="Editar tags do artigo (separadas por ponto-e-vírgula)"
                 on:change={(e) => updatePaperFieldAction(paperId, "tags", e.target.value)}
               />
             </div>
+
+            {#if activePhaseObj?.tags?.length > 0}
+              <div class="phaseCardQuickTagsRow" title="Tags da pesquisa — clique para alternar neste artigo">
+                {#each activePhaseObj.tags as ptag}
+                  {@const isTagged = Array.isArray(record.paper?.tags) && record.paper.tags.includes(ptag)}
+                  <button
+                    type="button"
+                    class="phaseQuickTagBadge"
+                    class:isTagged={isTagged}
+                    disabled={isCompleted}
+                    on:click={() => handleToggleTag(paperId, record.paper, ptag)}
+                    title={isTagged ? `Tag ativa no artigo. Clique para remover "${ptag}".` : `Clique para associar a tag "${ptag}" a este artigo.`}
+                  >
+                    <span class="quickTagCheck">{isTagged ? '✓' : '+'}</span>
+                    <span>{ptag}</span>
+                  </button>
+                {/each}
+              </div>
+            {/if}
 
             <!-- Justificativa ou notas de triagem se houver -->
             {#if record.classification?.notes || record.paper?.notes}

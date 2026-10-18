@@ -7,6 +7,8 @@ import {
   inferMetricTypeFromCategory,
   inferFromCategory,
   hashId,
+  parseBooleanTags,
+  cleanPaperTags,
 } from '../../../core/utils.mjs';
 
 export {
@@ -18,6 +20,8 @@ export {
   inferMetricTypeFromCategory,
   inferFromCategory,
   hashId,
+  parseBooleanTags,
+  cleanPaperTags,
 };
 
 
@@ -629,6 +633,9 @@ export function isReorderablePlannedPhase(label, phases = [], activePhaseLabel =
 export function getPhaseArchiveRecords(phase = {}, projectPapers = []) {
   const phaseLabel = phase?.label;
   if (!phaseLabel) return [];
+  const phaseTags = Array.isArray(phase?.tags) && phase.tags.length > 0
+    ? phase.tags
+    : parseBooleanTags(phase?.tagsRaw || phase?.tags || []);
 
   const papers = Array.isArray(projectPapers) ? projectPapers : [];
   const paperById = new Map();
@@ -690,9 +697,13 @@ export function getPhaseArchiveRecords(phase = {}, projectPapers = []) {
       return current;
     }
 
+    const cleanBaseTags = cleanPaperTags(safePaper.tags, phase?.categories);
+    const paperTags = [...new Set([...cleanBaseTags, ...phaseTags])];
+    const paperForRecord = { ...safePaper, tags: paperTags };
+
     const record = {
       key,
-      paper: safePaper,
+      paper: paperForRecord,
       classification: safeClassification,
       outcome,
       categoryLabel,
@@ -1084,10 +1095,7 @@ export function removePaperClassificationFromActivePhase(paper, activePhaseLabel
       .map(category => category?.label)
       .filter(Boolean)
   );
-  const categoryLabel = latestClassification?.categoryLabel || null;
-  const baseTags = (Array.isArray(paper.tags) ? paper.tags : [])
-    .filter(tag => !categoryLabels.has(tag));
-  const tags = [...new Set([...baseTags, ...(categoryLabel ? [categoryLabel] : [])])];
+  const tags = cleanPaperTags(paper.tags, projectCategories);
 
   return {
     ...paper,
@@ -1134,7 +1142,7 @@ export function findPaperIndexForBulk(collection, paper) {
   ));
 }
 
-export function createBulkClassifiedPaper(previousPaper, category, phaseLabel, classifiedAt, projectCategories = []) {
+export function createBulkClassifiedPaper(previousPaper, category, phaseLabel, classifiedAt, projectCategories = [], phaseTags = []) {
   const metricType = normalizeCategoryMetricType(
     category?.metricType,
     inferMetricTypeFromCategory(category)
@@ -1173,14 +1181,10 @@ export function createBulkClassifiedPaper(previousPaper, category, phaseLabel, c
       .map(value => String(value || "").trim().toLowerCase())
       .filter(Boolean)
   );
+  const cleanExisting = cleanPaperTags(previousPaper?.tags, projectCategories);
   const tags = [...new Set([
-    ...(Array.isArray(previousPaper?.tags)
-      ? previousPaper.tags.filter((tag) => {
-          const normalizedTag = String(tag || "").trim().toLowerCase();
-          return normalizedTag && !categoryReferences.has(normalizedTag);
-        })
-      : []),
-    category.label,
+    ...cleanExisting,
+    ...(Array.isArray(phaseTags) ? phaseTags : []),
   ])];
   const inferred = inferFromCategory(category);
   const history = Array.isArray(previousPaper?.history) ? [...previousPaper.history] : [];

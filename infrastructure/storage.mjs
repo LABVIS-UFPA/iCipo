@@ -13,6 +13,8 @@ import {
   normalizeArticleUrl,
   normalizeCategoryMetricType,
   normalizeMetricType,
+  parseBooleanTags,
+  cleanPaperTags,
 } from '../core/utils.mjs';
 import { wsManager } from './socketManager.mjs';
 
@@ -113,6 +115,8 @@ class NodeFsStrategy {
         completed: !!phase?.completed,
         categories,
         inheritanceCategoryLabel,
+        tagsRaw: phase?.tagsRaw || (typeof phase?.tags === 'string' ? phase.tags : ''),
+        tags: parseBooleanTags(phase?.tags || phase?.tagsRaw || []),
         papers: {
           inheritedAccumulated: Array.isArray(rawPapers.inheritedAccumulated) ? rawPapers.inheritedAccumulated : [],
           inherited: Array.isArray(rawPapers.inherited) ? rawPapers.inherited : [],
@@ -318,11 +322,9 @@ class NodeFsStrategy {
       ? { ...sourcePaper.classifications, [phase.label]: nextClassification }
       : { [phase.label]: nextClassification };
     const currentPhaseLabel = sourcePaper.phaseLabel || sourcePaper.phaseId || sourcePaper.iterationId || null;
-    const baseTags = (Array.isArray(sourcePaper.tags) ? sourcePaper.tags : [])
-      .filter(tag => !categoryLabels.has(tag) && tag !== 'duplicado-automatico');
-    const nextTags = targetCategory?.label
-      ? [...new Set([...baseTags, targetCategory.label])]
-      : baseTags;
+    const baseTags = cleanPaperTags(sourcePaper.tags, project?.categories)
+      .filter(tag => tag !== 'duplicado-automatico');
+    const nextTags = baseTags;
 
     return {
       changed: true,
@@ -557,11 +559,9 @@ class NodeFsStrategy {
         inheritedFromPhaseLabel: previousPhase?.label || null,
       };
 
-      const baseTags = (Array.isArray(sourcePaper.tags) ? sourcePaper.tags : [])
-        .filter(tag => !categoryLabels.has(tag) && tag !== 'duplicado-automatico');
-      const tags = targetCategory?.label
-        ? [...new Set([...baseTags, targetCategory.label])]
-        : baseTags;
+      const baseTags = cleanPaperTags(sourcePaper.tags, project?.categories)
+        .filter(tag => tag !== 'duplicado-automatico');
+      const tags = baseTags;
       const history = Array.isArray(sourcePaper.history) ? [...sourcePaper.history] : [];
       history.push({
         ts: inheritedAt,
@@ -793,6 +793,13 @@ class NodeFsStrategy {
       if (!rawData) return { status: 'error', message: 'Projeto não encontrado.' };
       const data = this.normalizeProjectPhaseCategoryModel(rawData);
       this.syncPhasePaperBuckets(projectID, data);
+      if (Array.isArray(data.phases)) {
+        for (const ph of data.phases) {
+          if (Array.isArray(ph.tags) && ph.tags.length > 0) {
+            this.syncPhasePaperTags(projectID, ph, data);
+          }
+        }
+      }
       if (JSON.stringify(rawData) !== JSON.stringify(data)) this.writeJson(relPath, data);
       return { status: 'ok', data };
     } catch (e) {
@@ -807,6 +814,13 @@ class NodeFsStrategy {
     if (!rawData) return { status: 'error', message: 'Projeto não encontrado.' };
     const data = this.normalizeProjectPhaseCategoryModel(rawData);
     this.syncPhasePaperBuckets(projectID, data);
+    if (Array.isArray(data.phases)) {
+      for (const ph of data.phases) {
+        if (Array.isArray(ph.tags) && ph.tags.length > 0) {
+          this.syncPhasePaperTags(projectID, ph, data);
+        }
+      }
+    }
     if (JSON.stringify(rawData) !== JSON.stringify(data)) {
       this.writeJson(relPath, data);
     }
@@ -1111,6 +1125,8 @@ class NodeFsStrategy {
     const requestedInheritanceCategory = phaseData.inheritanceCategoryLabel
       ?? existing.inheritanceCategoryLabel
       ?? null;
+    const tagsRaw = (phaseData.tagsRaw ?? (typeof phaseData.tags === 'string' ? phaseData.tags : (existing.tagsRaw ?? ''))).toString().trim();
+    const tags = parseBooleanTags(tagsRaw || phaseData.tags || existing.tags || []);
     const existingPapers = existing?.papers && typeof existing.papers === 'object'
       ? existing.papers
       : {};
@@ -1125,6 +1141,8 @@ class NodeFsStrategy {
         ? requestedInheritanceCategory
         : null,
       criteria,
+      tagsRaw,
+      tags,
       papers: {
         inheritedAccumulated: Array.isArray(existingPapers.inheritedAccumulated) ? existingPapers.inheritedAccumulated : [],
         inherited: Array.isArray(existingPapers.inherited) ? existingPapers.inherited : [],
@@ -1133,6 +1151,62 @@ class NodeFsStrategy {
         selected: Array.isArray(existingPapers.selected) ? existingPapers.selected : [],
       },
     };
+  }
+
+  syncPhasePaperTags(projectID, phase, project) {
+    if (!projectID || !phase) return;
+    const phaseTags = Array.isArray(phase.tags) && phase.tags.length > 0
+      ? phase.tags
+      : parseBooleanTags(phase.tagsRaw || phase.tags || []);
+
+    const papersDir = this.path.join(this.baseDir, projectID, 'papers');
+    if (!this.fs.existsSync(papersDir)) return;
+
+    const phasePaperIds = new Set([
+      ...(Array.isArray(phase.papers?.new) ? phase.papers.new : []),
+      ...(Array.isArray(phase.papers?.selected) ? phase.papers.selected : []),
+      ...(Array.isArray(phase.papers?.removed) ? phase.papers.removed : []),
+      ...(Array.isArray(phase.papers?.inherited) ? phase.papers.inherited : []),
+      ...(Array.isArray(phase.papers?.inheritedAccumulated) ? phase.papers.inheritedAccumulated : []),
+    ].map(String));
+
+    const categoryNames = new Set([
+      'incluir', 'excluir', 'pendente',
+      ...(Array.isArray(project?.categories) ? project.categories.flatMap(c => [c?.label, c?.title]) : [])
+    ].filter(Boolean).map(s => String(s).trim().toLowerCase()));
+
+    for (const filename of this.fs.readdirSync(papersDir)) {
+      if (!filename.endsWith('.json')) continue;
+      const paperPath = this.path.join(projectID, 'papers', filename);
+      const paper = this.readJson(paperPath);
+      if (!paper || typeof paper !== 'object') continue;
+      const paperId = String(paper.id || filename.replace(/\.json$/i, ''));
+
+      const belongsToPhase = paper.phaseLabel === phase.label
+        || (paper.classifications && paper.classifications[phase.label])
+        || phasePaperIds.has(paperId)
+        || ((project?.phases?.length || 0) <= 1);
+
+      if (belongsToPhase) {
+        const cleanExisting = (Array.isArray(paper.tags) ? paper.tags : [])
+          .filter(t => !categoryNames.has(String(t).trim().toLowerCase()));
+        const mergedTags = [...new Set([...cleanExisting, ...phaseTags])];
+        let changed = false;
+
+        if (JSON.stringify(paper.tags) !== JSON.stringify(mergedTags)) {
+          paper.tags = mergedTags;
+          changed = true;
+        }
+        if (!paper.phaseLabel) {
+          paper.phaseLabel = phase.label;
+          changed = true;
+        }
+        if (changed) {
+          paper.updatedAt = new Date().toISOString();
+          this.writeJson(paperPath, paper);
+        }
+      }
+    }
   }
 
   async savePhase(projectID, phaseData) {
@@ -1183,6 +1257,7 @@ class NodeFsStrategy {
 
     project.updatedAt = new Date().toISOString();
     this.syncPhasePaperBuckets(projectID, project);
+    this.syncPhasePaperTags(projectID, phase, project);
 
     this.writeJson(relPath, project);
     if (this.activeProjectID === projectID) this.activeProjectData = project;
@@ -1368,6 +1443,8 @@ class NodeFsStrategy {
         }
       }
     }
+
+    this.syncPhasePaperTags(projectID, phase, project);
 
     this.syncPhasePaperBuckets(projectID, project);
     this.writeJson(relPath, project);

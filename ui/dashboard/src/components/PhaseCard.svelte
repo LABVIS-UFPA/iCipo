@@ -316,6 +316,20 @@
       </div>
     {/if}
 
+    <!-- Tags used in this phase -->
+    {#if Array.isArray(phase.tags) && phase.tags.length > 0}
+      <div class="phaseCardTagsSection" title="Tags da pesquisa vinculadas aos artigos desta fase">
+        <div class="phaseCardTagsHeader">
+          <span>🏷️ Tags da pesquisa ({phase.tags.length}):</span>
+        </div>
+        <div class="phaseCardTagsBadges">
+          {#each phase.tags as pTag}
+            <span class="phaseCardTagBadge">{pTag}</span>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
     <!-- Card Footer Actions -->
     <div class="phaseCardFooter">
       <div class="phaseFooterLeft">

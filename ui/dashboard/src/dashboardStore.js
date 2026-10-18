@@ -24,7 +24,9 @@ import {
   isPhaseCompleted,
   isDefaultCategory,
   getPapersForCategory,
-  getCategoryDeletionBlockReason
+  getCategoryDeletionBlockReason,
+  parseBooleanTags,
+  cleanPaperTags
 } from './dashboardHelpers.js';
 
 
@@ -382,7 +384,24 @@ export async function loadDashboardState(silent = false) {
     highlightedLinksStore.set(highlightedLinks);
 
     const mergedPapers = getMergedPapers(consolidatedPapers, scopedPapers, highlightedLinks);
-    papersStore.set(mergedPapers);
+    const activePhaseObj = (project.phases || []).find(p => p.label === project.activePhaseLabel && !p.completed)
+      || (project.phases || [])[0]
+      || null;
+    const activePhaseTags = Array.isArray(activePhaseObj?.tags) && activePhaseObj.tags.length > 0
+      ? activePhaseObj.tags
+      : parseBooleanTags(activePhaseObj?.tagsRaw || activePhaseObj?.tags || []);
+
+    const cleanedPapers = mergedPapers.map(paper => {
+      const cleanTags = cleanPaperTags(paper.tags, project.categories);
+      const belongsToActive = paper.phaseLabel === activePhaseObj?.label
+        || (paper.classifications && paper.classifications[activePhaseObj?.label])
+        || ((project.phases?.length || 0) <= 1);
+      const nextTags = belongsToActive && activePhaseTags.length > 0
+        ? [...new Set([...cleanTags, ...activePhaseTags])]
+        : cleanTags;
+      return { ...paper, tags: nextTags };
+    });
+    papersStore.set(cleanedPapers);
 
     try {
       const snowballData = await storage.get(["svat_current_snowball_parent", "svat_current_snowball_title"]);
@@ -692,9 +711,11 @@ export async function updatePaperFieldAction(paperId, field, val) {
     const n = Number(val);
     finalVal = Number.isFinite(n) ? n : null;
   } else if (field === "tags") {
-    finalVal = typeof val === 'string'
-      ? val.split(/[;,]/).map(s => s.trim()).filter(Boolean)
+    const rawTags = typeof val === 'string'
+      ? parseBooleanTags(val)
       : (Array.isArray(val) ? val : []);
+    const project = get(projectStore);
+    finalVal = cleanPaperTags(rawTags, project?.categories);
   }
 
   target[field] = finalVal;
@@ -876,12 +897,14 @@ export async function applyPaperBulkCategoryAction(category, requestedOutcome, t
       const scopedPaper = scopedIndex >= 0 ? scopedPapers[scopedIndex] : null;
       const previousPaper = mergePaperSourcesForBulk(scopedPaper, renderedPaper);
 
+      const phaseTags = Array.isArray(targetPhase?.tags) ? targetPhase.tags : [];
       const nextPaper = createBulkClassifiedPaper(
         previousPaper,
         category,
         targetPhase.label,
         classifiedAt,
-        project.categories
+        project.categories,
+        phaseTags
       );
       const paperKey = String(nextPaper.id);
       if (processedIds.has(paperKey)) continue;
@@ -1176,17 +1199,59 @@ export async function savePhaseAction(phasePayload, phaseEditingLabel = null) {
   // Salva exatamente as categorias selecionadas pelo usuário para a fase
   const incomingCategories = Array.isArray(phasePayload.categories) ? phasePayload.categories : [];
   const finalCategories = [...new Set(incomingCategories)];
+  const rawTags = (typeof phasePayload.tagsRaw === 'string'
+    ? phasePayload.tagsRaw
+    : (typeof phasePayload.tags === 'string' ? phasePayload.tags : '')).trim();
+  const finalTags = parseBooleanTags(rawTags || phasePayload.tags || []);
 
   const payload = {
     ...phasePayload,
-    categories: finalCategories
+    categories: finalCategories,
+    tagsRaw: rawTags,
+    tags: finalTags,
   };
 
+  let saveResult;
   if (phaseEditingLabel) {
-    await storage.updatePhase(project.id, phaseEditingLabel, payload);
+    saveResult = await storage.updatePhase(project.id, phaseEditingLabel, payload);
   } else {
-    await storage.savePhase(project.id, payload);
+    saveResult = await storage.savePhase(project.id, payload);
     phaseCreationRequiredStore.set(false);
+  }
+
+  const targetLabel = phaseEditingLabel || saveResult?.data?.label || payload.label;
+  const projectCategories = Array.isArray(project.categories) ? project.categories : [];
+  const targetPhase = (Array.isArray(project.phases) ? project.phases : []).find(p => p.label === targetLabel) || payload;
+  const phasePaperIds = new Set([
+    ...(Array.isArray(targetPhase?.papers?.new) ? targetPhase.papers.new : []),
+    ...(Array.isArray(targetPhase?.papers?.selected) ? targetPhase.papers.selected : []),
+    ...(Array.isArray(targetPhase?.papers?.removed) ? targetPhase.papers.removed : []),
+    ...(Array.isArray(targetPhase?.papers?.inherited) ? targetPhase.papers.inherited : []),
+    ...(Array.isArray(targetPhase?.papers?.inheritedAccumulated) ? targetPhase.papers.inheritedAccumulated : []),
+  ].map(String));
+
+  const papers = get(papersStore);
+  for (const paper of papers) {
+    const paperId = String(paper.id || '');
+    const belongs = paper.phaseLabel === targetLabel
+      || (paper.classifications && paper.classifications[targetLabel])
+      || (paperId && phasePaperIds.has(paperId))
+      || ((project.phases?.length || 0) <= 1);
+
+    if (belongs) {
+      const cleanExisting = cleanPaperTags(paper.tags, projectCategories);
+      const merged = [...new Set([...cleanExisting, ...finalTags])];
+      paper.tags = merged;
+      if (!paper.phaseLabel && targetLabel) {
+        paper.phaseLabel = targetLabel;
+      }
+      paper.updatedAt = new Date().toISOString();
+      try {
+        await storage.savePaper(paper);
+      } catch (e) {
+        console.warn('Erro ao sincronizar tags da fase no artigo:', e);
+      }
+    }
   }
 
   isPhasePanelOpenStore.set(false);

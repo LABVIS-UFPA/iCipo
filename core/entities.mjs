@@ -8,6 +8,7 @@ import {
   normalizeMetricType,
   normalizeCategoryMetricType,
   inferMetricTypeFromCategory,
+  parseBooleanTags,
 } from "./utils.mjs";
 
 export const DEFAULT_PROJECT_CATEGORIES = Object.freeze([
@@ -344,6 +345,8 @@ class Project {
     phase.completed = false;
     phase.categories = uniqueStrings(phase.categories);
     phase.criteria = uniqueStrings(phase.criteria);
+    phase.tagsRaw = phase.tagsRaw || (typeof rawPhase.tagsRaw === 'string' ? rawPhase.tagsRaw : '');
+    phase.tags = parseBooleanTags(phase.tagsRaw || phase.tags);
     this._assertUniqueLabel(this.phases, phase.label, null, "phase");
     this._assertCriteriaExist(phase.criteria);
     this._assertCategoriesExist(phase.categories);
@@ -377,6 +380,8 @@ class Project {
     });
     nextPhase.categories = uniqueStrings(nextPhase.categories);
     nextPhase.criteria = uniqueStrings(nextPhase.criteria);
+    nextPhase.tagsRaw = nextPhase.tagsRaw || (typeof rawPhase.tagsRaw === 'string' ? rawPhase.tagsRaw : (previousPhase.tagsRaw || ''));
+    nextPhase.tags = parseBooleanTags(nextPhase.tagsRaw || nextPhase.tags);
     this._assertUniqueLabel(this.phases, nextPhase.label, previousPhase.label, "phase");
     this._assertCriteriaExist(nextPhase.criteria);
     this._assertCategoriesExist(nextPhase.categories);
@@ -716,6 +721,8 @@ class Phase {
     this.categories = checkArray(data.categories);
     this.inheritanceCategoryLabel = data.inheritanceCategoryLabel || null;
     this.criteria = checkArray(data.criteria);
+    this.tagsRaw = data.tagsRaw || (typeof data.tags === 'string' ? data.tags : '') || '';
+    this.tags = parseBooleanTags(data.tags || this.tagsRaw || []);
     const papers = data.papers && typeof data.papers === "object" ? data.papers : {};
     this.papers = {
       inheritedAccumulated: checkArray(papers.inheritedAccumulated),
@@ -735,6 +742,8 @@ class Phase {
       categories: this.categories,
       inheritanceCategoryLabel: this.inheritanceCategoryLabel,
       criteria: this.criteria,
+      tagsRaw: this.tagsRaw,
+      tags: this.tags,
       papers: {
         inherited: this.papers.inherited,
         inheritedAccumulated: this.papers.inheritedAccumulated,
