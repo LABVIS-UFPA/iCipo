@@ -37,7 +37,7 @@
   $: project = $projectStore || {};
   $: projectCategories = Array.isArray(project.categories) ? project.categories : [];
   $: defaultCategoryLabels = projectCategories
-    .filter(c => isDefaultCategory(c.label) || ['included', 'excluded', 'pending'].includes(normalizeCategoryMetricType(c.metricType, inferMetricTypeFromCategory(c))))
+    .filter(c => isDefaultCategory(c.label))
     .map(c => c.label);
   $: phases = Array.isArray(project.phases) ? project.phases : [];
   $: activePhaseLabel = $activePhaseLabelStore;
@@ -375,7 +375,7 @@
             </div>
           {:else}
             {#each projectCategories as cat (cat.label || cat.id)}
-              {@const isDefault = defaultCategoryLabels.includes(cat.label) || isDefaultCategory(cat.label)}
+              {@const isDefault = isDefaultCategory(cat.label)}
               {@const isChecked = isDefault || selectedCategories.includes(cat.label)}
               {@const normMetric = normalizeCategoryMetricType(cat.metricType, 'pending')}
               <label

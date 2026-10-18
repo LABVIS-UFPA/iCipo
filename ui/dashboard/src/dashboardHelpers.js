@@ -779,7 +779,10 @@ export const DEFAULT_PROJECT_CATEGORIES = DEFAULT_TUTORIAL_CATEGORIES;
 
 export function isDefaultCategory(categoryLabel) {
   const norm = String(categoryLabel || "").trim().toLowerCase();
-  return DEFAULT_TUTORIAL_CATEGORIES.some(c => c.label === norm);
+  return (
+    DEFAULT_TUTORIAL_CATEGORIES.some(c => c.label === norm) ||
+    ['incluir', 'excluir', 'pendente', 'include', 'exclude', 'pending'].includes(norm)
+  );
 }
 
 export function isCategoryLinkedToInheritedOrPriorPhasePapers(categoryLabel, papers = [], phases = []) {

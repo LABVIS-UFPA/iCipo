@@ -339,7 +339,7 @@ export async function loadDashboardState(silent = false) {
 
     // Assegura que todas as fases tenham as categorias padrão ativadas por padrão
     const defaultCategoryLabels = (project.categories || [])
-      .filter(c => isDefaultCategory(c.label) || ['included', 'excluded', 'pending'].includes(normalizeCategoryMetricType(c.metricType, inferMetricTypeFromCategory(c))))
+      .filter(c => isDefaultCategory(c.label))
       .map(c => c.label);
 
     if (defaultCategoryLabels.length > 0 && Array.isArray(project.phases) && project.phases.length > 0) {
@@ -1074,7 +1074,7 @@ export async function savePhaseAction(phasePayload, phaseEditingLabel = null) {
   if (!project?.id) throw new Error('Abra um projeto antes de salvar fases.');
 
   const defaultLabels = (project.categories || [])
-    .filter(c => isDefaultCategory(c.label) || ['included', 'excluded', 'pending'].includes(normalizeCategoryMetricType(c.metricType, inferMetricTypeFromCategory(c))))
+    .filter(c => isDefaultCategory(c.label))
     .map(c => c.label);
 
   // Categorias padrão são obrigatórias em todas as fases
