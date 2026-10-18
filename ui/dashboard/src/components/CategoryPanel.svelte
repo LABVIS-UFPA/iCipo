@@ -335,7 +335,7 @@
         <input
           id="categoryTitle"
           class="input phaseDrawerInput"
-          placeholder="Digite o título da categoria"
+          placeholder="Ex.: Fora do Escopo (ou Estudo Primário, Alta Relevância...)"
           bind:value={title}
           on:input={() => { if (title.trim()) titleError = ''; }}
         />

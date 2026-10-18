@@ -253,8 +253,8 @@
     <!-- Header com título, etapa e badges de status -->
     <div class="sidePanelHeader phaseDrawerHeader">
       <div class="phaseDrawerHeaderInfo">
-        <div class="phaseDrawerStepRow">
-          {#if isEditing && phaseIndex >= 0}
+        {#if isEditing && phaseIndex >= 0}
+          <div class="phaseDrawerStepRow">
             <span class="phaseDrawerStepPill">Etapa {phaseIndex + 1} de {phases.length}</span>
             {#if isCompleted}
               <span class="statusBadge badgeDone">✓ Concluída</span>
@@ -263,10 +263,8 @@
             {:else}
               <span class="statusBadge badgePlanned">⏱ Planejada</span>
             {/if}
-          {:else}
-            <span class="phaseDrawerStepPill">Etapa {phases.length + 1} (Nova)</span>
-          {/if}
-        </div>
+          </div>
+        {/if}
         <h2 id="phasePanelTitle" class="phaseDrawerTitle">
           {isEditing ? 'Editar Fase' : 'Nova Fase'}
         </h2>
@@ -305,7 +303,7 @@
         <input
           id="phaseTitle"
           class="input phaseDrawerInput"
-          placeholder="Digite o título da fase"
+          placeholder="Ex.: Triagem de Títulos e Resumos (ou Leitura Completa...)"
           bind:value={title}
           on:input={() => { if (title.trim()) titleError = ''; }}
         />
@@ -367,12 +365,6 @@
               </button>
             </div>
           {/if}
-        </div>
-
-        <div class="categoryImpactLegend">
-          <div class="legendItem"><span class="legendPill metricIncluded">Incluído</span> avança p/ próxima fase</div>
-          <div class="legendItem"><span class="legendPill metricExcluded">Excluído</span> descartado do estudo</div>
-          <div class="legendItem"><span class="legendPill metricPending">Pendente</span> fila de avaliação</div>
         </div>
 
         <div id="phaseCategoriesList" class="phaseDrawerCategoryList" aria-live="polite">
@@ -443,11 +435,11 @@
         {/if}
       </div>
 
-      <!-- Ciclo e Status da Fase -->
-      <div class="phaseDrawerFieldGroup">
-        <span class="phaseDrawerLabel">Ciclo e Status da Fase</span>
-        
-        {#if isEditing}
+      {#if isEditing}
+        <!-- Ciclo e Status da Fase -->
+        <div class="phaseDrawerFieldGroup">
+          <span class="phaseDrawerLabel">Ciclo e Status da Fase</span>
+          
           {#if isActivePhase}
             <div class="phaseLifecycleBox activeCycle">
               <div class="lifecycleBoxHeader">
@@ -553,17 +545,8 @@
               </p>
             </div>
           {/if}
-        {:else}
-          <div class="phaseLifecycleBox newPhaseCycle">
-            <div class="lifecycleBoxHeader">
-              <span class="lifecycleBadge plannedBadge">Nova Etapa Planejada</span>
-            </div>
-            <p class="lifecycleDesc">
-              Esta fase será inserida como a <strong>Etapa {phases.length + 1}</strong> da esteira de revisão.
-            </p>
-          </div>
-        {/if}
-      </div>
+        </div>
+      {/if}
 
       <!-- Botões de Ação Principais -->
       <div class="phaseDrawerActionsRow">
