@@ -332,6 +332,39 @@
                   <span class="miniCatPill pending">⏳ Pendente</span>
                 </div>
               </div>
+
+              <!-- CONECTOR 3 -->
+              <div class="scholarFlowConnector" aria-hidden="true">
+                <div class="connectorCircle">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                  </svg>
+                </div>
+              </div>
+
+              <!-- PASSO 4: PRONTO PARA REVISÃO -->
+              <div class="scholarCardStep cardStepSuccess">
+                <div class="cardStepHeader">
+                  <span class="cardStepNumber success">4</span>
+                  <span class="cardStepTag success">Revisão</span>
+                </div>
+                <div class="cardStepIconRow">
+                  <div class="stepVisualIcon emerald">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                      <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                    </svg>
+                  </div>
+                </div>
+                <h4 class="cardStepTitle">Inicie sua Revisão</h4>
+                <p class="cardStepDesc">
+                  Já está tudo pronto para você ir ao <b>Google Scholar</b> marcar os artigos e iniciar sua revisão!
+                </p>
+                <div class="miniReadyBanner">
+                  <span class="miniReadyPulse" aria-hidden="true"></span>
+                  <span class="miniReadyText">Pronto para triagem!</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -549,6 +582,9 @@
                 <strong
                   >Tudo pronto! Primeira fase configurada com sucesso</strong
                 >
+                <p>
+                  Já está tudo pronto para você ir ao <b>Google Scholar</b> marcar os artigos e iniciar sua revisão!
+                </p>
                 <div class="alertBoxActions">
                   <button
                     type="button"
@@ -986,12 +1022,12 @@
     line-height: 1.5;
   }
 
-  /* Grid com os 3 cards do fluxo */
+  /* Grid com os 4 cards do fluxo */
   .scholarCardsFlow {
     display: flex;
     align-items: stretch;
     justify-content: space-between;
-    gap: 10px;
+    gap: 8px;
     margin-top: 14px;
   }
 
@@ -1000,7 +1036,7 @@
     background: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 14px;
-    padding: 16px 14px;
+    padding: 15px 12px;
     display: flex;
     flex-direction: column;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
@@ -1090,6 +1126,64 @@
   .stepVisualIcon.purple {
     background: #f3e8ff;
     color: #9333ea;
+  }
+
+  .stepVisualIcon.emerald {
+    background: #dcfce7;
+    color: #16a34a;
+  }
+
+  .scholarCardStep.cardStepSuccess {
+    background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%);
+    border: 1.5px solid #86efac;
+    box-shadow: 0 4px 16px -2px rgba(34, 197, 94, 0.15);
+  }
+
+  .scholarCardStep.cardStepSuccess:hover {
+    border-color: #22c55e;
+    box-shadow: 0 8px 24px -4px rgba(34, 197, 94, 0.25);
+  }
+
+  .cardStepNumber.success {
+    background: #16a34a;
+    color: #ffffff;
+    box-shadow: 0 2px 6px rgba(22, 163, 74, 0.35);
+  }
+
+  .cardStepTag.success {
+    color: #16a34a;
+    font-weight: 800;
+  }
+
+  /* Banner de sucesso / pronto (Passo 4) */
+  .miniReadyBanner {
+    background: #0f172a;
+    color: #f8fafc;
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: auto;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.25);
+  }
+
+  .miniReadyPulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #4ade80;
+    box-shadow: 0 0 8px #4ade80;
+    flex-shrink: 0;
+  }
+
+  .miniReadyText {
+    color: #86efac;
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: -0.01em;
   }
 
   .cardStepTitle {
