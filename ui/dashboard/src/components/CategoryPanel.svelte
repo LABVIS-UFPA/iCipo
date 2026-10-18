@@ -12,7 +12,8 @@
     saveCategoryAction,
     deleteCategoryAction,
     requestCategoryDeletionAction,
-    createDefaultCategoriesAction
+    createDefaultCategoriesAction,
+    showNotice
   } from '../dashboardStore.js';
   import {
     getCategoryDeletionBlockReason,
@@ -235,7 +236,7 @@
       await requestCategoryDeletionAction(editingCategory);
     } catch (err) {
       console.warn('Falha ao excluir categoria:', err);
-      alert(err?.message || 'Falha ao excluir categoria.');
+      showNotice(err?.message || 'Falha ao excluir categoria.', 'error');
     } finally {
       isDeleting = false;
     }

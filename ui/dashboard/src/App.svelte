@@ -15,6 +15,7 @@
   import CategoryPanel from "./components/CategoryPanel.svelte";
   import PhasePanel from "./components/PhasePanel.svelte";
   import PhaseArchivePanel from "./components/PhaseArchivePanel.svelte";
+  import DropNoticeCard from "./components/DropNoticeCard.svelte";
   import {
     activeViewStore,
     accessStateStore,
@@ -30,7 +31,8 @@
     bindStorageSync,
     unbindStorageSync,
     setActiveView,
-    DASHBOARD_VIEWS
+    DASHBOARD_VIEWS,
+    showNotice
   } from "./dashboardStore.js";
 
   $: allPhases = Array.isArray($projectStore?.phases) ? $projectStore.phases : [];
@@ -53,9 +55,15 @@
     }
   }
 
+  let originalAlert = null;
+
   onMount(async () => {
     if (typeof window !== "undefined") {
       window.addEventListener("hashchange", handleHashChange);
+      originalAlert = window.alert;
+      window.alert = (message) => {
+        showNotice(message, 'warning');
+      };
     }
     bindStorageSync();
     await loadDashboardState();
@@ -64,6 +72,9 @@
   onDestroy(() => {
     if (typeof window !== "undefined") {
       window.removeEventListener("hashchange", handleHashChange);
+      if (originalAlert) {
+        window.alert = originalAlert;
+      }
     }
     unbindStorageSync();
   });
@@ -96,14 +107,6 @@
       <div class="viewContainer" class:hidden={$activeViewStore !== 'phases'}>
         <PhasesView />
       </div>
-
-      <PaperHistoryModal />
-
-      <PaperBulkCategoryModal />
-
-      <CategoryMigrationModal />
-
-      <CategoryTransferModal />
     </main>
   </div>
 
@@ -118,6 +121,15 @@
       isActivePhase={isArchivePhaseActive}
     />
   {/if}
+
+  <!-- Modais Globais (renderizados fora do appContentShiftWrapper para sobrepor gavetas laterais) -->
+  <PaperHistoryModal />
+  <PaperBulkCategoryModal />
+  <CategoryMigrationModal />
+  <CategoryTransferModal />
+
+  <!-- Card flutuante de avisos (desce de cima para baixo com z-index máximo) -->
+  <DropNoticeCard />
 
   <div
     id="noActiveProjectNotice"

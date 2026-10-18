@@ -33,7 +33,8 @@
     phaseArticlesViewModeStore,
     setPhaseArticlesViewMode,
     classifySinglePaperAction,
-    unmarkSinglePaperAction
+    unmarkSinglePaperAction,
+    showNotice
   } from '../dashboardStore.js';
 
   export let phase = {};
@@ -150,11 +151,11 @@
   // Ações Diretas em Artigo Único (Incluir, Excluir, Pendente, Remover Marcado)
   function handleSinglePaperOutcome(paper, outcome) {
     if (isCompleted) {
-      alert("Esta fase está marcada como concluída. Reabra a fase em 'Editar' para alterar a triagem.");
+      showNotice("Esta fase está marcada como concluída. Reabra a fase em 'Editar' para alterar a triagem.", "warning");
       return;
     }
     if (isPaperLockedInActivePhase(paper, activePhaseObj?.label)) {
-      alert("Artigos herdados de fases anteriores já foram validados e não podem ser reclassificados.");
+      showNotice("Artigos herdados de fases anteriores já foram validados e não podem ser reclassificados.", "warning");
       return;
     }
     classifySinglePaperAction(paper, outcome, activePhaseObj.label);
@@ -162,11 +163,11 @@
 
   function handleSinglePaperUnmark(paper) {
     if (isCompleted) {
-      alert("Esta fase está marcada como concluída. Reabra a fase em 'Editar' para alterar a triagem.");
+      showNotice("Esta fase está marcada como concluída. Reabra a fase em 'Editar' para alterar a triagem.", "warning");
       return;
     }
     if (isPaperLockedInActivePhase(paper, activePhaseObj?.label)) {
-      alert("Artigos herdados de fases anteriores são validados e não podem ser removidos.");
+      showNotice("Artigos herdados de fases anteriores são validados e não podem ser removidos.", "warning");
       return;
     }
     unmarkSinglePaperAction(paper, activePhaseObj.label);

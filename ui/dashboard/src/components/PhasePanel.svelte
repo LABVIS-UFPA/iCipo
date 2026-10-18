@@ -10,7 +10,8 @@
     phaseCreationRequiredStore,
     closePhasePanel,
     savePhaseAction,
-    deletePhaseAction
+    deletePhaseAction,
+    showNotice
   } from '../dashboardStore.js';
   import {
     canDeletePhaseLabel,
@@ -112,20 +113,11 @@
     categoriesError = '';
   }
 
-  function selectAllCategories() {
-    selectedCategories = projectCategories.map(c => c.label);
-    categoriesError = '';
-  }
-
-  function selectOnlyDefaultCategories() {
-    selectedCategories = [...defaultCategoryLabels];
-    categoriesError = '';
-  }
 
   function handleSetStatus(newStatus) {
     if (!isActivePhase && !isCompleted) return;
     if (newStatus === 'done' && pendingCount > 0) {
-      alert(`Você possui ${pendingCount} artigo(s) pendente(s) nesta etapa. Conclua a classificação de todos os artigos antes de finalizar a fase.`);
+      showNotice(`Você possui ${pendingCount} artigo(s) pendente(s) nesta etapa. Conclua a classificação de todos os artigos antes de finalizar a fase.`, 'warning');
       return;
     }
     status = newStatus;
@@ -165,11 +157,11 @@
     if (isEditing && status === 'done') {
       const currentStats = getPhaseStats(editingPhase, $papersStore);
       if (currentStats.pending > 0) {
-        alert(`Classifique os ${currentStats.pending} artigo(s) pendente(s) antes de concluir esta fase.`);
+        showNotice(`Classifique os ${currentStats.pending} artigo(s) pendente(s) antes de concluir esta fase.`, 'warning');
         return;
       }
       if (!isActivePhase && !isCompleted) {
-        alert('Somente a fase ativa pode ser concluída. As fases futuras permanecem planejadas.');
+        showNotice('Somente a fase ativa pode ser concluída. As fases futuras permanecem planejadas.', 'warning');
         return;
       }
     }
@@ -202,7 +194,7 @@
       closePhasePanel();
     } catch (err) {
       console.warn('Falha ao salvar fase:', err);
-      alert(err?.message || 'Falha ao salvar fase.');
+      showNotice(err?.message || 'Falha ao salvar fase.', 'error');
     } finally {
       isSaving = false;
     }
@@ -211,7 +203,7 @@
   async function handleDelete() {
     if (!isEditing || !canDelete) return;
     if (phases.length <= 1) {
-      alert('O projeto deve manter pelo menos uma fase. A primeira fase não pode ser excluída.');
+      showNotice('O projeto deve manter pelo menos uma fase. A primeira fase não pode ser excluída.', 'warning');
       return;
     }
 
@@ -225,7 +217,7 @@
       closePhasePanel();
     } catch (err) {
       console.warn('Falha ao excluir fase:', err);
-      alert(err?.message || 'Falha ao excluir fase.');
+      showNotice(err?.message || 'Falha ao excluir fase.', 'error');
     } finally {
       isDeleting = false;
     }
@@ -335,36 +327,11 @@
 
       <!-- Categorias Ativas na Fase -->
       <div class="phaseDrawerFieldGroup">
-        <div class="categoriesHeaderRow">
-          <div>
-            <span class="phaseDrawerLabel">
-              Categorias Ativas nesta Fase
-            </span>
-            <div class="phaseDrawerFieldHint">
-              Marque ou desmarque as categorias para controlar quais links marcados serão destacados no navegador nesta fase.
-            </div>
-          </div>
-          {#if projectCategories.length > 0}
-            <div class="categoryFastActions">
-              <button
-                type="button"
-                class="fastActionBtn"
-                on:click={selectAllCategories}
-                title="Selecionar todas as categorias cadastradas"
-              >
-                Todas
-              </button>
-              <span class="fastActionDivider">·</span>
-              <button
-                type="button"
-                class="fastActionBtn"
-                on:click={selectOnlyDefaultCategories}
-                title="Manter apenas as categorias padrão ativadas"
-              >
-                Apenas padrão
-              </button>
-            </div>
-          {/if}
+        <span class="phaseDrawerLabel">
+          Categorias Ativas nesta Fase
+        </span>
+        <div class="phaseDrawerFieldHint">
+          Marque ou desmarque as categorias para controlar quais links marcados serão destacados no navegador nesta fase.
         </div>
 
         <div id="phaseCategoriesList" class="phaseDrawerCategoryList" aria-live="polite">

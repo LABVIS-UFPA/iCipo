@@ -3,7 +3,8 @@
     projectStore,
     activePhaseLabelStore,
     openPhasePanel,
-    reorderPhasesAction
+    reorderPhasesAction,
+    showNotice
   } from '../dashboardStore.js';
   import PhaseCard from '../components/PhaseCard.svelte';
 
@@ -39,7 +40,7 @@
       await reorderPhasesAction(newLabels);
     } catch (err) {
       console.warn('Falha ao reorganizar fases:', err);
-      alert(err?.message || 'Falha ao reorganizar fases.');
+      showNotice(err?.message || 'Falha ao reorganizar fases.', 'error');
     }
   }
 </script>

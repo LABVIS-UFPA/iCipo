@@ -7,7 +7,8 @@
     expandedCompletedPhaseStore,
     paperMetricFilterStore,
     openPhasePanel,
-    togglePhaseCategoryAction
+    togglePhaseCategoryAction,
+    showNotice
   } from '../dashboardStore.js';
   import {
     getPhaseStats,
@@ -78,7 +79,7 @@
       return;
     }
     if (!isActivePhase) {
-      alert('Conclua a fase ativa atual antes de avançar para a próxima.');
+      showNotice('Conclua a fase ativa atual antes de avançar para a próxima.', 'warning');
     }
   }
 

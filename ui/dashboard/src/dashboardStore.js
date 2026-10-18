@@ -114,6 +114,34 @@ export const paperCategoryFilterStore = writable('all');
 export const paperPhaseFilterStore = writable('active');
 export const phaseArticlesViewModeStore = writable(getSavedPhaseViewMode());
 
+// Dropdown Notice Card Store & Helpers (Avisos animados descendo de cima para baixo)
+export const activeNoticeStore = writable(null);
+let noticeTimer = null;
+
+export function showNotice(message, type = 'warning', duration = 4800) {
+  if (!message) return;
+  if (noticeTimer) {
+    clearTimeout(noticeTimer);
+    noticeTimer = null;
+  }
+  const id = Date.now() + Math.random();
+  activeNoticeStore.set({ id, message: String(message), type, duration });
+  if (duration > 0) {
+    noticeTimer = setTimeout(() => {
+      activeNoticeStore.update((curr) => (curr && curr.id === id ? null : curr));
+      noticeTimer = null;
+    }, duration);
+  }
+}
+
+export function closeNotice() {
+  if (noticeTimer) {
+    clearTimeout(noticeTimer);
+    noticeTimer = null;
+  }
+  activeNoticeStore.set(null);
+}
+
 export function getSavedPhaseViewMode() {
   try {
     const saved = localStorage.getItem('icipo_phase_articles_view_mode');
@@ -711,7 +739,7 @@ export function requestPaperBulkOutcomeAction(outcome, targetPhaseLabel = null) 
   const normalizedOutcome = normalizeCategoryMetricType(outcome, "pending");
   const selectedIds = get(selectedPaperIdsStore);
   if (!selectedIds.size) {
-    alert("Selecione pelo menos 1 artigo.");
+    showNotice("Selecione pelo menos 1 artigo.", "warning");
     return;
   }
 
@@ -722,11 +750,11 @@ export function requestPaperBulkOutcomeAction(outcome, targetPhaseLabel = null) 
     : (phases.find(p => p.label === project.activePhaseLabel && !p.completed) || phases.find(p => !p.completed) || null);
 
   if (!targetPhase) {
-    alert("Crie uma fase antes de classificar artigos.");
+    showNotice("Crie uma fase antes de classificar artigos.", "warning");
     return;
   }
   if (isPhaseCompleted(targetPhase)) {
-    alert("A fase está concluída. Reabra a fase em 'Editar' antes de alterar a triagem.");
+    showNotice("A fase está concluída. Reabra a fase em 'Editar' antes de alterar a triagem.", "warning");
     return;
   }
 
@@ -737,7 +765,7 @@ export function requestPaperBulkOutcomeAction(outcome, targetPhaseLabel = null) 
 
   const copy = PAPER_BULK_ACTION_COPY[normalizedOutcome] || PAPER_BULK_ACTION_COPY.pending;
   if (!matchingCategories.length) {
-    alert(`A fase “${targetPhase.title || targetPhase.label}” não possui uma categoria vinculada a “${copy.result}”. Edite a fase e adicione pelo menos uma categoria com esse impacto antes de classificar.`);
+    showNotice(`A fase “${targetPhase.title || targetPhase.label}” não possui uma categoria vinculada a “${copy.result}”. Edite a fase e adicione pelo menos uma categoria com esse impacto antes de classificar.`, "warning");
     return;
   }
 
@@ -763,7 +791,7 @@ export async function applyPaperBulkCategoryAction(category, requestedOutcome, t
     : (phases.find(p => p.label === project.activePhaseLabel && !p.completed) || phases.find(p => !p.completed) || null);
 
   if (!targetPhase || isPhaseCompleted(targetPhase)) {
-    alert("A fase não está disponível para classificação.");
+    showNotice("A fase não está disponível para classificação.", "warning");
     return;
   }
 
@@ -772,14 +800,14 @@ export async function applyPaperBulkCategoryAction(category, requestedOutcome, t
   let selectedPapers = papers.filter(p => selectedIds.has(String(p.id)));
 
   if (!selectedPapers.length) {
-    alert("Selecione pelo menos 1 artigo.");
+    showNotice("Selecione pelo menos 1 artigo.", "warning");
     return;
   }
 
   const lockedPapers = selectedPapers.filter(p => isPaperLockedInActivePhase(p, targetPhase.label));
   if (lockedPapers.length > 0) {
     if (lockedPapers.length === selectedPapers.length) {
-      alert("Artigos herdados de fases anteriores são validados e não podem ter sua categoria trocada.");
+      showNotice("Artigos herdados de fases anteriores são validados e não podem ter sua categoria trocada.", "warning");
       closePaperBulkCategoryModal();
       return;
     }
@@ -877,7 +905,7 @@ export async function applyPaperBulkCategoryAction(category, requestedOutcome, t
     console.warn("paper bulk classification failed", error);
     const message = error?.message || "Não foi possível classificar os artigos selecionados.";
     setBulkStatus(message, "error");
-    alert(message);
+    showNotice(message, "error");
   } finally {
     closePaperBulkCategoryModal();
   }
@@ -886,14 +914,14 @@ export async function applyPaperBulkCategoryAction(category, requestedOutcome, t
 export async function bulkDeleteMarkedSelectedAction(targetPhaseLabel = null) {
   const selectedIds = get(selectedPaperIdsStore);
   if (!selectedIds.size) {
-    alert("Selecione pelo menos 1 artigo.");
+    showNotice("Selecione pelo menos 1 artigo.", "warning");
     return;
   }
 
   const project = get(projectStore);
   const targetLabel = targetPhaseLabel || project?.activePhaseLabel;
   if (!targetLabel) {
-    alert("Nenhuma fase disponível.");
+    showNotice("Nenhuma fase disponível.", "warning");
     return;
   }
   const phases = Array.isArray(project.phases) ? project.phases : [];
@@ -905,7 +933,7 @@ export async function bulkDeleteMarkedSelectedAction(targetPhaseLabel = null) {
   const lockedPapers = selectedPapers.filter(p => isPaperLockedInActivePhase(p, targetLabel));
   if (lockedPapers.length > 0) {
     if (lockedPapers.length === selectedPapers.length) {
-      alert("Artigos herdados de fases anteriores são validados e não podem ser removidos.");
+      showNotice("Artigos herdados de fases anteriores são validados e não podem ser removidos.", "warning");
       return;
     }
     selectedPapers = selectedPapers.filter(p => !isPaperLockedInActivePhase(p, targetLabel));
@@ -957,7 +985,7 @@ export async function bulkDeleteMarkedSelectedAction(targetPhaseLabel = null) {
     console.warn("bulkDeleteMarkedSelectedAction failed", error);
     const message = error?.message || "Não foi possível remover os artigos da fase.";
     setBulkStatus(message, "error");
-    alert(message);
+    showNotice(message, "error");
   }
 }
 
@@ -966,7 +994,7 @@ export function classifySinglePaperAction(paper, outcome, targetPhaseLabel = nul
   const project = get(projectStore);
   const targetLabel = targetPhaseLabel || project?.activePhaseLabel;
   if (isPaperLockedInActivePhase(paper, targetLabel)) {
-    alert("Artigos herdados de fases anteriores são validados e não podem ter sua categoria trocada.");
+    showNotice("Artigos herdados de fases anteriores são validados e não podem ter sua categoria trocada.", "warning");
     return;
   }
   selectedPaperIdsStore.set(new Set([String(paper.id)]));
@@ -978,7 +1006,7 @@ export async function unmarkSinglePaperAction(paper, targetPhaseLabel = null) {
   const project = get(projectStore);
   const targetLabel = targetPhaseLabel || project?.activePhaseLabel;
   if (isPaperLockedInActivePhase(paper, targetLabel)) {
-    alert("Artigos herdados de fases anteriores são validados e não podem ser removidos.");
+    showNotice("Artigos herdados de fases anteriores são validados e não podem ser removidos.", "warning");
     return;
   }
   selectedPaperIdsStore.set(new Set([String(paper.id)]));
@@ -1100,7 +1128,7 @@ export async function savePhaseAction(phasePayload, phaseEditingLabel = null) {
 
 export async function togglePhaseCategoryAction(phaseLabel, categoryLabel) {
   if (isDefaultCategory(categoryLabel)) {
-    alert('As categorias padrão (Incluir, Excluir, Pendente) são obrigatórias e não podem ser desativadas.');
+    showNotice('As categorias padrão (Incluir, Excluir, Pendente) são obrigatórias e não podem ser desativadas.', 'warning');
     return;
   }
   const project = get(projectStore);
@@ -1113,7 +1141,7 @@ export async function togglePhaseCategoryAction(phaseLabel, categoryLabel) {
   let nextCats;
   if (currentCats.includes(categoryLabel)) {
     if (currentCats.length <= 1) {
-      alert('A fase deve conter pelo menos uma categoria ativa.');
+      showNotice('A fase deve conter pelo menos uma categoria ativa.', 'warning');
       return;
     }
     nextCats = currentCats.filter(c => c !== categoryLabel);
@@ -1231,14 +1259,14 @@ export async function requestCategoryDeletionAction(category) {
 
   const categoryLabel = category.label;
   if (isDefaultCategory(categoryLabel)) {
-    alert("As categorias padrão (Incluir, Excluir, Pendente) não podem ser excluídas.");
+    showNotice("As categorias padrão (Incluir, Excluir, Pendente) não podem ser excluídas.", "warning");
     return;
   }
 
   const allPapers = get(papersStore);
   const deletionBlockReason = getCategoryDeletionBlockReason(rawProject, categoryLabel, allPapers);
   if (deletionBlockReason) {
-    alert(deletionBlockReason);
+    showNotice(deletionBlockReason, "warning");
     return;
   }
 

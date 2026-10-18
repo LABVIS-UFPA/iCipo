@@ -3125,44 +3125,53 @@ button.phaseCategoryBadgeItem:disabled{
   margin:0 2px;
   background:#dfe5ec;
 }
-.main .paperBulkOutcomeBtn{
+.main .paperBulkOutcomeBtn,
+.paperBulkOutcomeBtn{
   min-height:36px;
   padding:0 12px;
   font-size:11px;
   transition:border-color .15s ease,background .15s ease,box-shadow .15s ease;
 }
-.main .paperBulkOutcomeBtn--included{
+.main .paperBulkOutcomeBtn--included,
+.paperBulkOutcomeBtn--included{
   border-color:#bee5cf;
   background:#ecf9f2;
   color:#16784a;
 }
-.main .paperBulkOutcomeBtn--included:hover{
+.main .paperBulkOutcomeBtn--included:hover,
+.paperBulkOutcomeBtn--included:hover{
   border-color:#8fd0ad;
   background:#def4e8;
 }
-.main .paperBulkOutcomeBtn--excluded{
+.main .paperBulkOutcomeBtn--excluded,
+.paperBulkOutcomeBtn--excluded{
   border-color:#efcbd0;
   background:#fff0f1;
   color:#b83b45;
 }
-.main .paperBulkOutcomeBtn--excluded:hover{
+.main .paperBulkOutcomeBtn--excluded:hover,
+.paperBulkOutcomeBtn--excluded:hover{
   border-color:#e3aeb5;
   background:#ffe5e8;
 }
-.main .paperBulkOutcomeBtn--pending{
+.main .paperBulkOutcomeBtn--pending,
+.paperBulkOutcomeBtn--pending{
   border-color:#d7dee7;
   background:#f2f5f8;
   color:#59677b;
 }
-.main .paperBulkOutcomeBtn--pending:hover{
+.main .paperBulkOutcomeBtn--pending:hover,
+.paperBulkOutcomeBtn--pending:hover{
   border-color:#bcc7d4;
   background:#e9eef3;
 }
-.main .paperBulkOutcomeBtn--unavailable:not(:disabled){
+.main .paperBulkOutcomeBtn--unavailable:not(:disabled),
+.paperBulkOutcomeBtn--unavailable:not(:disabled){
   border-style:dashed;
   box-shadow:none;
 }
-.main .paperBulkUnmarkBtn{
+.main .paperBulkUnmarkBtn,
+.paperBulkUnmarkBtn{
   min-height:36px;
   padding:0 12px;
   border-color:#e6b7bd;
@@ -3170,7 +3179,8 @@ button.phaseCategoryBadgeItem:disabled{
   color:#b43a44;
   font-size:11px;
 }
-.main .paperBulkUnmarkBtn:hover{
+.main .paperBulkUnmarkBtn:hover,
+.paperBulkUnmarkBtn:hover{
   border-color:#d98d97;
   background:#fff5f6;
 }
