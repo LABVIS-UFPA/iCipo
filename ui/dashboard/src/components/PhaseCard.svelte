@@ -64,7 +64,7 @@
 
   async function handleToggleCategory(ev, catLabel) {
     ev.stopPropagation();
-    if (isCompleted || isDefaultCategory(catLabel)) return;
+    if (isCompleted) return;
     try {
       await togglePhaseCategoryAction(label, catLabel);
     } catch (err) {
@@ -295,25 +295,21 @@
         <div class="phaseCategoryBadges">
           {#each allCategories as cat}
             {@const isDefault = isDefaultCategory(cat.label)}
-            {@const isCatActive = isDefault || phaseCategoryLabels.includes(cat.label)}
+            {@const isCatActive = phaseCategoryLabels.includes(cat.label)}
             <button
               type="button"
               class="phaseCategoryBadgeItem"
               class:isCatActive={isCatActive}
               class:isCatInactive={!isCatActive}
-              class:isReadOnly={isCompleted || isDefault}
-              disabled={isCompleted || isDefault}
-              on:click={(ev) => !isDefault && handleToggleCategory(ev, cat.label)}
-              title={isDefault ? `${cat.title || cat.label}: Categoria padrão obrigatória (sempre ativa nesta fase).` : `${cat.title || cat.label}: ${isCatActive ? 'Ativa na fase (destacada no navegador). Clique para desmarcar.' : 'Desmarcada (não destaca links no navegador). Clique para ativar.'}`}
+              class:isReadOnly={isCompleted}
+              disabled={isCompleted}
+              on:click={(ev) => handleToggleCategory(ev, cat.label)}
+              title="{cat.title || cat.label}: {isCatActive ? 'Ativa na fase (destacada no navegador). Clique para desmarcar.' : 'Desmarcada (não destaca links no navegador). Clique para ativar.'}"
               aria-pressed={isCatActive}
             >
               <span class="catColorDot" style="background: {isCatActive ? (cat.color || '#2eae6c') : '#94a3b8'};"></span>
               <span class="catName">{cat.title || cat.label}</span>
-              {#if isDefault}
-                <span class="catDefaultLock" title="Obrigatória" style="font-size:10px;margin-left:3px;opacity:0.85">🔒</span>
-              {:else}
-                <span class="catCheckIcon" aria-hidden="true">{isCatActive ? '✓' : '○'}</span>
-              {/if}
+              <span class="catCheckIcon" aria-hidden="true">{isCatActive ? '✓' : '○'}</span>
             </button>
           {/each}
         </div>

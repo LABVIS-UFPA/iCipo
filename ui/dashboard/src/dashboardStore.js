@@ -1101,13 +1101,9 @@ export async function savePhaseAction(phasePayload, phaseEditingLabel = null) {
   const project = get(projectStore);
   if (!project?.id) throw new Error('Abra um projeto antes de salvar fases.');
 
-  const defaultLabels = (project.categories || [])
-    .filter(c => isDefaultCategory(c.label))
-    .map(c => c.label);
-
-  // Categorias padrão são obrigatórias em todas as fases
+  // Salva exatamente as categorias selecionadas pelo usuário para a fase
   const incomingCategories = Array.isArray(phasePayload.categories) ? phasePayload.categories : [];
-  const finalCategories = [...new Set([...defaultLabels, ...incomingCategories])];
+  const finalCategories = [...new Set(incomingCategories)];
 
   const payload = {
     ...phasePayload,
@@ -1127,10 +1123,6 @@ export async function savePhaseAction(phasePayload, phaseEditingLabel = null) {
 }
 
 export async function togglePhaseCategoryAction(phaseLabel, categoryLabel) {
-  if (isDefaultCategory(categoryLabel)) {
-    showNotice('As categorias padrão (Incluir, Excluir, Pendente) são obrigatórias e não podem ser desativadas.', 'warning');
-    return;
-  }
   const project = get(projectStore);
   if (!project?.id) throw new Error('Abra um projeto antes de configurar categorias.');
   const phases = Array.isArray(project.phases) ? project.phases : [];

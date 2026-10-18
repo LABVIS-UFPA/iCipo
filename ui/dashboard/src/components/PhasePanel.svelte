@@ -102,10 +102,11 @@
   }
 
   function toggleCategory(catLabel) {
-    if (isDefaultCategory(catLabel) || defaultCategoryLabels.includes(catLabel)) {
-      return; // Categorias padrão são obrigatórias
-    }
     if (selectedCategories.includes(catLabel)) {
+      if (selectedCategories.length <= 1) {
+        showNotice('A fase deve conter pelo menos uma categoria ativa.', 'warning');
+        return;
+      }
       selectedCategories = selectedCategories.filter(l => l !== catLabel);
     } else {
       selectedCategories = [...selectedCategories, catLabel];
@@ -176,8 +177,7 @@
       normalizeCategoryMetricType(cat?.metricType, 'pending') === 'pending'
     ));
 
-    const mandatoryLabels = defaultCategoryLabels.filter(Boolean);
-    const allCategoriesToSave = [...new Set([...mandatoryLabels, ...selectedCategories])];
+    const allCategoriesToSave = [...new Set(selectedCategories)];
 
     const phasePayload = {
       title: cleanTitle,
@@ -343,21 +343,20 @@
           {:else}
             {#each projectCategories as cat (cat.label || cat.id)}
               {@const isDefault = isDefaultCategory(cat.label)}
-              {@const isChecked = isDefault || selectedCategories.includes(cat.label)}
+              {@const isChecked = selectedCategories.includes(cat.label)}
               {@const normMetric = normalizeCategoryMetricType(cat.metricType, 'pending')}
               <label
                 class="phaseCategoryCardRow"
                 class:selected={isChecked}
                 class:isDefaultRow={isDefault}
-                title={isDefault ? 'Categoria padrão obrigatória (sempre ativa em todas as fases)' : (isChecked ? 'Categoria ativa nesta fase' : 'Categoria desmarcada')}
+                title={isChecked ? 'Categoria ativa nesta fase (links marcados serão destacados no navegador)' : 'Categoria desmarcada nesta fase (links não serão destacados no navegador)'}
               >
                 <div class="categoryCheckCol">
                   <input
                     type="checkbox"
                     value={cat.label}
                     checked={isChecked}
-                    disabled={isDefault}
-                    on:change={() => !isDefault && toggleCategory(cat.label)}
+                    on:change={() => toggleCategory(cat.label)}
                   />
                   <span
                     class="categoryCircleDot"
@@ -370,7 +369,7 @@
                   <div style="display:flex;align-items:center;gap:6px">
                     <span class="categoryName">{cat.title || cat.label}</span>
                     {#if isDefault}
-                      <span class="defaultCategoryPhaseTag" style="background: rgba(37,99,235,0.12); color: #2563eb; font-weight:700;">Obrigatória</span>
+                      <span class="defaultCategoryPhaseTag" style="background: rgba(37,99,235,0.08); color: #2563eb; font-weight:600;">Padrão</span>
                     {/if}
                   </div>
                   {#if cat.description}
