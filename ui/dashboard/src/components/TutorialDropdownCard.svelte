@@ -134,17 +134,14 @@
           type="button"
           class="tutorialStepTab"
           class:active={activeStep === "categories"}
-          class:done={isCompleted || (stage === "phases" && hasCustomCategory)}
-          class:attention={activeStep === "categories" && !hasCustomCategory}
+          class:done={isCompleted || stage === "phases" || hasCustomCategory}
           on:click={() => handleSelectStep("categories")}
           disabled={!isCompleted}
         >
           <span class="stepBadgeNumber">2</span>
           <span class="stepBadgeLabel">Categorias</span>
-          {#if hasCustomCategory}
+          {#if isCompleted || stage === "phases" || hasCustomCategory}
             <span class="stepCheckmark" aria-hidden="true">✓</span>
-          {:else if activeStep === "categories"}
-            <span class="stepRequiredBadge">Obrigatório</span>
           {/if}
         </button>
 
@@ -200,7 +197,7 @@
           </div>
 
           <h2 id="tutorialCardHeading" class="tutorialStepTitle">
-            Para que serve o iCipó & Como funciona a Visão Geral
+            Para que serve o iCipó
           </h2>
 
           <div class="tutorialTextHighlight">
@@ -222,53 +219,124 @@
             </p>
           </div>
 
-          <!-- Destaques dos Recursos da Visão Geral -->
-          <div class="tutorialCardsGrid">
-            <div class="tutorialFeatureCard">
-              <div class="featureCardIcon">📊</div>
-              <div class="featureCardContent">
-                <strong>Visão Geral & KPIs em Tempo Real</strong>
-                <span
-                  >Painel central com volume consolidado de artigos com desfecho <b
-                    >Incluído</b
-                  >, <b>Excluído</b> e <b>Pendente</b>.</span
-                >
+          <!-- FLUXO VISUAL MODERNO: MARCAÇÃO NO GOOGLE SCHOLAR -->
+          <div class="scholarHeroWorkflow">
+            <div class="scholarHeroHeader">
+              <div class="scholarIconWrapper">
+                <svg class="academicSvg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+                  <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+                </svg>
+              </div>
+              <div class="scholarHeroTitleWrap">
+                <div class="scholarBadgeRow">
+                  <span class="scholarPillBadge">Fluxo Prático de Coleta</span>
+                  <span class="scholarLiveBadge">● Google Scholar + iCipó</span>
+                </div>
+                <h3 class="scholarHeroTitle">Como marcar artigos no Google Acadêmico (Scholar)</h3>
+                <p class="scholarHeroSubtitle">
+                  A triagem é realizada durante suas buscas no Google Scholar através do menu do mouse:
+                </p>
               </div>
             </div>
 
-            <div class="tutorialFeatureCard">
-              <div class="featureCardIcon">🏷️</div>
-              <div class="featureCardContent">
-                <strong>Categorias Padrão & Personalizadas</strong>
-                <span
-                  >As categorias essenciais já vêm ativas, e você cria critérios
-                  específicos para enriquecer os dados da pesquisa.</span
-                >
+            <!-- Grid com 3 Passos Modernos e Conectores Elegantes -->
+            <div class="scholarCardsFlow">
+              <!-- PASSO 1 -->
+              <div class="scholarCardStep">
+                <div class="cardStepHeader">
+                  <span class="cardStepNumber">1</span>
+                  <span class="cardStepTag">Pesquisa</span>
+                </div>
+                <div class="cardStepIconRow">
+                  <div class="stepVisualIcon blue">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="11" cy="11" r="8"></circle>
+                      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                  </div>
+                </div>
+                <h4 class="cardStepTitle">Acesse o Google Scholar</h4>
+                <p class="cardStepDesc">
+                  Pesquise os artigos acadêmicos normalmente no navegador.
+                </p>
+                <div class="cardStepFooter">
+                  <span class="stepMetaPill">scholar.google.com</span>
+                </div>
               </div>
-            </div>
 
-            <div class="tutorialFeatureCard">
-              <div class="featureCardIcon">🔄</div>
-              <div class="featureCardContent">
-                <strong>Esteira Metodológica de Fases</strong>
-                <span
-                  >O estudo progride etapa por etapa. Artigos aceitos avançam
-                  com integridade protegida para as fases seguintes.</span
-                >
+              <!-- CONECTOR 1 -->
+              <div class="scholarFlowConnector" aria-hidden="true">
+                <div class="connectorCircle">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                  </svg>
+                </div>
+              </div>
+
+              <!-- PASSO 2 (DESTAQUE MOUSE) -->
+              <div class="scholarCardStep cardStepFeatured">
+                <div class="cardStepHeader">
+                  <span class="cardStepNumber highlight">2</span>
+                  <span class="cardStepTag featured">Ação do Mouse</span>
+                </div>
+                <div class="cardStepIconRow">
+                  <div class="stepVisualIcon green">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="5" y="2" width="14" height="20" rx="7"></rect>
+                      <path d="M12 2v6"></path>
+                      <path d="M12 2h7" stroke="#16a34a" stroke-width="2.5"></path>
+                    </svg>
+                  </div>
+                </div>
+                <h4 class="cardStepTitle">Botão Direito no Link ➔ iCipó</h4>
+                <p class="cardStepDesc">
+                  Clique com o <b>botão direito do mouse</b> sobre o link do artigo e selecione <b>iCipó</b>.
+                </p>
+                <div class="miniContextMock">
+                  <span class="miniContextItem">🖱️ Botão direito no link</span>
+                  <span class="miniContextSub">➔ <b>iCipó</b> ▶</span>
+                </div>
+              </div>
+
+              <!-- CONECTOR 2 -->
+              <div class="scholarFlowConnector" aria-hidden="true">
+                <div class="connectorCircle">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                  </svg>
+                </div>
+              </div>
+
+              <!-- PASSO 3 -->
+              <div class="scholarCardStep">
+                <div class="cardStepHeader">
+                  <span class="cardStepNumber">3</span>
+                  <span class="cardStepTag">Classificação</span>
+                </div>
+                <div class="cardStepIconRow">
+                  <div class="stepVisualIcon purple">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                      <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                    </svg>
+                  </div>
+                </div>
+                <h4 class="cardStepTitle">Escolha a Categoria</h4>
+                <p class="cardStepDesc">
+                  Clique na categoria desejada. O artigo é salvo no Dashboard automaticamente!
+                </p>
+                <div class="miniCategoryPills">
+                  <span class="miniCatPill include">✓ Incluir</span>
+                  <span class="miniCatPill exclude">✕ Excluir</span>
+                  <span class="miniCatPill pending">⏳ Pendente</span>
+                </div>
               </div>
             </div>
           </div>
 
           <!-- Próximo Passo & Ações -->
-          <div class="tutorialFooterActions">
-            <div class="nextStepHint">
-              <strong>Próxima etapa: Categorias</strong>
-              <span
-                >Você conhecerá as categorias padrão e poderá criar categorias
-                personalizadas se desejar.</span
-              >
-            </div>
-
+          <div class="tutorialFooterActions" style="justify-content: flex-end;">
             <button
               id="btnTutorialAdvanceToCategories"
               type="button"
@@ -310,8 +378,7 @@
               >
               para enriquecer os critérios específicos da sua pesquisa (ex.:
               metodologia, intervenção ou motivo de descarte),
-              <strong>ou pode usar somente as categorias padrão</strong> e avançar
-              diretamente para a criação das Fases.
+              <strong>ou pode usar somente as categorias padrão</strong>.
             </p>
           </div>
 
@@ -383,25 +450,7 @@
           {/if}
 
           <!-- Próximo Passo & Ações -->
-          <div class="tutorialFooterActions">
-            <div class="nextStepHint">
-              {#if !hasCustomCategory}
-                <strong style="color: #2878e8;"
-                  >Categorias padrão prontas</strong
-                >
-                <span
-                  >Você pode criar categorias adicionais agora ou avançar
-                  diretamente para as Fases.</span
-                >
-              {:else}
-                <strong style="color: #15803d;">Pronto para avançar</strong>
-                <span
-                  >Você já configurou categorias e pode seguir para estruturar
-                  as Fases do seu estudo.</span
-                >
-              {/if}
-            </div>
-
+          <div class="tutorialFooterActions" style="justify-content: flex-end;">
             <button
               id="btnTutorialAdvanceToPhases"
               type="button"
@@ -500,12 +549,6 @@
                 <strong
                   >Tudo pronto! Primeira fase configurada com sucesso</strong
                 >
-                <p>
-                  A fase <b>"{firstPhase?.title || firstPhase?.label}"</b> foi criada
-                  e está ativa. Seu projeto agora está 100% estruturado para coletar
-                  e triar artigos acadêmicos diretamente no Google Acadêmico com
-                  o iCipó.
-                </p>
                 <div class="alertBoxActions">
                   <button
                     type="button"
@@ -520,21 +563,15 @@
           {/if}
 
           <!-- Próximo Passo & Ações -->
-          <div class="tutorialFooterActions">
-            <div class="nextStepHint">
-              {#if !hasPhases}
+          <div class="tutorialFooterActions" style="justify-content: flex-end;">
+            {#if !hasPhases}
+              <div class="nextStepHint">
                 <strong style="color: #b45309;">Configuração pendente</strong>
                 <span
                   >Cadastre a primeira fase para concluir o tutorial do projeto.</span
                 >
-              {:else}
-                <strong style="color: #15803d;">Configuração concluída!</strong>
-                <span
-                  >Clique abaixo para encerrar o tutorial e começar a sua
-                  pesquisa.</span
-                >
-              {/if}
-            </div>
+              </div>
+            {/if}
 
             <button
               id="btnTutorialComplete"
@@ -858,42 +895,325 @@
     margin-bottom: 0;
   }
 
-  /* Grid de recursos (Etapa 1) */
-  .tutorialCardsGrid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 12px;
-    margin-bottom: 22px;
+  /* ==========================================================================
+     Fluxo Visual: Marcação no Google Scholar (Cards Interativos & Estilizados)
+     ========================================================================== */
+  .scholarHeroWorkflow {
+    background: linear-gradient(145deg, #f8fafc 0%, #f1f5f9 100%);
+    border: 1.5px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 20px 22px;
+    margin-bottom: 24px;
+    box-shadow: 0 4px 18px -4px rgba(15, 23, 42, 0.06);
+    position: relative;
+    overflow: hidden;
   }
 
-  .tutorialFeatureCard {
+  .scholarHeroWorkflow::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #2563eb, #16a34a, #9333ea);
+  }
+
+  .scholarHeroHeader {
     display: flex;
     align-items: flex-start;
-    gap: 12px;
-    padding: 14px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+
+  .scholarIconWrapper {
+    width: 42px;
+    height: 42px;
     border-radius: 12px;
-  }
-
-  .featureCardIcon {
-    font-size: 24px;
-    line-height: 1;
+    background: linear-gradient(135deg, #eff6ff, #dbeafe);
+    color: #2563eb;
+    display: grid;
+    place-items: center;
     flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.15);
   }
 
-  .featureCardContent strong {
-    display: block;
+  .scholarHeroTitleWrap {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .scholarBadgeRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+  }
+
+  .scholarPillBadge {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 8px;
+    background: #e0e7ff;
+    color: #4338ca;
+    border-radius: 6px;
+  }
+
+  .scholarLiveBadge {
+    font-size: 11px;
+    font-weight: 700;
+    color: #15803d;
+    background: #dcfce7;
+    padding: 2px 8px;
+    border-radius: 6px;
+  }
+
+  .scholarHeroTitle {
+    font-size: 16px;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0 0 4px 0;
+    line-height: 1.3;
+  }
+
+  .scholarHeroSubtitle {
     font-size: 13px;
-    color: #1e293b;
-    margin-bottom: 4px;
+    color: #475569;
+    margin: 0;
+    line-height: 1.5;
   }
 
-  .featureCardContent span {
-    display: block;
+  /* Grid com os 3 cards do fluxo */
+  .scholarCardsFlow {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .scholarCardStep {
+    flex: 1;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 16px 14px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+    position: relative;
+  }
+
+  .scholarCardStep:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+    border-color: #cbd5e1;
+  }
+
+  .scholarCardStep.cardStepFeatured {
+    background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%);
+    border: 1.5px solid #86efac;
+    box-shadow: 0 4px 16px -2px rgba(34, 197, 94, 0.15);
+  }
+
+  .scholarCardStep.cardStepFeatured:hover {
+    border-color: #22c55e;
+    box-shadow: 0 8px 24px -4px rgba(34, 197, 94, 0.25);
+  }
+
+  .cardStepHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .cardStepNumber {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #f1f5f9;
+    color: #334155;
     font-size: 12px;
-    line-height: 1.45;
+    font-weight: 800;
+    display: grid;
+    place-items: center;
+  }
+
+  .cardStepNumber.highlight {
+    background: #16a34a;
+    color: #ffffff;
+    box-shadow: 0 2px 6px rgba(22, 163, 74, 0.35);
+  }
+
+  .cardStepTag {
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
     color: #64748b;
+  }
+
+  .cardStepTag.featured {
+    color: #16a34a;
+    font-weight: 800;
+  }
+
+  .cardStepIconRow {
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+  }
+
+  .stepVisualIcon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+  }
+
+  .stepVisualIcon.blue {
+    background: #eff6ff;
+    color: #2563eb;
+  }
+
+  .stepVisualIcon.green {
+    background: #dcfce7;
+    color: #16a34a;
+  }
+
+  .stepVisualIcon.purple {
+    background: #f3e8ff;
+    color: #9333ea;
+  }
+
+  .cardStepTitle {
+    font-size: 13.5px;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0 0 6px 0;
+    line-height: 1.35;
+  }
+
+  .cardStepDesc {
+    font-size: 12px;
+    line-height: 1.5;
+    color: #475569;
+    margin: 0 0 12px 0;
+    flex-grow: 1;
+  }
+
+  .cardStepFooter {
+    margin-top: auto;
+  }
+
+  .stepMetaPill {
+    display: inline-block;
+    font-size: 11px;
+    font-family: monospace;
+    font-weight: 600;
+    color: #2563eb;
+    background: #eff6ff;
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 1px solid #bfdbfe;
+  }
+
+  /* Conectores com seta circular entre os passos */
+  .scholarFlowConnector {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: 0 2px;
+  }
+
+  .connectorCircle {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    color: #64748b;
+    display: grid;
+    place-items: center;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  }
+
+  /* Mockup de Menu de Contexto (Passo 2) */
+  .miniContextMock {
+    background: #0f172a;
+    color: #f8fafc;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 11px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.25);
+    margin-top: auto;
+  }
+
+  .miniContextItem {
+    opacity: 0.85;
+    font-size: 11px;
+  }
+
+  .miniContextSub {
+    color: #4ade80;
+    font-weight: 700;
+    padding-left: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* Pílulas de categorias (Passo 3) */
+  .miniCategoryPills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: auto;
+  }
+
+  .miniCatPill {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 6px;
+  }
+
+  .miniCatPill.include {
+    background: #dcfce7;
+    color: #15803d;
+    border: 1px solid #86efac;
+  }
+
+  .miniCatPill.exclude {
+    background: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #fca5a5;
+  }
+
+  .miniCatPill.pending {
+    background: #fef3c7;
+    color: #b45309;
+    border: 1px solid #fde68a;
+  }
+
+  @media (max-width: 768px) {
+    .scholarCardsFlow {
+      flex-direction: column;
+    }
+    .scholarFlowConnector {
+      transform: rotate(90deg);
+      padding: 6px 0;
+    }
   }
 
   /* Caixas de Alerta / Obrigação (Etapas 2 e 3) */
