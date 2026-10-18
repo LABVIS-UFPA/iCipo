@@ -16,6 +16,7 @@
   import PhasePanel from "./components/PhasePanel.svelte";
   import PhaseArchivePanel from "./components/PhaseArchivePanel.svelte";
   import DropNoticeCard from "./components/DropNoticeCard.svelte";
+  import DropConfirmCard from "./components/DropConfirmCard.svelte";
   import {
     activeViewStore,
     accessStateStore,
@@ -130,6 +131,7 @@
 
   <!-- Card flutuante de avisos (desce de cima para baixo com z-index máximo) -->
   <DropNoticeCard />
+  <DropConfirmCard />
 
   <div
     id="noActiveProjectNotice"

@@ -18,6 +18,7 @@
       if ($tutorialStageStore === 'overview') return view !== 'overview';
       if ($tutorialStageStore === 'categories') return view !== 'categories';
       if ($tutorialStageStore === 'phases') return view !== 'phases';
+      if ($tutorialStageStore === 'scholar') return false;
     }
     return false;
   }

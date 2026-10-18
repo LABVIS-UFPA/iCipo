@@ -103,7 +103,7 @@ export function persistDashboardView(view) {
 }
 
 export const activeViewStore = writable(getSavedDashboardView()); // 'overview' | 'phases' | 'categories'
-export const tutorialStageStore = writable(null); // 'overview' | 'categories' | 'phases' | 'complete'
+export const tutorialStageStore = writable(null); // 'overview' | 'categories' | 'phases' | 'scholar' | 'complete'
 export const phaseCreationRequiredStore = writable(false);
 export const dashboardIntroRequiredStore = writable(false);
 export const categoryCreationRequiredStore = writable(false);
@@ -140,6 +140,47 @@ export function closeNotice() {
     noticeTimer = null;
   }
   activeNoticeStore.set(null);
+}
+
+// Dropdown Confirm Card Store & Helpers (Diálogo de confirmação animado descendo do topo)
+export const activeConfirmStore = writable(null);
+
+export function showConfirmDialog({
+  title = "Confirmar ação",
+  message,
+  details = "",
+  phaseBadge = null,
+  confirmLabel = "Confirmar",
+  cancelLabel = "Cancelar",
+  tone = "danger",
+  icon = "unmark"
+} = {}) {
+  return new Promise((resolve) => {
+    activeConfirmStore.set({
+      id: Date.now() + Math.random(),
+      title,
+      message,
+      details,
+      phaseBadge,
+      confirmLabel,
+      cancelLabel,
+      tone,
+      icon,
+      resolve: (value) => {
+        activeConfirmStore.set(null);
+        resolve(Boolean(value));
+      }
+    });
+  });
+}
+
+export function closeConfirmDialog(result = false) {
+  activeConfirmStore.update((curr) => {
+    if (curr && typeof curr.resolve === "function") {
+      curr.resolve(result);
+    }
+    return null;
+  });
 }
 
 export function getSavedPhaseViewMode() {
@@ -413,6 +454,8 @@ export async function loadDashboardState(silent = false) {
         catReq = false;
       } else if (currentStage === 'phases') {
         phaseReq = !hasPhases;
+      } else if (currentStage === 'scholar') {
+        phaseReq = false;
       }
     }
 
@@ -434,6 +477,8 @@ export async function loadDashboardState(silent = false) {
         targetView = 'categories';
       } else if (currentStage === 'phases') {
         targetView = 'phases';
+      } else if (currentStage === 'scholar') {
+        targetView = 'overview';
       }
     } else {
       const currentView = get(activeViewStore);
@@ -939,7 +984,23 @@ export async function bulkDeleteMarkedSelectedAction(targetPhaseLabel = null) {
     selectedPapers = selectedPapers.filter(p => !isPaperLockedInActivePhase(p, targetLabel));
   }
 
-  if (!confirm(`Retirar ${selectedPapers.length} artigo(s) selecionado(s) da fase “${targetPhase.title || targetPhase.label}”? Essa ação remove a marcação desta fase.`)) return;
+  const count = selectedPapers.length;
+  const phaseTitle = targetPhase.title || targetPhase.label;
+  const confirmMsg = count === 1
+    ? `Retirar 1 artigo da fase “${phaseTitle}”?`
+    : `Retirar ${count} artigos selecionados da fase “${phaseTitle}”?`;
+
+  const confirmed = await showConfirmDialog({
+    title: "Retirar Artigo da Fase",
+    message: confirmMsg,
+    details: "Essa ação remove a marcação desta fase no iCipó. Os dados de triagem deste artigo nesta etapa serão desvinculados.",
+    phaseBadge: phaseTitle,
+    confirmLabel: count === 1 ? "Retirar Artigo" : `Retirar ${count} Artigos`,
+    cancelLabel: "Cancelar",
+    tone: "danger",
+    icon: "unmark"
+  });
+  if (!confirmed) return;
 
   const selectedUrls = new Set(
     selectedPapers.map(p => p.url).filter(Boolean).map(normalizeUrl)
@@ -1037,6 +1098,17 @@ export function advanceTutorialToPhases() {
   phaseCreationRequiredStore.set(phases.length === 0);
   isTutorialOpenStore.set(true);
   setActiveView('phases');
+}
+
+export function advanceTutorialToScholar() {
+  const project = get(projectStore);
+  if (project?.id) {
+    setTutorialStage('scholar', project.id);
+  }
+  categoryCreationRequiredStore.set(false);
+  phaseCreationRequiredStore.set(false);
+  tutorialStageStore.set('scholar');
+  isTutorialOpenStore.set(true);
 }
 
 export function completeTutorialAction() {
@@ -1275,7 +1347,16 @@ export async function requestCategoryDeletionAction(category) {
     return;
   }
 
-  if (!confirm(`Excluir a categoria "${category.title || category.label}"?`)) return;
+  const confirmed = await showConfirmDialog({
+    title: "Confirmar Exclusão de Categoria",
+    message: `Excluir a categoria “${category.title || category.label}”?`,
+    details: "Esta categoria não possui artigos vinculados no momento e será excluída do projeto.",
+    confirmLabel: "Excluir Categoria",
+    cancelLabel: "Cancelar",
+    tone: "danger",
+    icon: "trash"
+  });
+  if (!confirmed) return;
 
   await deleteCategoryAction(categoryLabel);
   closeCategoryPanel();

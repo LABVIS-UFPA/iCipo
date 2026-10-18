@@ -7,6 +7,7 @@
     openPhasePanel,
     advanceTutorialToCategories,
     advanceTutorialToPhases,
+    advanceTutorialToScholar,
     completeTutorialAction,
     closeGuidedTutorial,
     setActiveView,
@@ -44,7 +45,9 @@
   function handleSelectStep(step) {
     if (isCompleted) {
       selectedReviewStep = step;
-      setActiveView(step);
+      if (step !== "scholar") {
+        setActiveView(step);
+      }
     }
   }
 
@@ -64,6 +67,11 @@
 
   function handleOpenPhaseDrawer() {
     openPhasePanel(null);
+  }
+
+  function handleAdvanceScholar() {
+    advanceTutorialToScholar();
+    selectedReviewStep = "scholar";
   }
 
   function handleCompleteTutorial() {
@@ -117,13 +125,14 @@
           class:active={activeStep === "overview"}
           class:done={isCompleted ||
             stage === "categories" ||
-            stage === "phases"}
+            stage === "phases" ||
+            stage === "scholar"}
           on:click={() => handleSelectStep("overview")}
           disabled={!isCompleted}
         >
           <span class="stepBadgeNumber">1</span>
           <span class="stepBadgeLabel">Visão Geral</span>
-          {#if isCompleted || stage === "categories" || stage === "phases"}
+          {#if isCompleted || stage === "categories" || stage === "phases" || stage === "scholar"}
             <span class="stepCheckmark" aria-hidden="true">✓</span>
           {/if}
         </button>
@@ -134,13 +143,13 @@
           type="button"
           class="tutorialStepTab"
           class:active={activeStep === "categories"}
-          class:done={isCompleted || stage === "phases" || hasCustomCategory}
+          class:done={isCompleted || stage === "phases" || stage === "scholar" || hasCustomCategory}
           on:click={() => handleSelectStep("categories")}
           disabled={!isCompleted}
         >
           <span class="stepBadgeNumber">2</span>
           <span class="stepBadgeLabel">Categorias</span>
-          {#if isCompleted || stage === "phases" || hasCustomCategory}
+          {#if isCompleted || stage === "phases" || stage === "scholar" || hasCustomCategory}
             <span class="stepCheckmark" aria-hidden="true">✓</span>
           {/if}
         </button>
@@ -151,17 +160,34 @@
           type="button"
           class="tutorialStepTab"
           class:active={activeStep === "phases"}
-          class:done={isCompleted || hasPhases}
+          class:done={isCompleted || stage === "scholar" || hasPhases}
           class:attention={activeStep === "phases" && !hasPhases}
           on:click={() => handleSelectStep("phases")}
           disabled={!isCompleted}
         >
           <span class="stepBadgeNumber">3</span>
           <span class="stepBadgeLabel">Fases</span>
-          {#if hasPhases}
+          {#if hasPhases || stage === "scholar" || isCompleted}
             <span class="stepCheckmark" aria-hidden="true">✓</span>
           {:else if activeStep === "phases"}
             <span class="stepRequiredBadge">Obrigatório</span>
+          {/if}
+        </button>
+
+        <span class="stepperDivider" aria-hidden="true">➔</span>
+
+        <button
+          type="button"
+          class="tutorialStepTab"
+          class:active={activeStep === "scholar"}
+          class:done={isCompleted}
+          on:click={() => handleSelectStep("scholar")}
+          disabled={!isCompleted}
+        >
+          <span class="stepBadgeNumber">4</span>
+          <span class="stepBadgeLabel">Google Scholar</span>
+          {#if isCompleted}
+            <span class="stepCheckmark" aria-hidden="true">✓</span>
           {/if}
         </button>
       </div>
@@ -191,7 +217,7 @@
         <div class="tutorialStepPane" id="tutorialPaneOverview">
           <div class="tutorialStepMeta">
             <span class="tutorialStepTag"
-              >Etapa 1 de 3 · Introdução & Visão</span
+              >Etapa 1 de 4 · Introdução & Visão</span
             >
             <span class="tutorialToolBrand">🌿 iCipó (LABVIS-UFPA)</span>
           </div>
@@ -219,152 +245,21 @@
             </p>
           </div>
 
-          <!-- FLUXO VISUAL MODERNO: MARCAÇÃO NO GOOGLE SCHOLAR -->
-          <div class="scholarHeroWorkflow">
-            <div class="scholarHeroHeader">
-              <div class="scholarIconWrapper">
-                <svg class="academicSvg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-                  <path d="M6 12v5c3 3 9 3 12 0v-5"/>
-                </svg>
+          <!-- CARD DE AVISO / PREPARAÇÃO DAS ETAPAS ESSENCIAIS -->
+          <div class="tutorialAlertBox info tutorialPrepBox" role="status">
+            <div class="alertBoxIcon">⚙️</div>
+            <div class="alertBoxContent">
+              <div class="scholarBadgeRow" style="margin-bottom: 6px;">
+                <span class="scholarPillBadge">Fluxo Prático de Coleta</span>
+                <span class="scholarLiveBadge">● Google Scholar + iCipó</span>
               </div>
-              <div class="scholarHeroTitleWrap">
-                <div class="scholarBadgeRow">
-                  <span class="scholarPillBadge">Fluxo Prático de Coleta</span>
-                  <span class="scholarLiveBadge">● Google Scholar + iCipó</span>
-                </div>
-                <h3 class="scholarHeroTitle">Como marcar artigos no Google Acadêmico (Scholar)</h3>
-                <p class="scholarHeroSubtitle">
-                  A triagem é realizada durante suas buscas no Google Scholar através do menu do mouse:
-                </p>
-              </div>
-            </div>
-
-            <!-- Grid com 3 Passos Modernos e Conectores Elegantes -->
-            <div class="scholarCardsFlow">
-              <!-- PASSO 1 -->
-              <div class="scholarCardStep">
-                <div class="cardStepHeader">
-                  <span class="cardStepNumber">1</span>
-                  <span class="cardStepTag">Pesquisa</span>
-                </div>
-                <div class="cardStepIconRow">
-                  <div class="stepVisualIcon blue">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <circle cx="11" cy="11" r="8"></circle>
-                      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                    </svg>
-                  </div>
-                </div>
-                <h4 class="cardStepTitle">Acesse o Google Scholar</h4>
-                <p class="cardStepDesc">
-                  Pesquise os artigos acadêmicos normalmente no navegador.
-                </p>
-                <div class="cardStepFooter">
-                  <span class="stepMetaPill">scholar.google.com</span>
-                </div>
-              </div>
-
-              <!-- CONECTOR 1 -->
-              <div class="scholarFlowConnector" aria-hidden="true">
-                <div class="connectorCircle">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="9 18 15 12 9 6"></polyline>
-                  </svg>
-                </div>
-              </div>
-
-              <!-- PASSO 2 (DESTAQUE MOUSE) -->
-              <div class="scholarCardStep cardStepFeatured">
-                <div class="cardStepHeader">
-                  <span class="cardStepNumber highlight">2</span>
-                  <span class="cardStepTag featured">Ação do Mouse</span>
-                </div>
-                <div class="cardStepIconRow">
-                  <div class="stepVisualIcon green">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <rect x="5" y="2" width="14" height="20" rx="7"></rect>
-                      <path d="M12 2v6"></path>
-                      <path d="M12 2h7" stroke="#16a34a" stroke-width="2.5"></path>
-                    </svg>
-                  </div>
-                </div>
-                <h4 class="cardStepTitle">Botão Direito no Link ➔ iCipó</h4>
-                <p class="cardStepDesc">
-                  Clique com o <b>botão direito do mouse</b> sobre o link do artigo e selecione <b>iCipó</b>.
-                </p>
-                <div class="miniContextMock">
-                  <span class="miniContextItem">🖱️ Botão direito no link</span>
-                  <span class="miniContextSub">➔ <b>iCipó</b> ▶</span>
-                </div>
-              </div>
-
-              <!-- CONECTOR 2 -->
-              <div class="scholarFlowConnector" aria-hidden="true">
-                <div class="connectorCircle">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="9 18 15 12 9 6"></polyline>
-                  </svg>
-                </div>
-              </div>
-
-              <!-- PASSO 3 -->
-              <div class="scholarCardStep">
-                <div class="cardStepHeader">
-                  <span class="cardStepNumber">3</span>
-                  <span class="cardStepTag">Classificação</span>
-                </div>
-                <div class="cardStepIconRow">
-                  <div class="stepVisualIcon purple">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
-                      <line x1="7" y1="7" x2="7.01" y2="7"></line>
-                    </svg>
-                  </div>
-                </div>
-                <h4 class="cardStepTitle">Escolha a Categoria</h4>
-                <p class="cardStepDesc">
-                  Clique na categoria desejada. O artigo é salvo no Dashboard automaticamente!
-                </p>
-                <div class="miniCategoryPills">
-                  <span class="miniCatPill include">✓ Incluir</span>
-                  <span class="miniCatPill exclude">✕ Excluir</span>
-                  <span class="miniCatPill pending">⏳ Pendente</span>
-                </div>
-              </div>
-
-              <!-- CONECTOR 3 -->
-              <div class="scholarFlowConnector" aria-hidden="true">
-                <div class="connectorCircle">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="9 18 15 12 9 6"></polyline>
-                  </svg>
-                </div>
-              </div>
-
-              <!-- PASSO 4: PRONTO PARA REVISÃO -->
-              <div class="scholarCardStep cardStepSuccess">
-                <div class="cardStepHeader">
-                  <span class="cardStepNumber success">4</span>
-                  <span class="cardStepTag success">Revisão</span>
-                </div>
-                <div class="cardStepIconRow">
-                  <div class="stepVisualIcon emerald">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                      <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                    </svg>
-                  </div>
-                </div>
-                <h4 class="cardStepTitle">Inicie sua Revisão</h4>
-                <p class="cardStepDesc">
-                  Já está tudo pronto para você ir ao <b>Google Scholar</b> marcar os artigos e iniciar sua revisão!
-                </p>
-                <div class="miniReadyBanner">
-                  <span class="miniReadyPulse" aria-hidden="true"></span>
-                  <span class="miniReadyText">Pronto para triagem!</span>
-                </div>
-              </div>
+              <strong style="color: #0f172a; font-size: 14px;">Configurações essenciais antes de iniciar sua pesquisa</strong>
+              <p style="margin: 6px 0 0 0; color: #334155; font-size: 13px; line-height: 1.55;">
+                Mas antes de começar sua pesquisa, precisamos configurar algumas coisas essenciais: primeiro revisaremos as <b>Categorias</b> e em seguida criaremos as <b>Fases</b> do seu estudo.
+              </p>
+              <p style="margin: 6px 0 0 0; color: #475569; font-size: 12.5px;">
+                Ao concluir essas etapas essenciais, você verá o guia completo de como marcar artigos diretamente no Google Acadêmico com o botão direito do mouse!
+              </p>
             </div>
           </div>
 
@@ -385,7 +280,7 @@
         <div class="tutorialStepPane" id="tutorialPaneCategories">
           <div class="tutorialStepMeta">
             <span class="tutorialStepTag"
-              >Etapa 2 de 3 · Categorização Semântica</span
+              >Etapa 2 de 4 · Categorização Semântica</span
             >
             <span class="tutorialRequirementStatus ready"
               >✓ Categorias prontas</span
@@ -500,7 +395,7 @@
         <div class="tutorialStepPane" id="tutorialPanePhases">
           <div class="tutorialStepMeta">
             <span class="tutorialStepTag"
-              >Etapa 3 de 3 · Esteira Metodológica</span
+              >Etapa 3 de 4 · Esteira Metodológica</span
             >
             {#if hasPhases}
               <span class="tutorialRequirementStatus ready"
@@ -580,10 +475,10 @@
               <div class="alertBoxIcon">🎉</div>
               <div class="alertBoxContent">
                 <strong
-                  >Tudo pronto! Primeira fase configurada com sucesso</strong
+                  >Primeira fase configurada com sucesso!</strong
                 >
                 <p>
-                  Já está tudo pronto para você ir ao <b>Google Scholar</b> marcar os artigos e iniciar sua revisão!
+                  Sua esteira metodológica já possui uma etapa ativa. Agora vamos para a próxima etapa aprender como marcar os artigos no Google Scholar!
                 </p>
                 <div class="alertBoxActions">
                   <button
@@ -604,23 +499,207 @@
               <div class="nextStepHint">
                 <strong style="color: #b45309;">Configuração pendente</strong>
                 <span
-                  >Cadastre a primeira fase para concluir o tutorial do projeto.</span
+                  >Cadastre a primeira fase para avançar para as instruções de coleta no Scholar.</span
                 >
               </div>
             {/if}
 
             <button
-              id="btnTutorialComplete"
+              id="btnTutorialAdvanceToScholar"
               type="button"
-              class="btn tutorialBtnPrimary tutorialBtnSuccess"
+              class="btn tutorialBtnPrimary"
               class:disabled={!hasPhases}
               disabled={!hasPhases}
               title={!hasPhases
-                ? "Crie a primeira fase para concluir"
-                : "Concluir tutorial e iniciar o projeto"}
+                ? "Crie a primeira fase para avançar"
+                : "Avançar para as instruções do Google Scholar"}
+              on:click={handleAdvanceScholar}
+            >
+              <span>Avançar para Como Coletar no Scholar ➔</span>
+            </button>
+          </div>
+        </div>
+      {:else if activeStep === "scholar"}
+        <!-- ETAPA 4: COMO COLETAR NO GOOGLE SCHOLAR -->
+        <div class="tutorialStepPane" id="tutorialPaneScholar">
+          <div class="tutorialStepMeta">
+            <span class="tutorialStepTag"
+              >Etapa 4 de 4 · Coleta & Triagem no Google Scholar</span
+            >
+            <span class="tutorialRequirementStatus ready"
+              >✓ Tudo pronto para a pesquisa</span
+            >
+          </div>
+
+          <h2 id="tutorialCardHeading" class="tutorialStepTitle">
+            Como marcar artigos no Google Acadêmico (Scholar)
+          </h2>
+
+          <div class="tutorialTextHighlight">
+            <p>
+              A triagem é realizada durante suas buscas no <strong>Google Scholar</strong> através do menu do mouse:
+            </p>
+          </div>
+
+          <!-- FLUXO VISUAL MODERNO: MARCAÇÃO NO GOOGLE SCHOLAR (4 PASSOS) -->
+          <div class="scholarHeroWorkflow">
+            <div class="scholarHeroHeader">
+              <div class="scholarIconWrapper">
+                <svg class="academicSvg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+                  <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+                </svg>
+              </div>
+              <div class="scholarHeroTitleWrap">
+                <div class="scholarBadgeRow">
+                  <span class="scholarPillBadge">Fluxo Prático de Coleta</span>
+                  <span class="scholarLiveBadge">● Google Scholar + iCipó</span>
+                </div>
+                <h3 class="scholarHeroTitle">Como marcar artigos no Google Acadêmico (Scholar)</h3>
+                <p class="scholarHeroSubtitle">
+                  A triagem é realizada durante suas buscas no Google Scholar através do menu do mouse:
+                </p>
+              </div>
+            </div>
+
+            <!-- Grid com 4 Passos Modernos e Conectores Elegantes -->
+            <div class="scholarCardsFlow">
+              <!-- PASSO 1 -->
+              <div class="scholarCardStep">
+                <div class="cardStepHeader">
+                  <span class="cardStepNumber">1</span>
+                  <span class="cardStepTag">Pesquisa</span>
+                </div>
+                <div class="cardStepIconRow">
+                  <div class="stepVisualIcon blue">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="11" cy="11" r="8"></circle>
+                      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                  </div>
+                </div>
+                <h4 class="cardStepTitle">Acesse o Google Scholar</h4>
+                <p class="cardStepDesc">
+                  Pesquise os artigos acadêmicos normalmente no navegador.
+                </p>
+                <div class="cardStepFooter">
+                  <span class="stepMetaPill">scholar.google.com</span>
+                </div>
+              </div>
+
+              <!-- CONECTOR 1 -->
+              <div class="scholarFlowConnector" aria-hidden="true">
+                <div class="connectorCircle">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                  </svg>
+                </div>
+              </div>
+
+              <!-- PASSO 2 (DESTAQUE MOUSE) -->
+              <div class="scholarCardStep cardStepFeatured">
+                <div class="cardStepHeader">
+                  <span class="cardStepNumber highlight">2</span>
+                  <span class="cardStepTag featured">Ação do Mouse</span>
+                </div>
+                <div class="cardStepIconRow">
+                  <div class="stepVisualIcon green">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="5" y="2" width="14" height="20" rx="7"></rect>
+                      <path d="M12 2v6"></path>
+                      <path d="M12 2h7" stroke="#16a34a" stroke-width="2.5"></path>
+                    </svg>
+                  </div>
+                </div>
+                <h4 class="cardStepTitle">Botão Direito no Link ➔ iCipó</h4>
+                <p class="cardStepDesc">
+                  Clique com o <b>botão direito do mouse</b> sobre o link do artigo e selecione <b>iCipó</b>.
+                </p>
+                <div class="miniContextMock">
+                  <span class="miniContextItem">🖱️ Botão direito no link</span>
+                  <span class="miniContextSub">➔ <b>iCipó</b> ▶</span>
+                </div>
+              </div>
+
+              <!-- CONECTOR 2 -->
+              <div class="scholarFlowConnector" aria-hidden="true">
+                <div class="connectorCircle">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                  </svg>
+                </div>
+              </div>
+
+              <!-- PASSO 3 -->
+              <div class="scholarCardStep">
+                <div class="cardStepHeader">
+                  <span class="cardStepNumber">3</span>
+                  <span class="cardStepTag">Classificação</span>
+                </div>
+                <div class="cardStepIconRow">
+                  <div class="stepVisualIcon purple">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                      <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                    </svg>
+                  </div>
+                </div>
+                <h4 class="cardStepTitle">Escolha a Categoria</h4>
+                <p class="cardStepDesc">
+                  Clique na categoria desejada. O artigo é salvo no Dashboard automaticamente!
+                </p>
+                <div class="miniCategoryPills">
+                  <span class="miniCatPill include">✓ Incluir</span>
+                  <span class="miniCatPill exclude">✕ Excluir</span>
+                  <span class="miniCatPill pending">⏳ Pendente</span>
+                </div>
+              </div>
+
+              <!-- CONECTOR 3 -->
+              <div class="scholarFlowConnector" aria-hidden="true">
+                <div class="connectorCircle">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                  </svg>
+                </div>
+              </div>
+
+              <!-- PASSO 4: PRONTO PARA REVISÃO -->
+              <div class="scholarCardStep cardStepSuccess">
+                <div class="cardStepHeader">
+                  <span class="cardStepNumber success">4</span>
+                  <span class="cardStepTag success">Revisão</span>
+                </div>
+                <div class="cardStepIconRow">
+                  <div class="stepVisualIcon emerald">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                      <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                    </svg>
+                  </div>
+                </div>
+                <h4 class="cardStepTitle">Inicie sua Revisão</h4>
+                <p class="cardStepDesc">
+                  Já está tudo pronto para você ir ao <b>Google Scholar</b> marcar os artigos e iniciar sua revisão!
+                </p>
+                <div class="miniReadyBanner">
+                  <span class="miniReadyPulse" aria-hidden="true"></span>
+                  <span class="miniReadyText">Pronto para triagem!</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Próximo Passo & Ações Finais -->
+          <div class="tutorialFooterActions" style="justify-content: flex-end;">
+            <button
+              id="btnTutorialComplete"
+              type="button"
+              class="btn tutorialBtnPrimary tutorialBtnSuccess"
+              title="Concluir tutorial e iniciar o projeto"
               on:click={handleCompleteTutorial}
             >
-              <span>Concluir Tutorial ✓</span>
+              <span>Concluir Tutorial e Iniciar Revisão ✓</span>
             </button>
           </div>
         </div>
@@ -1336,6 +1415,25 @@
       rgba(240, 253, 244, 0.95)
     );
     border: 1.5px solid rgba(34, 197, 94, 0.4);
+  }
+
+  .tutorialAlertBox.info {
+    background: linear-gradient(
+      135deg,
+      rgba(239, 246, 255, 0.7),
+      rgba(248, 250, 252, 0.95)
+    );
+    border: 1.5px solid rgba(59, 130, 246, 0.35);
+  }
+
+  .tutorialPrepBox {
+    background: linear-gradient(
+      145deg,
+      rgba(240, 249, 255, 0.8),
+      rgba(248, 250, 252, 0.95)
+    );
+    border: 1.5px solid rgba(14, 165, 233, 0.35);
+    box-shadow: 0 4px 16px -2px rgba(14, 165, 233, 0.08);
   }
 
   .alertBoxIcon {

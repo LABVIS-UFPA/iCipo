@@ -11,7 +11,8 @@
     closePhasePanel,
     savePhaseAction,
     deletePhaseAction,
-    showNotice
+    showNotice,
+    showConfirmDialog
   } from '../dashboardStore.js';
   import {
     canDeletePhaseLabel,
@@ -207,7 +208,18 @@
       return;
     }
 
-    if (!confirm('Excluir esta fase? Se for a fase ativa, o sistema irá promover automaticamente a próxima fase disponível.')) {
+    const phaseTitle = editingPhase?.title || editingPhase?.label || 'esta fase';
+    const confirmed = await showConfirmDialog({
+      title: "Confirmar Exclusão de Fase",
+      message: `Excluir a fase “${phaseTitle}”?`,
+      details: "Se for a fase ativa, o sistema irá promover automaticamente a próxima fase disponível para dar continuidade ao estudo.",
+      phaseBadge: phaseTitle,
+      confirmLabel: "Excluir Fase",
+      cancelLabel: "Cancelar",
+      tone: "danger",
+      icon: "trash"
+    });
+    if (!confirmed) {
       return;
     }
 
