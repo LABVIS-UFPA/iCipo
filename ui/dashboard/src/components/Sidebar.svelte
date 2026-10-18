@@ -46,7 +46,6 @@
       <img class="brandLogo" src="/img/icipo_logo[dark].png" alt="iCipó" />
     </picture>
     <span class="brandFallback">iCipó</span>
-    <span class="brandSub" id="brandSub">{project.id ? `ID: ${project.id}` : 'Sem projeto ativo'}</span>
   </div>
 
   <nav class="nav u-flex-fill-col u-scroll-y" aria-label="Navegação principal">

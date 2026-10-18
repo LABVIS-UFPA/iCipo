@@ -1114,7 +1114,7 @@ body{
   align-items:center;
   justify-content:flex-start;
 }
-.brandPicture{display:block;width:92px;height:34px;max-width:100%}
+.brandPicture{display:block;width:104px;height:38px;max-width:100%}
 .brandModern .brandLogo{width:100%;height:100%;object-fit:contain;object-position:left center;display:block}
 .brandFallback{display:none;font-size:22px;font-weight:900;letter-spacing:-.04em}
 
