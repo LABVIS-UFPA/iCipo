@@ -82,11 +82,13 @@ function linkMatchesStoredUrl(anchorHref, storedUrl) {
 
 function normalizeTitleText(text) {
   return String(text || '')
-    .toLowerCase()
+    .replace(/^\s*\[(?:html|pdf|livro|citação|citacao|book|citation|b)\]\s*/i, '')
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // remove acentos
-    .replace(/[\W_]+/g, ' ')          // pontuações e símbolos viram espaço simples
-    .replace(/\s+/g, ' ')             // múltiplos espaços viram um só
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/^(?:html|pdf|livro|citacao|citation|book)\s+/i, '')
+    .replace(/[\W_]+/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
@@ -113,35 +115,66 @@ function setHighlightedArticles(articles) {
       });
     }
   }
+
+  if (normalizedArticlesList.length > 0) {
+    console.log(`iCipó: ${normalizedArticlesList.length} artigo(s) carregado(s) para destaque genérico.`);
+  }
 }
 
 function applyTitleHighlight(el, item) {
-  if (!el || el.classList.contains('ic-generic-title-highlight')) return;
+  if (!el) return;
 
-  el.classList.add('ic-generic-title-highlight');
-  el.setAttribute('data-icipo-article-id', String(item.id || ''));
-  el.style.outline = `2px solid ${item.color}`;
-  el.style.backgroundColor = `${item.color}22`;
-  el.style.borderRadius = '3px';
+  // No Scopus e outras bases, o título está dentro de um <a> com classes CSS do framework.
+  // Destacar o <a> (ou o elemento mais direto) garante que o contorno fique no botão/link clicável.
+  const parentAnchor = el.closest('a');
+  const childAnchor = el.querySelector('a');
+  const target = parentAnchor || childAnchor || el;
 
-  if (!el.querySelector('.ic-title-badge')) {
+  if (target.classList.contains('ic-generic-title-highlight') || target.closest('.ic-generic-title-highlight')) {
+    return;
+  }
+
+  target.classList.add('ic-generic-title-highlight');
+  target.setAttribute('data-icipo-article-id', String(item.id || ''));
+
+  // Estilização com important para sobrepor regras de reset como 'focus-ring: none' do Scopus
+  target.style.setProperty('outline', `2px solid ${item.color}`, 'important');
+  target.style.setProperty('outline-offset', '2px', 'important');
+  target.style.setProperty('background-color', `${item.color}28`, 'important');
+  target.style.setProperty('box-shadow', `0 0 0 2px ${item.color}40`, 'important');
+  target.style.setProperty('border-radius', '4px', 'important');
+
+  try {
+    if (window.getComputedStyle(target).display === 'inline') {
+      target.style.setProperty('display', 'inline-block', 'important');
+    }
+  } catch (_) {
+    if (target.tagName && target.tagName.toLowerCase() === 'span') {
+      target.style.setProperty('display', 'inline-block', 'important');
+    }
+  }
+
+  if (!target.querySelector('.ic-title-badge')) {
     const badge = document.createElement('span');
     badge.className = 'ic-title-badge';
     badge.textContent = ` [iCipó: ${item.categoryLabel}] `;
     badge.style.cssText = `
-      display: inline-block;
-      font-size: 0.75em;
-      font-weight: 600;
-      color: ${item.color};
-      background: rgba(0, 0, 0, 0.05);
-      border: 1px solid ${item.color};
-      border-radius: 3px;
-      padding: 1px 4px;
-      margin-left: 6px;
-      vertical-align: middle;
-      pointer-events: none;
+      display: inline-block !important;
+      font-size: 0.72em !important;
+      font-weight: 700 !important;
+      line-height: 1.2 !important;
+      color: ${item.color} !important;
+      background-color: rgba(255, 255, 255, 0.95) !important;
+      border: 1.5px solid ${item.color} !important;
+      border-radius: 4px !important;
+      padding: 1px 5px !important;
+      margin-left: 6px !important;
+      vertical-align: middle !important;
+      pointer-events: none !important;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15) !important;
+      z-index: 10 !important;
     `;
-    el.appendChild(badge);
+    target.appendChild(badge);
   }
 }
 
@@ -157,6 +190,7 @@ function paintHighlights() {
     el.style.outline = '';
     el.style.backgroundColor = '';
     el.style.borderRadius = '';
+    el.style.display = '';
     el.removeAttribute('data-icipo-article-id');
     el.classList.remove('ic-generic-title-highlight');
     const badge = el.querySelector('.ic-title-badge');
@@ -197,16 +231,20 @@ function paintHighlights() {
     });
   }
 
-  // 4.2 Casamento universal por Título em elementos candidatos
-  const titleCandidates = document.querySelectorAll('h1, h2, h3, h4, [role="heading"], a');
+  // 4.2 Casamento universal por Título em elementos candidatos (incluindo span para Scopus)
+  const titleCandidates = document.querySelectorAll('h1, h2, h3, h4, [role="heading"], a, span, p, strong');
   titleCandidates.forEach((el) => {
-    if (el.classList.contains('ic-generic-title-highlight') || el.classList.contains('ic-highlighted-link')) {
+    if (
+      el.classList.contains('ic-generic-title-highlight') ||
+      el.closest('.ic-generic-title-highlight') ||
+      el.classList.contains('ic-highlighted-link')
+    ) {
       return;
     }
 
     const rawText = el.textContent || '';
     const textLen = rawText.trim().length;
-    if (textLen < 15 || textLen > 400) return;
+    if (textLen < 15 || textLen > 500) return;
 
     const normElText = normalizeTitleText(rawText);
     if (normElText.length < 15) return;
@@ -220,7 +258,7 @@ function paintHighlights() {
       } else if (normElText.length >= 25 && normElText.includes(item.normTitle)) {
         matched = true;
       } else if (item.normTitle.length >= 25 && item.normTitle.includes(normElText)) {
-        if ((normElText.length / item.normTitle.length) >= 0.75) {
+        if ((normElText.length / item.normTitle.length) >= 0.70) {
           matched = true;
         }
       }
