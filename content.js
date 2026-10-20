@@ -6,6 +6,7 @@ let normalizedArticlesList = [];
 let highlightsEnabled = true;
 let refreshPromise = null;
 let mutationTimer = null;
+let highlightsWatcherStarted = false;
 
 /**
  * Mantém a mesma regra de identidade usada pelo servidor para que uma URL
@@ -324,7 +325,8 @@ async function refreshHighlightsFromWs() {
 }
 
 function watchForChanges() {
-  if (typeof MutationObserver === 'undefined') return;
+  if (highlightsWatcherStarted || typeof MutationObserver === 'undefined') return;
+  highlightsWatcherStarted = true;
 
   const observer = new MutationObserver(() => {
     clearTimeout(mutationTimer);
@@ -337,12 +339,21 @@ function watchForChanges() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+function initializeHighlights() {
   refreshHighlightsFromWs();
   watchForChanges();
-});
+}
+
+// Em document_idle, o script pode ser injetado depois destes eventos terem
+// ocorrido. Nesse caso, os listeners abaixo nunca seriam executados.
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializeHighlights, { once: true });
+} else {
+  initializeHighlights();
+}
 
 window.addEventListener('load', refreshHighlightsFromWs);
+window.addEventListener('pageshow', refreshHighlightsFromWs);
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.action === 'refreshHighlights') {
