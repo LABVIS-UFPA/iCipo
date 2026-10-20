@@ -1,6 +1,8 @@
 // Os highlights são obtidos exclusivamente pelo background, que consulta o servidor via WebSocket.
 // Não há persistência nem leitura de artigos/highlights em chrome.storage.local.
 let currentHighlights = {};
+let currentHighlightedArticles = [];
+let normalizedArticlesList = [];
 let highlightsEnabled = true;
 let refreshPromise = null;
 let mutationTimer = null;
@@ -78,7 +80,160 @@ function linkMatchesStoredUrl(anchorHref, storedUrl) {
   );
 }
 
+function normalizeTitleText(text) {
+  return String(text || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // remove acentos
+    .replace(/[\W_]+/g, ' ')          // pontuações e símbolos viram espaço simples
+    .replace(/\s+/g, ' ')             // múltiplos espaços viram um só
+    .trim();
+}
+
+function setHighlightedArticles(articles) {
+  currentHighlightedArticles = Array.isArray(articles) ? articles : [];
+  normalizedArticlesList = [];
+
+  for (const item of currentHighlightedArticles) {
+    const rawTitle = item?.title ? String(item.title).trim() : '';
+    const normTitle = rawTitle.length >= 10 ? normalizeTitleText(rawTitle) : '';
+    const rawDoi = item?.doi ? String(item.doi).trim().toLowerCase() : '';
+    const cleanDoi = rawDoi.replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '').replace(/^[./]+|[./]+$/g, '');
+
+    if (normTitle || cleanDoi) {
+      normalizedArticlesList.push({
+        id: item.id,
+        rawTitle,
+        normTitle,
+        doi: cleanDoi || null,
+        url: item.url || null,
+        color: item.color || '#4CAF50',
+        categoryLabel: item.categoryLabel || 'Salvo',
+        outcome: item.outcome || 'pending'
+      });
+    }
+  }
+}
+
+function applyTitleHighlight(el, item) {
+  if (!el || el.classList.contains('ic-generic-title-highlight')) return;
+
+  el.classList.add('ic-generic-title-highlight');
+  el.setAttribute('data-icipo-article-id', String(item.id || ''));
+  el.style.outline = `2px solid ${item.color}`;
+  el.style.backgroundColor = `${item.color}22`;
+  el.style.borderRadius = '3px';
+
+  if (!el.querySelector('.ic-title-badge')) {
+    const badge = document.createElement('span');
+    badge.className = 'ic-title-badge';
+    badge.textContent = ` [iCipó: ${item.categoryLabel}] `;
+    badge.style.cssText = `
+      display: inline-block;
+      font-size: 0.75em;
+      font-weight: 600;
+      color: ${item.color};
+      background: rgba(0, 0, 0, 0.05);
+      border: 1px solid ${item.color};
+      border-radius: 3px;
+      padding: 1px 4px;
+      margin-left: 6px;
+      vertical-align: middle;
+      pointer-events: none;
+    `;
+    el.appendChild(badge);
+  }
+}
+
 function paintHighlights() {
+  // 1. Limpa estilos de links legados por URL
+  document.querySelectorAll('a.ic-highlighted-link').forEach((link) => {
+    link.style.backgroundColor = '';
+    link.classList.remove('ic-highlighted-link');
+  });
+
+  // 2. Limpa estilos genéricos por título e DOI
+  document.querySelectorAll('.ic-generic-title-highlight').forEach((el) => {
+    el.style.outline = '';
+    el.style.backgroundColor = '';
+    el.style.borderRadius = '';
+    el.removeAttribute('data-icipo-article-id');
+    el.classList.remove('ic-generic-title-highlight');
+    const badge = el.querySelector('.ic-title-badge');
+    if (badge) badge.remove();
+  });
+
+  if (!highlightsEnabled) {
+    return;
+  }
+
+  // 3. Aplica destaque por URL (Google Acadêmico e links diretos)
+  if (currentHighlights && Object.keys(currentHighlights).length > 0) {
+    for (const [linkUrl, color] of Object.entries(currentHighlights)) {
+      document.querySelectorAll('a[href]').forEach((link) => {
+        if (linkMatchesStoredUrl(link.href, linkUrl)) {
+          link.classList.add('ic-highlighted-link');
+          link.style.backgroundColor = color;
+        }
+      });
+    }
+  }
+
+  // 4. Aplica destaque genérico por DOI e por Título (ACM, IEEE, Scopus, Springer, etc.)
+  if (!normalizedArticlesList || normalizedArticlesList.length === 0) {
+    return;
+  }
+
+  // 4.1 Casamento universal por DOI
+  const articlesWithDoi = normalizedArticlesList.filter(a => a.doi);
+  if (articlesWithDoi.length > 0) {
+    document.querySelectorAll('a[href]').forEach((a) => {
+      const href = (a.href || '').toLowerCase();
+      for (const item of articlesWithDoi) {
+        if (href.includes(item.doi)) {
+          applyTitleHighlight(a, item);
+        }
+      }
+    });
+  }
+
+  // 4.2 Casamento universal por Título em elementos candidatos
+  const titleCandidates = document.querySelectorAll('h1, h2, h3, h4, [role="heading"], a');
+  titleCandidates.forEach((el) => {
+    if (el.classList.contains('ic-generic-title-highlight') || el.classList.contains('ic-highlighted-link')) {
+      return;
+    }
+
+    const rawText = el.textContent || '';
+    const textLen = rawText.trim().length;
+    if (textLen < 15 || textLen > 400) return;
+
+    const normElText = normalizeTitleText(rawText);
+    if (normElText.length < 15) return;
+
+    for (const item of normalizedArticlesList) {
+      if (!item.normTitle || item.normTitle.length < 12) continue;
+
+      let matched = false;
+      if (normElText === item.normTitle) {
+        matched = true;
+      } else if (normElText.length >= 25 && normElText.includes(item.normTitle)) {
+        matched = true;
+      } else if (item.normTitle.length >= 25 && item.normTitle.includes(normElText)) {
+        if ((normElText.length / item.normTitle.length) >= 0.75) {
+          matched = true;
+        }
+      }
+
+      if (matched) {
+        applyTitleHighlight(el, item);
+        break;
+      }
+    }
+  });
+}
+
+/*
   document.querySelectorAll('a.ic-highlighted-link').forEach((link) => {
     link.style.backgroundColor = '';
     link.classList.remove('ic-highlighted-link');
@@ -100,6 +255,8 @@ function paintHighlights() {
   }
 }
 
+*/
+
 async function refreshHighlightsFromWs() {
   if (refreshPromise) return refreshPromise;
 
@@ -115,6 +272,7 @@ async function refreshHighlightsFromWs() {
         currentHighlights = response?.highlightedLinks && typeof response.highlightedLinks === 'object'
           ? response.highlightedLinks
           : {};
+        setHighlightedArticles(response?.highlightedArticles || []);
         highlightsEnabled = response?.active !== false;
         paintHighlights();
       } finally {
@@ -132,7 +290,7 @@ function watchForChanges() {
 
   const observer = new MutationObserver(() => {
     clearTimeout(mutationTimer);
-    mutationTimer = setTimeout(paintHighlights, 80);
+    mutationTimer = setTimeout(paintHighlights, 120);
   });
 
   observer.observe(document.documentElement || document.body, {

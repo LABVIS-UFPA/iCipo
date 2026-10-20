@@ -514,23 +514,108 @@ async function enrichPaperMetadataWithDoiDirect(doi, fallbackTitle = null, fallb
 }
 
 async function getHighlightsSnapshotFromWs() {
-  const active = await getExtensionActive();
-  if (!active) {
-    return { highlightedLinks: {}, active: false };
+  const extensionIsActive = await getExtensionActive();
+  if (!extensionIsActive) {
+    return { highlightedLinks: {}, highlightedArticles: [], active: false };
   }
 
   try {
-    const data = await storage.getAllHighlightedLinksForActiveProject();
+    const res = await storage.getAllHighlightedLinksForActiveProject();
+    const data = (res && res.data && typeof res.data === 'object' && ('highlightedLinks' in res.data || 'svat_papers' in res.data))
+      ? res.data
+      : (res || {});
+
+    const highlightedLinks = data?.highlightedLinks && typeof data.highlightedLinks === 'object'
+      ? data.highlightedLinks
+      : {};
+
+    const project = data?.svat_project || null;
+    const categoryMap = new Map();
+    if (Array.isArray(project?.categories)) {
+      for (const cat of project.categories) {
+        if (cat?.label) {
+          categoryMap.set(cat.label, cat);
+        }
+      }
+    }
+
+    const papers = Array.isArray(data?.svat_papers) ? data.svat_papers : [];
+    const highlightedArticles = [];
+
+    for (const paper of papers) {
+      if (!paper || paper.visited === false) continue;
+
+      let categoryLabel = paper.categoryLabel || null;
+      let outcome = paper.status || 'pending';
+
+      if (paper.classifications && typeof paper.classifications === 'object' && !Array.isArray(paper.classifications)) {
+        const entries = Object.values(paper.classifications)
+          .filter(c => c && c.categoryLabel)
+          .sort((a, b) => String(b.classifiedAt || '').localeCompare(String(a.classifiedAt || '')));
+        if (entries.length > 0) {
+          categoryLabel = entries[0].categoryLabel;
+          outcome = entries[0].outcome || outcome;
+        }
+      }
+
+      const category = categoryLabel ? categoryMap.get(categoryLabel) : null;
+      const color = category?.color || highlightedLinks[paper.url] || 'yellow';
+      const title = paper.title && String(paper.title).trim() !== String(paper.url || '').trim()
+        ? String(paper.title).trim()
+        : null;
+
+      const rawDoi = String(paper.doi || '').trim();
+      const doi = rawDoi ? rawDoi.replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '').toLowerCase() : null;
+
+      if (title || doi || paper.url) {
+        highlightedArticles.push({
+          id: paper.id,
+          title,
+          doi,
+          url: paper.url || null,
+          color,
+          categoryLabel: category?.title || categoryLabel || 'Salvo',
+          outcome,
+          phaseLabel: paper.phaseLabel || null
+        });
+      }
+    }
+
     return {
-      highlightedLinks: data?.highlightedLinks || {},
-      active: true
+      highlightedLinks,
+      highlightedArticles,
+      active: true,
+
     };
   } catch (error) {
-    console.warn('iCipo: falha ao buscar highlights via WebSocket.', error);
-    // Falha de conexão não equivale a desligar a extensão.
-    return { highlightedLinks: {}, active: true, error: error?.message || String(error) };
+    console.warn('iCipo: falha ao compilar highlights e artigos via WebSocket.', error);
+    // Sincronizacao falhou mas extensao continua ativa.
+    return { highlightedLinks: {}, highlightedArticles: [], active: true, error: error?.message || String(error) };
   }
 }
+
+/*
+
+
+
+
+
+  }
+
+  try {
+
+    return {
+
+
+    };
+  } catch (error) {
+
+
+
+  }
+}
+
+*/
 
 async function broadcastHighlightsRefresh() {
   if (typeof chrome === 'undefined' || !chrome.tabs) return;
