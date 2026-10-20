@@ -1,9 +1,12 @@
 // Os highlights são obtidos exclusivamente pelo background, que consulta o servidor via WebSocket.
 // Não há persistência nem leitura de artigos/highlights em chrome.storage.local.
 let currentHighlights = {};
+let currentHighlightedArticles = [];
+let normalizedArticlesList = [];
 let highlightsEnabled = true;
 let refreshPromise = null;
 let mutationTimer = null;
+let highlightsWatcherStarted = false;
 
 /**
  * Mantém a mesma regra de identidade usada pelo servidor para que uma URL
@@ -78,7 +81,198 @@ function linkMatchesStoredUrl(anchorHref, storedUrl) {
   );
 }
 
+function normalizeTitleText(text) {
+  return String(text || '')
+    .replace(/^\s*\[(?:html|pdf|livro|citação|citacao|book|citation|b)\]\s*/i, '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/^(?:html|pdf|livro|citacao|citation|book)\s+/i, '')
+    .replace(/[\W_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function setHighlightedArticles(articles) {
+  currentHighlightedArticles = Array.isArray(articles) ? articles : [];
+  normalizedArticlesList = [];
+
+  for (const item of currentHighlightedArticles) {
+    const rawTitle = item?.title ? String(item.title).trim() : '';
+    const normTitle = rawTitle.length >= 10 ? normalizeTitleText(rawTitle) : '';
+    const rawDoi = item?.doi ? String(item.doi).trim().toLowerCase() : '';
+    const cleanDoi = rawDoi.replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '').replace(/^[./]+|[./]+$/g, '');
+
+    if (normTitle || cleanDoi) {
+      normalizedArticlesList.push({
+        id: item.id,
+        rawTitle,
+        normTitle,
+        doi: cleanDoi || null,
+        url: item.url || null,
+        color: item.color || '#4CAF50',
+        categoryLabel: item.categoryLabel || 'Salvo',
+        outcome: item.outcome || 'pending'
+      });
+    }
+  }
+
+  if (normalizedArticlesList.length > 0) {
+    console.log(`iCipó: ${normalizedArticlesList.length} artigo(s) carregado(s) para destaque genérico.`);
+  }
+}
+
+function applyTitleHighlight(el, item) {
+  if (!el) return;
+
+  // No Scopus e outras bases, o título está dentro de um <a> com classes CSS do framework.
+  // Destacar o <a> (ou o elemento mais direto) garante que o contorno fique no botão/link clicável.
+  const parentAnchor = el.closest('a');
+  const childAnchor = el.querySelector('a');
+  const target = parentAnchor || childAnchor || el;
+
+  if (target.classList.contains('ic-generic-title-highlight') || target.closest('.ic-generic-title-highlight')) {
+    return;
+  }
+
+  target.classList.add('ic-generic-title-highlight');
+  target.setAttribute('data-icipo-article-id', String(item.id || ''));
+
+  // Estilização com important para sobrepor regras de reset como 'focus-ring: none' do Scopus
+  target.style.setProperty('outline', `2px solid ${item.color}`, 'important');
+  target.style.setProperty('outline-offset', '2px', 'important');
+  target.style.setProperty('background-color', `${item.color}28`, 'important');
+  target.style.setProperty('box-shadow', `0 0 0 2px ${item.color}40`, 'important');
+  target.style.setProperty('border-radius', '4px', 'important');
+
+  try {
+    if (window.getComputedStyle(target).display === 'inline') {
+      target.style.setProperty('display', 'inline-block', 'important');
+    }
+  } catch (_) {
+    if (target.tagName && target.tagName.toLowerCase() === 'span') {
+      target.style.setProperty('display', 'inline-block', 'important');
+    }
+  }
+
+  if (!target.querySelector('.ic-title-badge')) {
+    const badge = document.createElement('span');
+    badge.className = 'ic-title-badge';
+    badge.textContent = ` [iCipó: ${item.categoryLabel}] `;
+    badge.style.cssText = `
+      display: inline-block !important;
+      font-size: 0.72em !important;
+      font-weight: 700 !important;
+      line-height: 1.2 !important;
+      color: ${item.color} !important;
+      background-color: rgba(255, 255, 255, 0.95) !important;
+      border: 1.5px solid ${item.color} !important;
+      border-radius: 4px !important;
+      padding: 1px 5px !important;
+      margin-left: 6px !important;
+      vertical-align: middle !important;
+      pointer-events: none !important;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15) !important;
+      z-index: 10 !important;
+    `;
+    target.appendChild(badge);
+  }
+}
+
 function paintHighlights() {
+  // 1. Limpa estilos de links legados por URL
+  document.querySelectorAll('a.ic-highlighted-link').forEach((link) => {
+    link.style.backgroundColor = '';
+    link.classList.remove('ic-highlighted-link');
+  });
+
+  // 2. Limpa estilos genéricos por título e DOI
+  document.querySelectorAll('.ic-generic-title-highlight').forEach((el) => {
+    el.style.outline = '';
+    el.style.backgroundColor = '';
+    el.style.borderRadius = '';
+    el.style.display = '';
+    el.removeAttribute('data-icipo-article-id');
+    el.classList.remove('ic-generic-title-highlight');
+    const badge = el.querySelector('.ic-title-badge');
+    if (badge) badge.remove();
+  });
+
+  if (!highlightsEnabled) {
+    return;
+  }
+
+  // 3. Aplica destaque por URL (Google Acadêmico e links diretos)
+  if (currentHighlights && Object.keys(currentHighlights).length > 0) {
+    for (const [linkUrl, color] of Object.entries(currentHighlights)) {
+      document.querySelectorAll('a[href]').forEach((link) => {
+        if (linkMatchesStoredUrl(link.href, linkUrl)) {
+          link.classList.add('ic-highlighted-link');
+          link.style.backgroundColor = color;
+        }
+      });
+    }
+  }
+
+  // 4. Aplica destaque genérico por DOI e por Título (ACM, IEEE, Scopus, Springer, etc.)
+  if (!normalizedArticlesList || normalizedArticlesList.length === 0) {
+    return;
+  }
+
+  // 4.1 Casamento universal por DOI
+  const articlesWithDoi = normalizedArticlesList.filter(a => a.doi);
+  if (articlesWithDoi.length > 0) {
+    document.querySelectorAll('a[href]').forEach((a) => {
+      const href = (a.href || '').toLowerCase();
+      for (const item of articlesWithDoi) {
+        if (href.includes(item.doi)) {
+          applyTitleHighlight(a, item);
+        }
+      }
+    });
+  }
+
+  // 4.2 Casamento universal por Título em elementos candidatos (incluindo span para Scopus)
+  const titleCandidates = document.querySelectorAll('h1, h2, h3, h4, [role="heading"], a, span, p, strong');
+  titleCandidates.forEach((el) => {
+    if (
+      el.classList.contains('ic-generic-title-highlight') ||
+      el.closest('.ic-generic-title-highlight') ||
+      el.classList.contains('ic-highlighted-link')
+    ) {
+      return;
+    }
+
+    const rawText = el.textContent || '';
+    const textLen = rawText.trim().length;
+    if (textLen < 15 || textLen > 500) return;
+
+    const normElText = normalizeTitleText(rawText);
+    if (normElText.length < 15) return;
+
+    for (const item of normalizedArticlesList) {
+      if (!item.normTitle || item.normTitle.length < 12) continue;
+
+      let matched = false;
+      if (normElText === item.normTitle) {
+        matched = true;
+      } else if (normElText.length >= 25 && normElText.includes(item.normTitle)) {
+        matched = true;
+      } else if (item.normTitle.length >= 25 && item.normTitle.includes(normElText)) {
+        if ((normElText.length / item.normTitle.length) >= 0.70) {
+          matched = true;
+        }
+      }
+
+      if (matched) {
+        applyTitleHighlight(el, item);
+        break;
+      }
+    }
+  });
+}
+
+/*
   document.querySelectorAll('a.ic-highlighted-link').forEach((link) => {
     link.style.backgroundColor = '';
     link.classList.remove('ic-highlighted-link');
@@ -100,6 +294,8 @@ function paintHighlights() {
   }
 }
 
+*/
+
 async function refreshHighlightsFromWs() {
   if (refreshPromise) return refreshPromise;
 
@@ -115,6 +311,7 @@ async function refreshHighlightsFromWs() {
         currentHighlights = response?.highlightedLinks && typeof response.highlightedLinks === 'object'
           ? response.highlightedLinks
           : {};
+        setHighlightedArticles(response?.highlightedArticles || []);
         highlightsEnabled = response?.active !== false;
         paintHighlights();
       } finally {
@@ -128,11 +325,12 @@ async function refreshHighlightsFromWs() {
 }
 
 function watchForChanges() {
-  if (typeof MutationObserver === 'undefined') return;
+  if (highlightsWatcherStarted || typeof MutationObserver === 'undefined') return;
+  highlightsWatcherStarted = true;
 
   const observer = new MutationObserver(() => {
     clearTimeout(mutationTimer);
-    mutationTimer = setTimeout(paintHighlights, 80);
+    mutationTimer = setTimeout(paintHighlights, 120);
   });
 
   observer.observe(document.documentElement || document.body, {
@@ -141,12 +339,21 @@ function watchForChanges() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+function initializeHighlights() {
   refreshHighlightsFromWs();
   watchForChanges();
-});
+}
+
+// Em document_idle, o script pode ser injetado depois destes eventos terem
+// ocorrido. Nesse caso, os listeners abaixo nunca seriam executados.
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializeHighlights, { once: true });
+} else {
+  initializeHighlights();
+}
 
 window.addEventListener('load', refreshHighlightsFromWs);
+window.addEventListener('pageshow', refreshHighlightsFromWs);
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.action === 'refreshHighlights') {
