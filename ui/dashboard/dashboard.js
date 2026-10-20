@@ -7,6 +7,7 @@ import {
   inferMetricTypeFromCategory,
   inferFromCategory,
   hashId,
+  slugify,
 } from '../../core/utils.mjs';
 import { storage, ICIPO_DATA_REVISION_KEY } from '../../infrastructure/storage.mjs';
 
@@ -25,6 +26,7 @@ let overviewMetricScope = "all"; // all | active | <phaseLabel>
 let renderedPapersById = new Map();
 let paperBulkBusy = false;
 let paperBulkPendingOutcome = null;
+let paperBulkPendingCategories = [];
 let paperBulkStatusTimer = null;
 let expandedCompletedPhaseLabel = null;
 let refreshPhaseCards = () => { };
@@ -51,10 +53,10 @@ const PAPER_BULK_ACTION_COPY = Object.freeze({
     plural: "incluídos",
   },
   excluded: {
-    button: "Remover",
-    result: "Removido",
-    singular: "removido",
-    plural: "removidos",
+    button: "Excluir",
+    result: "Excluído",
+    singular: "excluído",
+    plural: "excluídos",
   },
   pending: {
     button: "Pendente",
@@ -68,8 +70,101 @@ function projectHasCategories() {
   return Array.isArray(state?.project?.categories) && state.project.categories.length > 0;
 }
 
+function getCriterionForClassification(classification, category) {
+  if (!classification || classification.outcome !== "excluded") return null;
+  const criterionId = classification.criterionId;
+  const snapshot = classification.criterionSnapshot;
+  if (snapshot?.title) return snapshot;
+  if (!criterionId) return null;
+  const criterion = (Array.isArray(category?.criteria) ? category.criteria : [])
+    .map(item => typeof item === "string" ? { label: item, title: item, version: 1 } : item)
+    .find(item => item?.id === criterionId || item?.label === criterionId);
+  return criterion?.title ? { title: criterion.title, version: criterion.version || 1 } : null;
+}
+
 function tutorialStorageKey(projectID = state?.project?.id) {
   return projectID ? `icipo:tutorial:${projectID}` : '';
+}
+
+function getExclusionCriterion(category, criterionId) {
+  const criteria = Array.isArray(category?.criteria) ? category.criteria : [];
+  return criteria
+    .map(item => typeof item === "string"
+      ? { id: `ce-${category.label}-${slugify(item)}`, label: item, title: item, version: 1 }
+      : { ...item, id: item?.id || item?.label || `ce-${category.label}-${slugify(item?.title)}`, version: item?.version || 1 })
+    .find(item => item.id === criterionId) || null;
+}
+
+function renderExclusionCriteria(category, selectedId = null) {
+  const select = document.getElementById("paperExclusionCriterionSelect");
+  const newFields = document.getElementById("paperExclusionNewCriterionFields");
+  const confirm = document.getElementById("btnConfirmPaperExclusion");
+  if (!select || !newFields || !confirm) return;
+
+  const criteria = Array.isArray(category?.criteria) ? category.criteria : [];
+  select.innerHTML = criteria.map(item => {
+    const criterion = typeof item === "string"
+      ? { id: `ce-${category.label}-${slugify(item)}`, title: item }
+      : { id: item.id || item.label, title: item.title || item.label };
+    return `<option value="${escapeHtml(criterion.id)}">${escapeHtml(criterion.title)}</option>`;
+  }).join("");
+  const createOption = '<option value="__new__">+ Criar novo critério</option>';
+  select.insertAdjacentHTML("beforeend", createOption);
+  if (selectedId && Array.from(select.options).some(option => option.value === selectedId)) {
+    select.value = selectedId;
+  }
+  const creating = select.value === "__new__";
+  newFields.classList.toggle("hidden", !creating);
+  confirm.classList.toggle("hidden", creating);
+}
+
+async function confirmPaperExclusion(createNew = false) {
+  const categorySelect = document.getElementById("paperExclusionCategorySelect");
+  const criterionSelect = document.getElementById("paperExclusionCriterionSelect");
+  const newInput = document.getElementById("paperExclusionNewCriterion");
+  const category = paperBulkPendingCategories.find(item => item.label === categorySelect?.value);
+  if (!category) {
+    alert("Selecione a categoria de exclusão.");
+    return;
+  }
+
+  let criterion = getExclusionCriterion(category, criterionSelect?.value);
+  if (createNew || criterionSelect?.value === "__new__") {
+    const title = String(newInput?.value || "").trim();
+    if (!title) {
+      alert("Informe o nome do novo critério.");
+      newInput?.focus();
+      return;
+    }
+    const existing = (category.criteria || []).some(item => String(typeof item === "string" ? item : item?.title).trim().toLowerCase() === title.toLowerCase());
+    if (existing) {
+      alert("Esse critério já existe nesta categoria.");
+      return;
+    }
+    const nextCriteria = [...(category.criteria || []), {
+      id: `ce-${category.label}-${slugify(title)}`,
+      title,
+      version: 1,
+    }];
+    try {
+      state.project.updateCategory(category.label, { ...category, criteria: nextCriteria });
+      const result = await storage.saveProject(state.project);
+      if (result?.status === "error") throw new Error(result.message || "Não foi possível salvar o critério.");
+      category.criteria = nextCriteria;
+      criterion = nextCriteria[nextCriteria.length - 1];
+    } catch (error) {
+      console.warn("save exclusion criterion failed", error);
+      alert(error?.message || "Não foi possível salvar o novo critério.");
+      return;
+    }
+  }
+
+  if (!criterion) {
+    alert("Selecione um critério de exclusão.");
+    return;
+  }
+  closePaperBulkCategoryModal();
+  await applyPaperBulkCategory(category, "excluded", criterion);
 }
 
 function getTutorialStage(projectID = state?.project?.id) {
@@ -1092,40 +1187,32 @@ async function removeUrlsFromActivePhase(urls = []) {
   const removedScopedPapers = scopedPapers.filter(paper => targets.has(normalizeUrl(paper?.url)));
   const remainingScopedPapers = scopedPapers.filter(paper => !targets.has(normalizeUrl(paper?.url)));
 
-  // Retira imediatamente os itens da fase ativa. Os arquivos consolidados são
-  // atualizados em seguida sem apagar classificações de fases anteriores.
+  // Remover marcados é uma ação administrativa: não gera classificação de
+  // exclusão e remove o artigo persistido, o destaque e o registro da fase.
   await storage.set({ highlightedLinks, svat_papers: remainingScopedPapers });
 
+  const papersToDelete = [
+    ...removedScopedPapers,
+    ...(Array.isArray(state?.papers) ? state.papers.filter(paper => targets.has(normalizeUrl(paper?.url))) : []),
+  ];
   const processedIds = new Set();
-  for (const scopedPaper of removedScopedPapers) {
-    const paperId = scopedPaper?.id;
+  for (const paper of papersToDelete) {
+    const paperId = paper?.id;
     if ((!paperId && paperId !== 0) || processedIds.has(String(paperId))) continue;
     processedIds.add(String(paperId));
 
-    let persistedPaper = null;
     try {
-      persistedPaper = await storage.loadPaper(paperId);
-      if (persistedPaper && typeof persistedPaper.toJSON === "function") {
-        persistedPaper = persistedPaper.toJSON();
+      const result = await storage.deletePaper(paperId);
+      if (result?.status === "error") {
+        throw new Error(result.message || `Não foi possível excluir o artigo ${paperId}.`);
       }
-    } catch (_) {
-      persistedPaper = null;
+    } catch (error) {
+      throw new Error(error?.message || `Não foi possível excluir o artigo ${paperId}.`);
     }
+  }
 
-    const mergedPaper = {
-      ...(persistedPaper || {}),
-      ...scopedPaper,
-      classifications: {
-        ...getPaperClassificationsMap(persistedPaper),
-        ...getPaperClassificationsMap(scopedPaper),
-      },
-    };
-    const nextPaper = removePaperClassificationFromActivePhase(mergedPaper);
-
-    await storage.savePaper(nextPaper);
-    const stateIndex = (state?.papers || []).findIndex(paper => String(paper?.id) === String(paperId));
-    if (stateIndex >= 0) state.papers[stateIndex] = nextPaper;
-    else if (Array.isArray(state?.papers)) state.papers.push(nextPaper);
+  if (Array.isArray(state?.papers)) {
+    state.papers = state.papers.filter(paper => !targets.has(normalizeUrl(paper?.url)));
   }
 }
 
@@ -2466,6 +2553,8 @@ async function renderPapersTable() {
       ? "Duplicado automático"
       : (category?.title || category?.label || "Sem categoria");
     const categoryColor = getPaperCategoryColor(p, hl);
+    const classification = getPaperClassificationForPhase(p, f.phase);
+    const criterion = getCriterionForClassification(classification, category);
     const rowStyle = categoryColor
       ? `style="--paper-category-color:${escapeHtml(categoryColor)};--paper-category-tint:${escapeHtml(hexToRgba(categoryColor, 0.25))};--paper-category-tint-hover:${escapeHtml(hexToRgba(categoryColor, 0.50))}"`
       : "";
@@ -2498,6 +2587,7 @@ async function renderPapersTable() {
               <span>${escapeHtml(categoryDisplayLabel)}</span>
             </span>
             <span class="paperOutcomeBadge paperOutcomeBadge--${escapeHtml(metricType)}">${escapeHtml(getPaperMetricLabel(metricType))}</span>
+            ${criterion?.title ? `<small class="paperCriterionCell">${escapeHtml(criterion.title)}</small>` : ""}
           </span>
         </td>
         <td><input class="cellInput" data-field="tags" data-id="${escapeHtml(p.id)}" value="${escapeHtml(tags)}" placeholder="ex: vis;ml" /></td>
@@ -2807,7 +2897,7 @@ function updatePaperBulkActionState() {
     } else if (!selectedChecks.length) {
       unmarkButton.title = "Selecione pelo menos um artigo.";
     } else {
-      unmarkButton.title = "Retirar os artigos selecionados da fase ativa, sem classificá-los como removidos.";
+      unmarkButton.title = "Excluir os artigos selecionados da base e retirar suas marcações, sem classificá-los como excluídos.";
     }
   }
 
@@ -2828,6 +2918,8 @@ function closePaperBulkCategoryModal() {
   }
   if (options) options.innerHTML = "";
   paperBulkPendingOutcome = null;
+  paperBulkPendingCategories = [];
+  document.getElementById("paperExclusionCriteriaFields")?.classList.add("hidden");
 }
 
 function openPaperBulkCategoryModal(outcome, categories, selectedCount) {
@@ -2841,13 +2933,46 @@ function openPaperBulkCategoryModal(outcome, categories, selectedCount) {
   if (!modal || !options) return;
 
   paperBulkPendingOutcome = normalizedOutcome;
+  paperBulkPendingCategories = categories;
   if (eyebrow) eyebrow.textContent = `Classificação em lote · ${copy.result}`;
   if (title) title.textContent = "Escolha a categoria que será aplicada";
   if (description) {
     description.textContent = `${selectedCount} artigo${selectedCount === 1 ? "" : "s"} será${selectedCount === 1 ? "" : "ão"} classificado${selectedCount === 1 ? "" : "s"} como ${copy.result.toLowerCase()}. A categoria escolhida será gravada na fase ativa e alimentará a respectiva contagem.`;
   }
 
+  const exclusionFields = document.getElementById("paperExclusionCriteriaFields");
+  const categorySelect = document.getElementById("paperExclusionCategorySelect");
+  const criterionSelect = document.getElementById("paperExclusionCriterionSelect");
+  const newInput = document.getElementById("paperExclusionNewCriterion");
+  if (normalizedOutcome === "excluded" && exclusionFields && categorySelect && criterionSelect) {
+    exclusionFields.classList.remove("hidden");
+    categorySelect.innerHTML = categories.map(category =>
+      `<option value="${escapeHtml(category.label)}">${escapeHtml(category.title || category.label)}</option>`
+    ).join("");
+    renderExclusionCriteria(categories[0]);
+    categorySelect.onchange = () => {
+      const selected = categories.find(item => item.label === categorySelect.value);
+      renderExclusionCriteria(selected);
+    };
+    criterionSelect.onchange = (event) => renderExclusionCriteria(
+      categories.find(item => item.label === categorySelect.value),
+      event.target.value
+    );
+    document.getElementById("btnConfirmPaperExclusion").onclick = () => confirmPaperExclusion(false);
+    document.getElementById("btnSavePaperExclusionCriterion").onclick = () => confirmPaperExclusion(true);
+    if (newInput) newInput.value = "";
+  } else {
+    exclusionFields?.classList.add("hidden");
+  }
+
   options.innerHTML = "";
+  options.classList.remove("hidden");
+  if (normalizedOutcome === "excluded") {
+    options.classList.add("hidden");
+    modal.classList.remove("hidden");
+    modal.setAttribute("aria-hidden", "false");
+    return;
+  }
   for (const category of categories) {
     const option = document.createElement("button");
     option.type = "button";
@@ -2921,7 +3046,7 @@ function findPaperIndexForBulk(collection, paper) {
   ));
 }
 
-function createBulkClassifiedPaper(previousPaper, category, phaseLabel, classifiedAt) {
+function createBulkClassifiedPaper(previousPaper, category, phaseLabel, classifiedAt, criterion = null) {
   const metricType = normalizeCategoryMetricType(
     category?.metricType,
     inferMetricTypeFromCategory(category)
@@ -2980,6 +3105,10 @@ function createBulkClassifiedPaper(previousPaper, category, phaseLabel, classifi
       category: category.label,
       metricType,
       phaseLabel,
+      ...(metricType === "excluded" && criterion ? {
+        criterionId: criterion.id || criterion.label,
+        criterionTitle: criterion.title || criterion.label,
+      } : {}),
       previousCategory: previousPaper?.categoryLabel || null,
       previousStatus: normalizeMetricType(previousPaper?.status, "pending"),
       source: "articles_toolbar",
@@ -3001,6 +3130,13 @@ function createBulkClassifiedPaper(previousPaper, category, phaseLabel, classifi
         phaseLabel,
         categoryLabel: category.label,
         outcome: metricType,
+        ...(metricType === "excluded" && criterion ? {
+          criterionId: criterion.id || criterion.label,
+          criterionSnapshot: {
+            title: criterion.title || criterion.label,
+            version: criterion.version || 1,
+          },
+        } : {}),
         classifiedAt,
         inherited: inheritedInCurrentPhase,
         entryType,
@@ -3057,6 +3193,11 @@ async function requestPaperBulkOutcome(outcome) {
     return;
   }
 
+  if (normalizedOutcome === "excluded") {
+    openPaperBulkCategoryModal(normalizedOutcome, categories, classifiablePapers.length);
+    return;
+  }
+
   if (categories.length === 1) {
     await applyPaperBulkCategory(categories[0], normalizedOutcome);
     return;
@@ -3065,7 +3206,7 @@ async function requestPaperBulkOutcome(outcome) {
   openPaperBulkCategoryModal(normalizedOutcome, categories, classifiablePapers.length);
 }
 
-async function applyPaperBulkCategory(category, requestedOutcome) {
+async function applyPaperBulkCategory(category, requestedOutcome, criterion = null) {
   const activePhase = getActivePhaseForPaperBulkActions();
   if (!activePhase || isPhaseCompleted(activePhase)) {
     alert("A fase ativa não está disponível para classificação.");
@@ -3127,7 +3268,8 @@ async function applyPaperBulkCategory(category, requestedOutcome) {
         previousPaper,
         category,
         activePhase.label,
-        classifiedAt
+        classifiedAt,
+        criterion
       );
       const paperKey = String(nextPaper.id);
       if (processedIds.has(paperKey)) continue;
@@ -3214,7 +3356,7 @@ async function bulkDeleteMarkedSelected() {
     return;
   }
 
-  if (!confirm(`Retirar ${ids.length} artigo(s) selecionado(s) da fase ativa? Essa ação remove a marcação; para classificar como excluído, use o botão “Remover”.`)) return;
+  if (!confirm(`Remover ${ids.length} artigo(s) selecionado(s) da base de dados? Essa ação retira o destaque e não contabiliza os artigos como excluídos.`)) return;
 
   const selectedUrls = [];
   for (const id of ids) {
@@ -3228,18 +3370,18 @@ async function bulkDeleteMarkedSelected() {
 
   paperBulkBusy = true;
   updatePaperBulkActionState();
-  setPaperBulkStatus("Retirando as marcações da fase ativa…", "loading", false);
+  setPaperBulkStatus("Removendo os artigos e suas marcações…", "loading", false);
 
   try {
     await removeUrlsFromActivePhase(selectedUrls);
     await refreshDashboardFromStorage("paper_bulk_unmark");
     setPaperBulkStatus(
-      `${ids.length} artigo${ids.length === 1 ? " foi retirado" : "s foram retirados"} da fase ativa.`,
+      `${ids.length} artigo${ids.length === 1 ? " foi removido" : "s foram removidos"} da base de dados.`,
       "success"
     );
   } catch (error) {
     console.warn("bulkDeleteMarkedSelected failed", error);
-    const message = error?.message || "Não foi possível remover os artigos da fase ativa.";
+    const message = error?.message || "Não foi possível remover os artigos da base de dados.";
     setPaperBulkStatus(message, "error");
     alert(message);
   } finally {
@@ -3490,7 +3632,11 @@ function bindEvents() {
       description: "Artigos que não atendem aos critérios da fase e não devem seguir na progressão.",
       color: "#EF4444",
       metricType: "excluded",
-      criteria: [],
+      criteria: [
+        "Não tem imagem representativa",
+        "Não apresenta testes de utilizador",
+        "Fora do tema da pesquisa",
+      ],
     },
     {
       title: "Pendente",
@@ -3515,12 +3661,15 @@ function bindEvents() {
     }
 
     categoryDraftCriteria.forEach((criterion, index) => {
+      const criterionTitle = typeof criterion === "string"
+        ? criterion
+        : (criterion?.title || criterion?.label || "");
       const row = document.createElement("div");
       row.className = "categoryCriterionItem";
 
       const text = document.createElement("span");
       text.className = "categoryCriterionText";
-      text.textContent = criterion;
+      text.textContent = criterionTitle;
 
       const actions = document.createElement("div");
       actions.className = "categoryCriterionActions";
@@ -3530,11 +3679,16 @@ function bindEvents() {
       editButton.title = "Editar critério";
       editButton.textContent = "✎";
       editButton.addEventListener("click", () => {
-        const nextValue = prompt("Editar critério:", criterion)?.trim();
-        if (!nextValue || nextValue === criterion) return;
-        const duplicated = categoryDraftCriteria.some((item, itemIndex) => itemIndex !== index && item.toLowerCase() === nextValue.toLowerCase());
+        const nextValue = prompt("Editar critério:", criterionTitle)?.trim();
+        if (!nextValue || nextValue === criterionTitle) return;
+        const duplicated = categoryDraftCriteria.some((item, itemIndex) => (
+          itemIndex !== index
+          && String(typeof item === "string" ? item : item?.title || item?.label || "").toLowerCase() === nextValue.toLowerCase()
+        ));
         if (duplicated) return alert("Este critério já foi adicionado à categoria.");
-        categoryDraftCriteria[index] = nextValue;
+        categoryDraftCriteria[index] = typeof criterion === "string"
+          ? nextValue
+          : { ...criterion, title: nextValue, label: slugify(nextValue) };
         renderCategoryCriteria();
       });
 
@@ -3557,7 +3711,9 @@ function bindEvents() {
   function addCategoryCriterion() {
     const title = categoryCriterionNewInput?.value?.trim();
     if (!title) return;
-    if (categoryDraftCriteria.some(item => item.toLowerCase() === title.toLowerCase())) {
+    if (categoryDraftCriteria.some(item => (
+      String(typeof item === "string" ? item : item?.title || item?.label || "").toLowerCase() === title.toLowerCase()
+    ))) {
       return alert("Este critério já foi adicionado à categoria.");
     }
     categoryDraftCriteria.push(title);

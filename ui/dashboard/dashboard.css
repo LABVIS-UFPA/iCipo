@@ -2162,6 +2162,39 @@ body.dashboardIntroRequired .dashboardIntroModal{pointer-events:auto}
   background:rgba(198,207,221,.09);
   color:#d5dce8;
 }
+.paperExclusionCriteriaFields{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  margin:4px 0 14px;
+}
+.paperExclusionCriteriaFields label{
+  color:rgba(234,240,255,.78);
+  font-size:11px;
+  font-weight:800;
+}
+.paperExclusionNewCriterionFields{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  padding:10px;
+  border:1px solid rgba(126,180,255,.22);
+  border-radius:11px;
+  background:rgba(126,180,255,.06);
+}
+.paperExclusionConfirm{
+  align-self:flex-end;
+  border-color:rgba(255,107,107,.34);
+  background:rgba(255,107,107,.12);
+  color:#ffb0b0;
+}
+.paperCriterionCell{
+  display:block;
+  margin-top:4px;
+  color:#7c8798;
+  font-size:10px;
+  line-height:1.3;
+}
 
 @media (max-width:1080px){
   .papersToolbar #search{flex-basis:100%}

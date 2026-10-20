@@ -617,9 +617,29 @@ class Paper {
 
 
 function normalizeCategoryCriteria(value) {
-  // Formato atual: lista de textos pertencentes exclusivamente à categoria.
+  // Critérios novos preservam identificador e versão; textos antigos continuam válidos.
   if (Array.isArray(value)) {
-    return uniqueStrings(value.map(item => typeof item === "string" ? item.trim() : item?.title?.trim()).filter(Boolean));
+    const normalized = [];
+    for (const item of value) {
+      if (typeof item === "string") {
+        const title = item.trim();
+        if (title && !normalized.includes(title)) normalized.push(title);
+        continue;
+      }
+      if (!item || typeof item !== "object") continue;
+      const title = String(item.title || item.label || "").trim();
+      if (!title) continue;
+      const criterion = {
+        ...item,
+        title,
+        label: item.label || slugify(title),
+        version: Number.isInteger(item.version) && item.version > 0 ? item.version : 1,
+      };
+      if (!normalized.some(existing => (
+        typeof existing === "string" ? existing === title : existing.id === criterion.id || existing.title === title
+      ))) normalized.push(criterion);
+    }
+    return normalized;
   }
 
   // Compatibilidade com projetos criados pelo formato antigo.
