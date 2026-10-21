@@ -4788,10 +4788,15 @@ function bindEvents() {
   });
   async function reloadActiveProjectAfterPhaseChange() {
     try {
-      const fresh = await storage.getActiveProject();
+      const fresh = await storage.loadProject(state?.project?.id);
       if (fresh) state.project = fresh;
     } catch (err) {
-      console.warn('Não foi possível recarregar o projeto ativo após salvar fase.', err);
+      try {
+        const fresh = await storage.getActiveProject();
+        if (fresh) state.project = fresh;
+      } catch (fallbackError) {
+        console.warn('Não foi possível recarregar o projeto após alterar fases.', fallbackError);
+      }
     }
   }
 

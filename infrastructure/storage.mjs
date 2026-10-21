@@ -1399,32 +1399,35 @@ class NodeFsStrategy {
       };
     }
 
-    project.phases.splice(phaseIndex, 1);
-    const previousPhase = phaseIndex > 0 ? project.phases[phaseIndex - 1] : null;
-    if (previousPhase) {
-      previousPhase.completed = false;
-      project.activePhaseLabel = previousPhase.label;
+    const wasActivePhase = project.activePhaseLabel === phaseLabel;
+    project.phases = project.phases.filter((phase) => phase?.label !== phaseLabel);
+
+    let nextActivePhase = project.phases.find((phase) => phase.label === project.activePhaseLabel) || null;
+    if (wasActivePhase) {
+      nextActivePhase = project.phases[phaseIndex]
+        || project.phases[phaseIndex - 1]
+        || project.phases.find((phase) => !phase.completed)
+        || null;
+      if (nextActivePhase) {
+        nextActivePhase.completed = false;
+        project.activePhaseLabel = nextActivePhase.label;
+      } else {
+        project.activePhaseLabel = null;
+      }
     }
-    const nextActivePhase = previousPhase
-      || project.phases[phaseIndex]
-      || project.phases.find((p) => !p.completed)
-      || project.phases.at(-1)
-      || null;
 
     const phaseDir = this.path.join(this.baseDir, projectID, 'phases', phaseLabel);
     if (this.fs.existsSync(phaseDir)) {
       this.fs.rmSync(phaseDir, { recursive: true, force: true });
     }
-    this.cleanupDeletedPhasePaperReferences(projectID, phaseLabel, nextActivePhase?.label || previousPhase?.label || null);
-
-    if (project.activePhaseLabel === phaseLabel) {
-      project.activePhaseLabel = nextActivePhase?.label || null;
-    }
+    this.cleanupDeletedPhasePaperReferences(projectID, phaseLabel, nextActivePhase?.label || null);
 
     project.updatedAt = new Date().toISOString();
     this.syncPhasePaperBuckets(projectID, project);
     this.writeJson(relPath, project);
-    if (this.activeProjectID === projectID) this.activeProjectData = project;
+    if (this.activeProjectID === projectID) {
+      this.activeProjectData = this.normalizeProjectPhaseCategoryModel(project);
+    }
 
     console.log('✅ Fase removida do project.json:', phaseLabel);
     return { status: 'ok', message: 'Fase removida com sucesso.', data: { activePhaseLabel: project.activePhaseLabel || null } };
