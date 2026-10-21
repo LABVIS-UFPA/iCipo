@@ -4100,6 +4100,7 @@ function bindEvents() {
 
   // --- Phases (persistidas no project.json via WebSocket) ---
   const btnShowAddPhase = document.getElementById('btnShowAddPhase');
+  const phaseCreationToggle = document.getElementById('phaseCreationToggle');
   const phasePanel = document.getElementById('phasePanel');
   const sideOverlay = document.getElementById('sideOverlay');
   const btnClosePhase = document.getElementById('btnClosePhase');
@@ -4128,6 +4129,7 @@ function bindEvents() {
   let phaseEditingLabel = null; // label original da fase em edição
   let phaseLabelStatus = 'pending'; // 'pending' | 'done'
   let phaseDraggingLabel = null;
+  let phaseCreationLocked = true;
 
   function getProjectPhases() {
     return Array.isArray(state?.project?.phases) ? state.project.phases : [];
@@ -4167,11 +4169,26 @@ function bindEvents() {
 
   function updatePhaseCreationAvailability() {
     if (!btnShowAddPhase) return;
+    const phases = getProjectPhases();
     const latest = getLatestPhase();
-    btnShowAddPhase.disabled = false;
-    btnShowAddPhase.title = latest
-      ? 'Adicionar uma fase planejada ao plano de pesquisa'
-      : 'Adicionar a primeira fase';
+    const activePhase = phases.find(phase => phase?.label === state?.project?.activePhaseLabel);
+    const activePhaseCompleted = !activePhase || isPhaseCompleted(activePhase);
+    const creationBlocked = phaseCreationLocked && phases.length > 0 && !activePhaseCompleted;
+
+    btnShowAddPhase.disabled = creationBlocked;
+    btnShowAddPhase.title = creationBlocked
+      ? 'Conclua a fase ativa para adicionar uma nova fase'
+      : (latest
+        ? 'Adicionar uma fase planejada ao plano de pesquisa'
+        : 'Adicionar a primeira fase');
+  }
+
+  if (phaseCreationToggle) {
+    phaseCreationLocked = phaseCreationToggle.checked;
+    phaseCreationToggle.addEventListener('change', () => {
+      phaseCreationLocked = phaseCreationToggle.checked;
+      updatePhaseCreationAvailability();
+    });
   }
 
   function updateToggleButtonUI() {

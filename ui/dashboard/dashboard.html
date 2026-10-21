@@ -295,10 +295,15 @@
           </div>
 
           <div class="toolbar">
-            <div style="display:flex;gap:8px;align-items:center">
+            <div class="phaseToolbarContent">
               <button id="btnShowAddPhase" class="btn">Adicionar nova fase</button>
               <div class="muted">As fases são organizadas em ordem. Use “Ver artigos” na fase ativa ou em uma fase concluída para consultar a triagem sem sair da árvore.</div>
             </div>
+            <label class="phaseCreationToggle">
+              <span>Bloquear novas fases</span>
+              <input id="phaseCreationToggle" type="checkbox" checked />
+              <span class="phaseCreationToggleTrack" aria-hidden="true"><span></span></span>
+            </label>
           </div>
 
           <div class="card u-flex-fill-col" style="margin-top:12px">
