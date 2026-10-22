@@ -98,6 +98,9 @@ const messageHandler = {
   "export_active_project": async () => {
     return await storage.exportActiveProject();
   },
+  "import_project_backup": async (payload) => {
+    return await storage.importProjectBackup(payload?.backup);
+  },
   "save_project": async (payload) => {
     payload.projectID = payload.data.id;
     return verifyProjectID(payload) || await storage.saveProject(payload.data);

@@ -1006,6 +1006,81 @@ class NodeFsStrategy {
     };
   }
 
+  async importProjectBackup(backup) {
+    if (!backup || backup.format !== 'icipo-project-backup' || backup.version !== 1) {
+      return { status: 'error', message: 'Arquivo de backup de projeto inválido ou incompatível.' };
+    }
+
+    const projectID = String(backup.projectId || '').trim();
+    const project = backup.project;
+    if (!/^[a-zA-Z0-9._-]+$/.test(projectID)) {
+      return { status: 'error', message: 'O backup possui um identificador de projeto inválido.' };
+    }
+    if (!project || typeof project !== 'object' || project.id !== projectID) {
+      return { status: 'error', message: 'O backup não contém um projeto válido.' };
+    }
+    if (!Array.isArray(backup.papers) || !backup.papers.every(paper => paper && typeof paper === 'object' && (paper.id || paper.id === 0))) {
+      return { status: 'error', message: 'O backup contém uma lista de artigos inválida.' };
+    }
+    if (!backup.papers.every(paper => /^[a-zA-Z0-9._-]+$/.test(String(paper.id)))) {
+      return { status: 'error', message: 'O backup contém um identificador de artigo inválido.' };
+    }
+    if (!backup.phaseStorage || typeof backup.phaseStorage !== 'object' || Array.isArray(backup.phaseStorage)) {
+      return { status: 'error', message: 'O backup contém dados de fases inválidos.' };
+    }
+    const phaseEntries = Object.entries(backup.phaseStorage);
+    if (phaseEntries.some(([phaseLabel, phaseData]) => (
+      !/^[a-zA-Z0-9._-]+$/.test(phaseLabel)
+      || !phaseData
+      || typeof phaseData !== 'object'
+      || Array.isArray(phaseData)
+    ))) {
+      return { status: 'error', message: 'O backup contém uma fase inválida.' };
+    }
+
+    const projectDir = this.path.join(this.baseDir, projectID);
+    const papersDir = this.path.join(projectDir, 'papers');
+    const phasesDir = this.path.join(projectDir, 'phases');
+    const restoredProject = this.normalizeProjectPhaseCategoryModel(project);
+
+    this.ensureDir(projectDir);
+    if (this.fs.existsSync(papersDir)) this.fs.rmSync(papersDir, { recursive: true, force: true });
+    if (this.fs.existsSync(phasesDir)) this.fs.rmSync(phasesDir, { recursive: true, force: true });
+
+    this.writeJson(this.path.join(projectID, 'project.json'), restoredProject);
+    for (const paper of backup.papers) {
+      this.writeJson(this.path.join(projectID, 'papers', `${paper.id}.json`), paper);
+    }
+
+    for (const [phaseLabel, phaseData] of phaseEntries) {
+      this.writeJson(this.path.join(projectID, 'phases', phaseLabel, 'storage.json'), phaseData);
+    }
+
+    const config = this.readJson('config.json') || { projects: [] };
+    config.projects = Array.isArray(config.projects) ? config.projects : [];
+    const projectSummary = {
+      id: projectID,
+      name: restoredProject.name,
+      researchers: restoredProject.researchers,
+    };
+    const projectIndex = config.projects.findIndex(item => item?.id === projectID);
+    if (projectIndex === -1) config.projects.push(projectSummary);
+    else config.projects[projectIndex] = { ...config.projects[projectIndex], ...projectSummary };
+    this.writeJson('config.json', config);
+
+    this.activeProjectID = projectID;
+    this.activeProjectData = restoredProject;
+    return {
+      status: 'ok',
+      message: 'Projeto restaurado com sucesso.',
+      data: {
+        projectId: projectID,
+        papers: backup.papers.length,
+        phases: Object.keys(backup.phaseStorage).length,
+      },
+    };
+  }
+
   // Storage-like get/set methods (chrome.storage.local-like behavior)
   get scopedStorageKeys() {
     return new Set(['highlightedLinks', 'svat_papers', 'svat_project']);
@@ -1766,6 +1841,16 @@ class WebSocketStrategy {
     return { status: 'ok', data };
   }
 
+  async importProjectBackup(backup) {
+    const result = await this.send('import_project_backup', { backup });
+    if (result) {
+      await this.notifyContextMenuRefresh();
+      await this.notifyScholarRefresh();
+      await this.notifyDataRefresh('project_imported', { projectID: backup?.projectId || null });
+    }
+    return { status: 'ok', data: result };
+  }
+
   async deleteProject(projectID) {
     const result = await this.send('delete_project', { projectID });
     await this.notifyDataRefresh('project_deleted', { projectID });
@@ -2148,6 +2233,11 @@ class StorageService {
   async exportActiveProject() {
     if (!this.initialized) await this.init();
     return this.strategy.exportActiveProject();
+  }
+
+  async importProjectBackup(backup) {
+    if (!this.initialized) await this.init();
+    return this.strategy.importProjectBackup(backup);
   }
 
   // Expose strategy's sync function to be triggered from background script
