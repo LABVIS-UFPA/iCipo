@@ -237,6 +237,14 @@ class NodeFsStrategy {
     };
   }
 
+  getPaperReviewedForPhase(paper, phaseLabel) {
+    const classification = this.getPaperClassificationForPhase(paper, phaseLabel);
+    if (classification && Object.prototype.hasOwnProperty.call(classification, 'reviewed')) {
+      return classification.reviewed;
+    }
+    return paper?.reviewed ?? false;
+  }
+
   getCategoryMap(project = {}) {
     return new Map(
       (Array.isArray(project.categories) ? project.categories : [])
@@ -514,7 +522,10 @@ class NodeFsStrategy {
     });
   }
 
-  inheritIncludedPapers(projectID, project, previousPhase, nextPhase, { activateNextPhase = true } = {}) {
+  inheritIncludedPapers(projectID, project, previousPhase, nextPhase, {
+    activateNextPhase = true,
+    reviewDecisions = {},
+  } = {}) {
     const inheritedPapers = previousPhase
       ? this.collectIncludedPapersForPhase(projectID, previousPhase.label)
       : [];
@@ -543,6 +554,10 @@ class NodeFsStrategy {
         ? { ...sourcePaper.classifications }
         : {};
       const sourceClassification = this.getPaperClassificationForPhase(sourcePaper, previousPhase?.label);
+      const paperKey = String(paperId);
+      const inheritedReviewed = Object.prototype.hasOwnProperty.call(reviewDecisions, paperKey)
+        ? reviewDecisions[paperKey]
+        : this.getPaperReviewedForPhase(sourcePaper, previousPhase?.label);
       const targetCategory = this.getPhaseIncludedCategory(
         project,
         nextPhase,
@@ -552,6 +567,7 @@ class NodeFsStrategy {
         phaseLabel: nextPhase.label,
         categoryLabel: targetCategory?.label || null,
         outcome: 'included',
+        reviewed: inheritedReviewed,
         classifiedAt: inheritedAt,
         inherited: true,
         entryType: 'inherited',
@@ -572,6 +588,7 @@ class NodeFsStrategy {
           toPhaseLabel: nextPhase.label,
           category: targetCategory?.label || null,
           metricType: 'included',
+          reviewed: inheritedReviewed,
         },
       });
 
@@ -579,6 +596,7 @@ class NodeFsStrategy {
         ...sourcePaper,
         id: paperId,
         status: 'included',
+        reviewed: inheritedReviewed,
         categoryLabel: targetCategory?.label || null,
         phaseLabel: nextPhase.label,
         iterationId: nextPhase.label,
@@ -651,9 +669,10 @@ class NodeFsStrategy {
     };
   }
 
-  inheritIncludedPapersForNewPhase(projectID, project, previousPhase, nextPhase) {
+  inheritIncludedPapersForNewPhase(projectID, project, previousPhase, nextPhase, reviewDecisions = {}) {
     return this.inheritIncludedPapers(projectID, project, previousPhase, nextPhase, {
       activateNextPhase: false,
+      reviewDecisions,
     });
   }
 
@@ -674,13 +693,24 @@ class NodeFsStrategy {
         ? { ...paper.classifications }
         : {};
 
-      if (Object.prototype.hasOwnProperty.call(classifications, deletedPhaseLabel)) {
-        delete classifications[deletedPhaseLabel];
-        paper.classifications = classifications;
-        changed = true;
+      for (const [classificationPhaseLabel, classification] of Object.entries(classifications)) {
+        const isDeletedPhaseClassification = classificationPhaseLabel === deletedPhaseLabel
+          || classification?.phaseLabel === deletedPhaseLabel;
+        const inheritsFromDeletedPhase = classification?.inheritedFromPhaseLabel === deletedPhaseLabel;
+
+        if (isDeletedPhaseClassification || inheritsFromDeletedPhase) {
+          delete classifications[classificationPhaseLabel];
+          changed = true;
+        }
       }
 
-      if (paper.phaseLabel === deletedPhaseLabel || paper.iterationId === deletedPhaseLabel) {
+      if (changed) paper.classifications = classifications;
+
+      if (
+        changed
+        || paper.phaseLabel === deletedPhaseLabel
+        || paper.iterationId === deletedPhaseLabel
+      ) {
         const fallbackClassification = fallbackPhaseLabel
           ? classifications[fallbackPhaseLabel]
           : null;
@@ -1132,6 +1162,11 @@ class NodeFsStrategy {
     this.syncPhasePaperBuckets(projectID, project);
 
     const phase = this.normalizePhase(phaseData);
+    const reviewDecisions = phaseData?.inheritedPaperReviewStatus
+      && typeof phaseData.inheritedPaperReviewStatus === 'object'
+      && !Array.isArray(phaseData.inheritedPaperReviewStatus)
+      ? phaseData.inheritedPaperReviewStatus
+      : {};
     // A criação serve apenas para montar o plano de pesquisa. Toda nova fase
     // nasce pendente/planejada e não recebe artigos até chegar a sua vez na
     // progressão sequencial.
@@ -1158,7 +1193,13 @@ class NodeFsStrategy {
       ? project.phases[project.phases.length - 2]
       : null;
     if (previousPhase) {
-      const inheritanceResult = this.inheritIncludedPapersForNewPhase(projectID, project, previousPhase, phase);
+      const inheritanceResult = this.inheritIncludedPapersForNewPhase(
+        projectID,
+        project,
+        previousPhase,
+        phase,
+        reviewDecisions,
+      );
       if (inheritanceResult?.status === 'error') return inheritanceResult;
     }
 
@@ -1399,32 +1440,35 @@ class NodeFsStrategy {
       };
     }
 
-    project.phases.splice(phaseIndex, 1);
-    const previousPhase = phaseIndex > 0 ? project.phases[phaseIndex - 1] : null;
-    if (previousPhase) {
-      previousPhase.completed = false;
-      project.activePhaseLabel = previousPhase.label;
+    const wasActivePhase = project.activePhaseLabel === phaseLabel;
+    project.phases = project.phases.filter((phase) => phase?.label !== phaseLabel);
+
+    let nextActivePhase = project.phases.find((phase) => phase.label === project.activePhaseLabel) || null;
+    if (wasActivePhase) {
+      nextActivePhase = project.phases[phaseIndex]
+        || project.phases[phaseIndex - 1]
+        || project.phases.find((phase) => !phase.completed)
+        || null;
+      if (nextActivePhase) {
+        nextActivePhase.completed = false;
+        project.activePhaseLabel = nextActivePhase.label;
+      } else {
+        project.activePhaseLabel = null;
+      }
     }
-    const nextActivePhase = previousPhase
-      || project.phases[phaseIndex]
-      || project.phases.find((p) => !p.completed)
-      || project.phases.at(-1)
-      || null;
 
     const phaseDir = this.path.join(this.baseDir, projectID, 'phases', phaseLabel);
     if (this.fs.existsSync(phaseDir)) {
       this.fs.rmSync(phaseDir, { recursive: true, force: true });
     }
-    this.cleanupDeletedPhasePaperReferences(projectID, phaseLabel, nextActivePhase?.label || previousPhase?.label || null);
-
-    if (project.activePhaseLabel === phaseLabel) {
-      project.activePhaseLabel = nextActivePhase?.label || null;
-    }
+    this.cleanupDeletedPhasePaperReferences(projectID, phaseLabel, nextActivePhase?.label || null);
 
     project.updatedAt = new Date().toISOString();
     this.syncPhasePaperBuckets(projectID, project);
     this.writeJson(relPath, project);
-    if (this.activeProjectID === projectID) this.activeProjectData = project;
+    if (this.activeProjectID === projectID) {
+      this.activeProjectData = this.normalizeProjectPhaseCategoryModel(project);
+    }
 
     console.log('✅ Fase removida do project.json:', phaseLabel);
     return { status: 'ok', message: 'Fase removida com sucesso.', data: { activePhaseLabel: project.activePhaseLabel || null } };

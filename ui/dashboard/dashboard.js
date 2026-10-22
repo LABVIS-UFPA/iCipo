@@ -342,6 +342,33 @@ function getPaperClassificationForPhase(paper, phaseLabel) {
   };
 }
 
+function getPaperReviewedForPhase(paper, phaseLabel) {
+  const classification = getPaperClassificationForPhase(paper, phaseLabel);
+  if (classification && Object.prototype.hasOwnProperty.call(classification, "reviewed")) {
+    return classification.reviewed;
+  }
+  return paper?.reviewed ?? false;
+}
+
+function setPaperReviewedForPhase(paper, phaseLabel, reviewed) {
+  if (!paper || !phaseLabel) return;
+  const classifications = paper.classifications
+    && typeof paper.classifications === "object"
+    && !Array.isArray(paper.classifications)
+    ? { ...paper.classifications }
+    : {};
+  const current = getPaperClassificationForPhase(paper, phaseLabel);
+  classifications[phaseLabel] = {
+    ...(current || {}),
+    phaseLabel,
+    categoryLabel: current?.categoryLabel || paper.categoryLabel || null,
+    outcome: current?.outcome || paper.status || "pending",
+    reviewed,
+  };
+  paper.classifications = classifications;
+  paper.reviewed = reviewed;
+}
+
 function getDynamicPhaseStats(phaseLabel) {
   const stats = {
     total: 0,
@@ -443,6 +470,9 @@ function getPhaseArchiveRecords(phase = {}) {
       || safePaper.updatedAt
       || safePaper.createdAt
       || null;
+    const reviewed = Object.prototype.hasOwnProperty.call(safeClassification, "reviewed")
+      ? safeClassification.reviewed
+      : safePaper.reviewed ?? false;
 
     const current = records.get(key);
     if (current) {
@@ -451,6 +481,9 @@ function getPhaseArchiveRecords(phase = {}) {
         || safeClassification.inheritedFromPhaseLabel
         || fallback.inheritedFromPhaseLabel
         || null;
+      if (!Object.prototype.hasOwnProperty.call(current, "reviewed")) {
+        current.reviewed = reviewed;
+      }
       return current;
     }
 
@@ -461,6 +494,7 @@ function getPhaseArchiveRecords(phase = {}) {
       outcome,
       categoryLabel,
       classifiedAt,
+      reviewed,
       inherited,
       inheritedFromPhaseLabel: safeClassification.inheritedFromPhaseLabel
         || fallback.inheritedFromPhaseLabel
@@ -583,6 +617,20 @@ function createPhaseArchiveArticleItem(record) {
   categoryText.textContent = categoryName;
   categoryBadge.append(categoryMarker, categoryText);
   badges.appendChild(categoryBadge);
+
+  const reviewed = record?.reviewed === true || record?.reviewed === "completed";
+  const reviewedBadge = document.createElement("span");
+  reviewedBadge.className = `phaseArchiveReviewBadge ${reviewed
+    ? "phaseArchiveReviewBadge--reviewed"
+    : "phaseArchiveReviewBadge--notReviewed"}`;
+  reviewedBadge.textContent = reviewed ? "Revisado" : "Não revisado";
+  reviewedBadge.setAttribute(
+    "title",
+    reviewed
+      ? "O artigo foi marcado como revisado nesta fase."
+      : "O artigo não foi marcado como revisado nesta fase."
+  );
+  badges.appendChild(reviewedBadge);
 
 
 
@@ -2567,6 +2615,7 @@ async function renderPapersTable() {
     const belongsToActivePhase = !activePhaseLabel || paperBelongsToPhase(p, activePhaseLabel);
     const rowCheckDisabled = belongsToActivePhase ? "" : 'disabled title="Artigo de outra fase: disponível apenas para consulta"';
     const phaseDisplay = getPaperPhaseDisplay(p);
+    const phaseReviewed = getPaperReviewedForPhase(p, activePhaseLabel);
 
     rowsHtml += `
       <tr class="${rowClass}" ${rowStyle}>
@@ -2603,9 +2652,9 @@ async function renderPapersTable() {
         return `<button type="button" class="btn ghost small snowballBtn ${isActive ? 'active' : ''}" style="${style}" data-snowball-id="${escapeHtml(p.id)}" data-snowball-title="${escapeHtml(p.title || "(sem título)")}" title="${title}" aria-label="Snowballing">🔗</button>`;
       })()}
             ${(() => {
-        if (p.reviewed === true || p.reviewed === "completed") {
+        if (phaseReviewed === true || phaseReviewed === "completed") {
           return `<span class="paperPhaseBadge" style="background:var(--good); border-color:var(--good); color:white;" title="Snowballing / Revisão Concluída">✔ Revisado</span>`;
-        } else if (p.reviewed === "paused") {
+        } else if (phaseReviewed === "paused") {
           return `<span class="paperPhaseBadge" style="background:var(--warn); border-color:var(--warn); color:white;" title="Snowballing Pausado">⏸ Pausado</span>`;
         }
         return '';
@@ -2673,9 +2722,10 @@ async function renderPapersTable() {
           if (paper) {
             const prev = paper.reviewed;
             const next = isCompleted ? "completed" : "paused";
+            const activePhaseLabel = state?.project?.activePhaseLabel || paper.phaseLabel || paper.iterationId;
             const targets = [...new Set([projectPaper, scopedPaper].filter(Boolean))];
             for (const target of targets) {
-              target.reviewed = next;
+              setPaperReviewedForPhase(target, activePhaseLabel, next);
               target.updatedAt = new Date().toISOString();
             }
             pushHistory(paper, "update_field", { field: "reviewed", from: prev, to: next });
@@ -4100,6 +4150,7 @@ function bindEvents() {
 
   // --- Phases (persistidas no project.json via WebSocket) ---
   const btnShowAddPhase = document.getElementById('btnShowAddPhase');
+  const phaseCreationToggle = document.getElementById('phaseCreationToggle');
   const phasePanel = document.getElementById('phasePanel');
   const sideOverlay = document.getElementById('sideOverlay');
   const btnClosePhase = document.getElementById('btnClosePhase');
@@ -4128,6 +4179,8 @@ function bindEvents() {
   let phaseEditingLabel = null; // label original da fase em edição
   let phaseLabelStatus = 'pending'; // 'pending' | 'done'
   let phaseDraggingLabel = null;
+  let phaseCreationLocked = true;
+  let phaseSaveInProgress = false;
 
   function getProjectPhases() {
     return Array.isArray(state?.project?.phases) ? state.project.phases : [];
@@ -4167,11 +4220,26 @@ function bindEvents() {
 
   function updatePhaseCreationAvailability() {
     if (!btnShowAddPhase) return;
+    const phases = getProjectPhases();
     const latest = getLatestPhase();
-    btnShowAddPhase.disabled = false;
-    btnShowAddPhase.title = latest
-      ? 'Adicionar uma fase planejada ao plano de pesquisa'
-      : 'Adicionar a primeira fase';
+    const activePhase = phases.find(phase => phase?.label === state?.project?.activePhaseLabel);
+    const activePhaseCompleted = !activePhase || isPhaseCompleted(activePhase);
+    const creationBlocked = phaseCreationLocked && phases.length > 0 && !activePhaseCompleted;
+
+    btnShowAddPhase.disabled = creationBlocked;
+    btnShowAddPhase.title = creationBlocked
+      ? 'Conclua a fase ativa para adicionar uma nova fase'
+      : (latest
+        ? 'Adicionar uma fase planejada ao plano de pesquisa'
+        : 'Adicionar a primeira fase');
+  }
+
+  if (phaseCreationToggle) {
+    phaseCreationLocked = phaseCreationToggle.checked;
+    phaseCreationToggle.addEventListener('change', () => {
+      phaseCreationLocked = phaseCreationToggle.checked;
+      updatePhaseCreationAvailability();
+    });
   }
 
   function updateToggleButtonUI() {
@@ -4771,10 +4839,15 @@ function bindEvents() {
   });
   async function reloadActiveProjectAfterPhaseChange() {
     try {
-      const fresh = await storage.getActiveProject();
+      const fresh = await storage.loadProject(state?.project?.id);
       if (fresh) state.project = fresh;
     } catch (err) {
-      console.warn('Não foi possível recarregar o projeto ativo após salvar fase.', err);
+      try {
+        const fresh = await storage.getActiveProject();
+        if (fresh) state.project = fresh;
+      } catch (fallbackError) {
+        console.warn('Não foi possível recarregar o projeto após alterar fases.', fallbackError);
+      }
     }
   }
 
@@ -4792,6 +4865,7 @@ function bindEvents() {
 
   if (btnSavePhase) btnSavePhase.addEventListener('click', async (e) => {
     e.preventDefault();
+    if (phaseSaveInProgress) return;
     const completesRequiredFirstPhase = phaseCreationRequired && !phaseEditingLabel;
     const title = (phaseTitleInput?.value || '').trim();
     const desc = (phaseDescInput?.value || '').trim();
@@ -4849,6 +4923,9 @@ function bindEvents() {
       alert('Somente a fase ativa pode ser concluída. As fases futuras permanecem planejadas.');
       return;
     }
+
+    phaseSaveInProgress = true;
+    btnSavePhase.disabled = true;
 
     const phasePayload = {
       title,
@@ -4917,7 +4994,8 @@ function bindEvents() {
         const outcome = normalizeMetricType(classification.outcome ?? paper.status, 'pending');
 
         if (outcome === 'included') {
-          const isCurrentlyReviewed = paper.reviewed === true || paper.reviewed === 'completed';
+          const isCurrentlyReviewed = getPaperReviewedForPhase(paper, targetPhaseLabel) === true
+            || getPaperReviewedForPhase(paper, targetPhaseLabel) === 'completed';
           const inheritedInPreviousPhase = isInheritedPhaseClassification(classification) || paper.phaseLabel !== targetPhaseLabel;
           if (inheritedInPreviousPhase || isCurrentlyReviewed) {
             eligiblePapers.push(paper);
@@ -4934,28 +5012,14 @@ function bindEvents() {
           console.log('🧭 Enviando update_phase para WS', { projectID: state.project.id, phaseLabel: phaseEditingLabel, data: phasePayload });
           await storage.updatePhase(state.project.id, phaseEditingLabel, phasePayload);
         } else {
+          phasePayload.inheritedPaperReviewStatus = Object.fromEntries(
+            eligiblePapers.map(paper => [
+              String(paper.id),
+              selectedReviewedIds.includes(String(paper.id)),
+            ])
+          );
           console.log('🧭 Enviando save_phase para WS', { projectID: state.project.id, data: phasePayload });
           await storage.savePhase(state.project.id, phasePayload);
-
-          if (eligiblePapers.length > 0) {
-            const updates = [];
-            for (const paper of eligiblePapers) {
-              const shouldBeReviewed = selectedReviewedIds.includes(String(paper.id));
-              const isCurrentlyReviewed = paper.reviewed === true || paper.reviewed === 'completed';
-              if (shouldBeReviewed !== isCurrentlyReviewed) {
-                const projectPaper = (Array.isArray(state?.papers) ? state.papers : []).find(p => String(p.id) === String(paper.id)) || paper;
-                const prev = projectPaper.reviewed;
-                const next = shouldBeReviewed ? true : false;
-                projectPaper.reviewed = next;
-                projectPaper.updatedAt = new Date().toISOString();
-                pushHistory(projectPaper, "update_field", { field: "reviewed", from: prev, to: next });
-                updates.push(storage.savePaper(projectPaper));
-              }
-            }
-            if (updates.length > 0) {
-              await Promise.allSettled(updates);
-            }
-          }
         }
 
         await reloadActiveProjectAfterPhaseChange();
@@ -4984,6 +5048,7 @@ function bindEvents() {
         console.warn('savePhase failed', err);
         alert(err?.message || err?.message || err?.payload?.message || 'Falha ao salvar fase. Veja o console.');
       } finally {
+        phaseSaveInProgress = false;
         btnSavePhase.disabled = false;
       }
     };
@@ -4992,7 +5057,8 @@ function bindEvents() {
       inheritanceModalTableBody.innerHTML = '';
       eligiblePapers.forEach(p => {
         const tr = document.createElement('tr');
-        const isCurrentlyReviewed = p.reviewed === true || p.reviewed === 'completed';
+        const isCurrentlyReviewed = getPaperReviewedForPhase(p, targetPhaseLabel) === true
+          || getPaperReviewedForPhase(p, targetPhaseLabel) === 'completed';
         const phasesDisplay = getPaperPhaseDisplay(p);
 
         tr.innerHTML = `
@@ -5034,23 +5100,19 @@ function bindEvents() {
 
       inheritanceReviewedModal.classList.remove('hidden');
 
-      const newConfirm = btnConfirmInheritanceModal.cloneNode(true);
-      btnConfirmInheritanceModal.replaceWith(newConfirm);
-      const newCancel = btnCloseInheritanceModal.cloneNode(true);
-      btnCloseInheritanceModal.replaceWith(newCancel);
-
-      const confirmBtn = document.getElementById('btnConfirmInheritanceModal');
-      const cancelBtn = document.getElementById('btnCloseInheritanceModal');
-
-      confirmBtn.addEventListener('click', () => {
+      // Substitui o callback anterior para não acumular uma gravação por abertura
+      // da janela e disparar tentativas de salvar fases antigas.
+      btnConfirmInheritanceModal.onclick = () => {
         const selectedIds = Array.from(inheritanceModalTableBody.querySelectorAll('.inheritance-paper-check:checked')).map(cb => cb.value);
         inheritanceReviewedModal.classList.add('hidden');
         finalizeSave(selectedIds);
-      });
+      };
 
-      cancelBtn.addEventListener('click', () => {
+      btnCloseInheritanceModal.onclick = () => {
         inheritanceReviewedModal.classList.add('hidden');
-      });
+        phaseSaveInProgress = false;
+        btnSavePhase.disabled = false;
+      };
     } else {
       finalizeSave();
     }
@@ -5089,15 +5151,7 @@ function bindEvents() {
     try {
       console.log('🧭 Enviando delete_phase para WS', { projectID: state.project.id, phaseLabel: phaseEditingLabel });
       await storage.deletePhase(state.project.id, phaseEditingLabel);
-      await reloadActiveProjectAfterPhaseChange();
-      renderPhasesFromProject();
-      renderHeader();
-      await Promise.allSettled([
-        renderOverview(),
-        loadHighlightedLinks(),
-        renderPapersTable(),
-        updateScholarCategoryMenu(),
-      ]);
+      await refreshDashboardFromStorage('phase_deleted');
       const requiresReplacementPhase = !projectHasPhases();
       applyPhaseRequirementUI(requiresReplacementPhase);
       clearPhaseForm();

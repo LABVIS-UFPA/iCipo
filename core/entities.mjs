@@ -487,6 +487,7 @@ class Paper {
     this.doi = data.doi || "";
     this.origin = data.origin || null;
     this.status = normalizeMetricType(data.status, "pending");
+    this.reviewed = data.reviewed ?? false;
     this.categoryLabel = data.categoryLabel || data.categoryId || null;
     this.phaseLabel = data.phaseLabel || data.phaseId || null;
     this.classifications = data.classifications && typeof data.classifications === "object" && !Array.isArray(data.classifications)
@@ -592,6 +593,7 @@ class Paper {
       doi: this.doi,
       origin: this.origin,
       status: this.status,
+      reviewed: this.reviewed,
       categoryLabel: this.categoryLabel,
       phaseLabel: this.phaseLabel,
       classifications: this.classifications,
