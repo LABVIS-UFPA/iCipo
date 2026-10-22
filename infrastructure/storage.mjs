@@ -964,6 +964,48 @@ class NodeFsStrategy {
     }
   }
 
+  async exportActiveProject() {
+    if (!this.activeProjectID) {
+      return { status: 'error', message: 'Nenhum projeto está aberto no momento.' };
+    }
+
+    const projectID = this.activeProjectID;
+    const projectPath = this.path.join(projectID, 'project.json');
+    const project = this.readJson(projectPath);
+    if (!project || typeof project !== 'object') {
+      return { status: 'error', message: 'Não foi possível localizar os dados do projeto ativo.' };
+    }
+
+    const papers = this.readProjectPaperEntries(projectID).map(({ paper }) => paper);
+    const phaseStorage = {};
+    const phasesDir = this.path.join(this.baseDir, projectID, 'phases');
+
+    if (this.fs.existsSync(phasesDir)) {
+      for (const phaseLabel of this.fs.readdirSync(phasesDir)) {
+        const phaseDir = this.path.join(phasesDir, phaseLabel);
+        if (!this.fs.statSync(phaseDir).isDirectory()) continue;
+
+        const storageData = this.readJson(this.path.join(projectID, 'phases', phaseLabel, 'storage.json'));
+        if (storageData && typeof storageData === 'object') {
+          phaseStorage[phaseLabel] = storageData;
+        }
+      }
+    }
+
+    return {
+      status: 'ok',
+      data: {
+        format: 'icipo-project-backup',
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        projectId: projectID,
+        project,
+        papers,
+        phaseStorage,
+      },
+    };
+  }
+
   // Storage-like get/set methods (chrome.storage.local-like behavior)
   get scopedStorageKeys() {
     return new Set(['highlightedLinks', 'svat_papers', 'svat_project']);
@@ -1719,6 +1761,11 @@ class WebSocketStrategy {
     }
   }
 
+  async exportActiveProject() {
+    const data = await this.send('export_active_project', {});
+    return { status: 'ok', data };
+  }
+
   async deleteProject(projectID) {
     const result = await this.send('delete_project', { projectID });
     await this.notifyDataRefresh('project_deleted', { projectID });
@@ -2096,6 +2143,11 @@ class StorageService {
   async getActiveProject() {
     if (!this.initialized) await this.init();
     return this.strategy.getActiveProject();
+  }
+
+  async exportActiveProject() {
+    if (!this.initialized) await this.init();
+    return this.strategy.exportActiveProject();
   }
 
   // Expose strategy's sync function to be triggered from background script

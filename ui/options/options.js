@@ -323,20 +323,29 @@ document.addEventListener("DOMContentLoaded", () => {
     highlightSearch.addEventListener("input", () => loadHighlightedLinks());
   }
 
-  downloadStorage.addEventListener("click", () => {
-    storage.get(null).then(function (data) {
-      const jsonString = JSON.stringify(data, null, 2);
+  downloadStorage.addEventListener("click", async () => {
+    try {
+      const response = await storage.exportActiveProject();
+      if (!response?.data || response.data.format !== "icipo-project-backup") {
+        throw new Error(response?.message || "Não foi possível exportar o projeto ativo.");
+      }
+
+      const jsonString = JSON.stringify(response.data, null, 2);
       const blob = new Blob([jsonString], { type: "application/json" });
       const url = URL.createObjectURL(blob);
 
       const a = document.createElement("a");
       a.href = url;
-      a.download = "storage_backup.json";
+      const projectId = String(response.data.projectId || "projeto-ativo")
+        .replace(/[^a-z0-9._-]+/gi, "_");
+      a.download = `icipo_${projectId}_backup.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    }).catch(()=>{});
+    } catch (error) {
+      alert(`Não foi possível exportar o projeto ativo. ${error?.message || "Tente novamente."}`);
+    }
   });
 
   uploadStorage.addEventListener("change", function (event) {
