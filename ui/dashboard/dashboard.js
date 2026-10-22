@@ -5100,25 +5100,19 @@ function bindEvents() {
 
       inheritanceReviewedModal.classList.remove('hidden');
 
-      const newConfirm = btnConfirmInheritanceModal.cloneNode(true);
-      btnConfirmInheritanceModal.replaceWith(newConfirm);
-      const newCancel = btnCloseInheritanceModal.cloneNode(true);
-      btnCloseInheritanceModal.replaceWith(newCancel);
-
-      const confirmBtn = document.getElementById('btnConfirmInheritanceModal');
-      const cancelBtn = document.getElementById('btnCloseInheritanceModal');
-
-      confirmBtn.addEventListener('click', () => {
+      // Substitui o callback anterior para não acumular uma gravação por abertura
+      // da janela e disparar tentativas de salvar fases antigas.
+      btnConfirmInheritanceModal.onclick = () => {
         const selectedIds = Array.from(inheritanceModalTableBody.querySelectorAll('.inheritance-paper-check:checked')).map(cb => cb.value);
         inheritanceReviewedModal.classList.add('hidden');
         finalizeSave(selectedIds);
-      });
+      };
 
-      cancelBtn.addEventListener('click', () => {
+      btnCloseInheritanceModal.onclick = () => {
         inheritanceReviewedModal.classList.add('hidden');
         phaseSaveInProgress = false;
         btnSavePhase.disabled = false;
-      });
+      };
     } else {
       finalizeSave();
     }
