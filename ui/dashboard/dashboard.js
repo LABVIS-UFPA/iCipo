@@ -4180,6 +4180,7 @@ function bindEvents() {
   let phaseLabelStatus = 'pending'; // 'pending' | 'done'
   let phaseDraggingLabel = null;
   let phaseCreationLocked = true;
+  let phaseSaveInProgress = false;
 
   function getProjectPhases() {
     return Array.isArray(state?.project?.phases) ? state.project.phases : [];
@@ -4864,6 +4865,7 @@ function bindEvents() {
 
   if (btnSavePhase) btnSavePhase.addEventListener('click', async (e) => {
     e.preventDefault();
+    if (phaseSaveInProgress) return;
     const completesRequiredFirstPhase = phaseCreationRequired && !phaseEditingLabel;
     const title = (phaseTitleInput?.value || '').trim();
     const desc = (phaseDescInput?.value || '').trim();
@@ -4921,6 +4923,9 @@ function bindEvents() {
       alert('Somente a fase ativa pode ser concluída. As fases futuras permanecem planejadas.');
       return;
     }
+
+    phaseSaveInProgress = true;
+    btnSavePhase.disabled = true;
 
     const phasePayload = {
       title,
@@ -5043,6 +5048,7 @@ function bindEvents() {
         console.warn('savePhase failed', err);
         alert(err?.message || err?.message || err?.payload?.message || 'Falha ao salvar fase. Veja o console.');
       } finally {
+        phaseSaveInProgress = false;
         btnSavePhase.disabled = false;
       }
     };
@@ -5110,6 +5116,8 @@ function bindEvents() {
 
       cancelBtn.addEventListener('click', () => {
         inheritanceReviewedModal.classList.add('hidden');
+        phaseSaveInProgress = false;
+        btnSavePhase.disabled = false;
       });
     } else {
       finalizeSave();
@@ -5149,15 +5157,7 @@ function bindEvents() {
     try {
       console.log('🧭 Enviando delete_phase para WS', { projectID: state.project.id, phaseLabel: phaseEditingLabel });
       await storage.deletePhase(state.project.id, phaseEditingLabel);
-      await reloadActiveProjectAfterPhaseChange();
-      renderPhasesFromProject();
-      renderHeader();
-      await Promise.allSettled([
-        renderOverview(),
-        loadHighlightedLinks(),
-        renderPapersTable(),
-        updateScholarCategoryMenu(),
-      ]);
+      await refreshDashboardFromStorage('phase_deleted');
       const requiresReplacementPhase = !projectHasPhases();
       applyPhaseRequirementUI(requiresReplacementPhase);
       clearPhaseForm();

@@ -693,13 +693,24 @@ class NodeFsStrategy {
         ? { ...paper.classifications }
         : {};
 
-      if (Object.prototype.hasOwnProperty.call(classifications, deletedPhaseLabel)) {
-        delete classifications[deletedPhaseLabel];
-        paper.classifications = classifications;
-        changed = true;
+      for (const [classificationPhaseLabel, classification] of Object.entries(classifications)) {
+        const isDeletedPhaseClassification = classificationPhaseLabel === deletedPhaseLabel
+          || classification?.phaseLabel === deletedPhaseLabel;
+        const inheritsFromDeletedPhase = classification?.inheritedFromPhaseLabel === deletedPhaseLabel;
+
+        if (isDeletedPhaseClassification || inheritsFromDeletedPhase) {
+          delete classifications[classificationPhaseLabel];
+          changed = true;
+        }
       }
 
-      if (paper.phaseLabel === deletedPhaseLabel || paper.iterationId === deletedPhaseLabel) {
+      if (changed) paper.classifications = classifications;
+
+      if (
+        changed
+        || paper.phaseLabel === deletedPhaseLabel
+        || paper.iterationId === deletedPhaseLabel
+      ) {
         const fallbackClassification = fallbackPhaseLabel
           ? classifications[fallbackPhaseLabel]
           : null;
