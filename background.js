@@ -753,7 +753,19 @@ function highlightLink(linkUrl, color, categoryName) {
     return yiq >= 160 ? '#111827' : '#ffffff';
   }
 
-  document.querySelectorAll(`a[href^='${linkUrl}']`).forEach(link => {
+  function cleanUrl(u) {
+    return String(u || '')
+      .trim()
+      .replace(/([?&])casa_token=[^&#]*/gi, '$1')
+      .replace(/[?&]+$/g, '')
+      .replace(/#.*$/g, '')
+      .replace(/\/+$/g, '');
+  }
+
+  const target = cleanUrl(linkUrl);
+  document.querySelectorAll('a[href]').forEach(link => {
+    const href = cleanUrl(link.href);
+    if (!href || !target || (href !== target && !link.href.startsWith(linkUrl))) return;
     link.classList.add('ic-highlighted-link');
     link.style.backgroundColor = color;
     const existing = link.nextElementSibling;
@@ -784,7 +796,19 @@ function highlightLink(linkUrl, color, categoryName) {
 }
 
 function removeHighlight(linkUrl) {
-  document.querySelectorAll(`a[href^='${linkUrl}']`).forEach(link => {
+  function cleanUrl(u) {
+    return String(u || '')
+      .trim()
+      .replace(/([?&])casa_token=[^&#]*/gi, '$1')
+      .replace(/[?&]+$/g, '')
+      .replace(/#.*$/g, '')
+      .replace(/\/+$/g, '');
+  }
+
+  const target = cleanUrl(linkUrl);
+  document.querySelectorAll('a[href]').forEach(link => {
+    const href = cleanUrl(link.href);
+    if (!href || !target || (href !== target && !link.href.startsWith(linkUrl))) return;
     link.classList.remove('ic-highlighted-link');
     link.style.backgroundColor = "";
     const next = link.nextElementSibling;

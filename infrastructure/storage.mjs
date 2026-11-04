@@ -1070,7 +1070,11 @@ class NodeFsStrategy {
         .filter(item => item.classification && item.classification.categoryLabel)
         .sort((first, second) => String(second.classification?.classifiedAt || '').localeCompare(String(first.classification?.classifiedAt || '')));
 
-      const latestClassification = classifiedEntries[0];
+      const activePhaseClassification = activePhase?.label && classifications[activePhase.label]?.categoryLabel
+        ? { phaseLabel: activePhase.label, classification: classifications[activePhase.label] }
+        : null;
+
+      const latestClassification = activePhaseClassification || classifiedEntries[0];
       if (!latestClassification) continue;
 
       const category = categoryMap.get(latestClassification.classification.categoryLabel)

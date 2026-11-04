@@ -164,8 +164,11 @@ async function refreshHighlightsFromWs() {
   return refreshPromise;
 }
 
+let highlightsWatcherStarted = false;
+
 function watchForChanges() {
-  if (typeof MutationObserver === 'undefined') return;
+  if (highlightsWatcherStarted || typeof MutationObserver === 'undefined') return;
+  highlightsWatcherStarted = true;
 
   const observer = new MutationObserver(() => {
     clearTimeout(mutationTimer);
@@ -178,12 +181,21 @@ function watchForChanges() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+function initializeHighlights() {
   refreshHighlightsFromWs();
   watchForChanges();
-});
+}
+
+// Em document_idle, o script pode ser injetado depois de DOMContentLoaded ter
+// ocorrido. Nesse caso, inicializa imediatamente.
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializeHighlights, { once: true });
+} else {
+  initializeHighlights();
+}
 
 window.addEventListener('load', refreshHighlightsFromWs);
+window.addEventListener('pageshow', refreshHighlightsFromWs);
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.action === 'refreshHighlights') {

@@ -1025,7 +1025,7 @@ export function getMergedPapers(consolidatedPapers = [], scopedPapers = [], high
       createdAt: existing.createdAt || "",
       year: existing.year || "",
       tags: Array.isArray(existing.tags) ? existing.tags : [],
-      highlightedColor: color,
+      highlightedColor: normalizeHexColor(color),
       visited: true,
     }));
   }
