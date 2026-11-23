@@ -2334,6 +2334,18 @@ function getPaperPhaseTitle(paper) {
   return active?.title || active?.label || "—";
 }
 
+function getPaperOriginPhaseTitle(paper) {
+  const phases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
+  const phaseLabels = new Set(getPaperPhaseLabels(paper));
+  const originPhase = phases.find(phase => (
+    phaseLabels.has(phase?.label)
+    || phaseLabels.has(phase?.id)
+    || phaseLabels.has(phase?.title)
+  ));
+
+  return originPhase?.title || originPhase?.label || getPaperPhaseTitle(paper);
+}
+
 function renderOverviewRecentArticles(papers, highlightedLinks = {}, scope = overviewMetricScope) {
   const tbody = $("#overviewRecentTable tbody");
   if (!tbody) return;
@@ -2614,7 +2626,7 @@ async function renderPapersTable() {
     const activePhaseLabel = state?.project?.activePhaseLabel || "";
     const belongsToActivePhase = !activePhaseLabel || paperBelongsToPhase(p, activePhaseLabel);
     const rowCheckDisabled = belongsToActivePhase ? "" : 'disabled title="Artigo de outra fase: disponível apenas para consulta"';
-    const phaseDisplay = getPaperPhaseDisplay(p);
+    const phaseDisplay = getPaperOriginPhaseTitle(p);
     const phaseReviewed = getPaperReviewedForPhase(p, activePhaseLabel);
 
     rowsHtml += `
