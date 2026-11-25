@@ -323,45 +323,59 @@ document.addEventListener("DOMContentLoaded", () => {
     highlightSearch.addEventListener("input", () => loadHighlightedLinks());
   }
 
-  downloadStorage.addEventListener("click", () => {
-    storage.get(null).then(function (data) {
-      const jsonString = JSON.stringify(data, null, 2);
+  downloadStorage.addEventListener("click", async () => {
+    try {
+      const response = await storage.exportActiveProject();
+      if (!response?.data || response.data.format !== "icipo-project-backup") {
+        throw new Error(response?.message || "Não foi possível exportar o projeto ativo.");
+      }
+
+      const jsonString = JSON.stringify(response.data, null, 2);
       const blob = new Blob([jsonString], { type: "application/json" });
       const url = URL.createObjectURL(blob);
 
       const a = document.createElement("a");
       a.href = url;
-      a.download = "storage_backup.json";
+      const projectId = String(response.data.projectId || "projeto-ativo")
+        .replace(/[^a-z0-9._-]+/gi, "_");
+      a.download = `icipo_${projectId}_backup.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    }).catch(()=>{});
+    } catch (error) {
+      alert(`Não foi possível exportar o projeto ativo. ${error?.message || "Tente novamente."}`);
+    }
   });
 
-  uploadStorage.addEventListener("change", function (event) {
+  uploadStorage.addEventListener("change", async function (event) {
     const file = event.target.files[0];
     if (uploadFileName) uploadFileName.textContent = file?.name || "Nenhum arquivo escolhido";
     if (!file) return;
-    if (!confirm("Tem certeza de que deseja fazer upload deste arquivo? Isso pode sobrescrever os dados existentes.")) {
+    if (!confirm("Tem certeza de que deseja restaurar este projeto? Os dados do mesmo projeto serão substituídos; se ele não existir, será criado.")) {
       event.target.value = "";
       if (uploadFileName) uploadFileName.textContent = "Nenhum arquivo escolhido";
       return;
     }
 
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = function (event) {
-        try {
-          const jsonData = JSON.parse(event.target.result);
-          storage.set(jsonData).then(() => {
-            alert("Dados carregados no storage com sucesso!");
-          }).catch((e)=>{ alert("Erro ao salvar dados: " + e); });
-        } catch (error) {
-          alert("Erro ao processar o JSON: " + error);
+    try {
+      const jsonData = JSON.parse(await file.text());
+      if (jsonData?.format === "icipo-project-backup") {
+        const response = await storage.importProjectBackup(jsonData);
+        if (response?.status !== "ok") {
+          throw new Error(response?.message || "Não foi possível restaurar o projeto.");
         }
-      };
-      reader.readAsText(file);
+        alert(`Projeto restaurado com sucesso. ${response.data?.papers || 0} artigo(s) e ${response.data?.phases || 0} fase(s) processados.`);
+        window.location.href = chrome.runtime.getURL("ui/dashboard/dashboard.html");
+        return;
+      }
+
+      await storage.set(jsonData);
+      alert("Dados legados carregados no storage com sucesso!");
+    } catch (error) {
+      alert(`Erro ao restaurar o backup: ${error?.message || error}`);
+    } finally {
+      event.target.value = "";
     }
   });
 

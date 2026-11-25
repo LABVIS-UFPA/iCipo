@@ -2334,6 +2334,18 @@ function getPaperPhaseTitle(paper) {
   return active?.title || active?.label || "—";
 }
 
+function getPaperOriginPhaseTitle(paper) {
+  const phases = Array.isArray(state?.project?.phases) ? state.project.phases : [];
+  const phaseLabels = new Set(getPaperPhaseLabels(paper));
+  const originPhase = phases.find(phase => (
+    phaseLabels.has(phase?.label)
+    || phaseLabels.has(phase?.id)
+    || phaseLabels.has(phase?.title)
+  ));
+
+  return originPhase?.title || originPhase?.label || getPaperPhaseTitle(paper);
+}
+
 function renderOverviewRecentArticles(papers, highlightedLinks = {}, scope = overviewMetricScope) {
   const tbody = $("#overviewRecentTable tbody");
   if (!tbody) return;
@@ -2614,7 +2626,7 @@ async function renderPapersTable() {
     const activePhaseLabel = state?.project?.activePhaseLabel || "";
     const belongsToActivePhase = !activePhaseLabel || paperBelongsToPhase(p, activePhaseLabel);
     const rowCheckDisabled = belongsToActivePhase ? "" : 'disabled title="Artigo de outra fase: disponível apenas para consulta"';
-    const phaseDisplay = getPaperPhaseDisplay(p);
+    const phaseDisplay = getPaperOriginPhaseTitle(p);
     const phaseReviewed = getPaperReviewedForPhase(p, activePhaseLabel);
 
     rowsHtml += `
@@ -2969,12 +2981,23 @@ function closePaperBulkCategoryModal() {
   if (options) options.innerHTML = "";
   paperBulkPendingOutcome = null;
   paperBulkPendingCategories = [];
-  document.getElementById("paperExclusionCriteriaFields")?.classList.add("hidden");
+  const exclusionFields = document.getElementById("paperExclusionCriteriaFields");
+  exclusionFields?.classList.add("hidden");
+  if (exclusionFields) {
+    exclusionFields.hidden = true;
+    exclusionFields.style.display = "none";
+  }
 }
 
 function openPaperBulkCategoryModal(outcome, categories, selectedCount) {
   const normalizedOutcome = normalizeCategoryMetricType(outcome, "pending");
   const copy = PAPER_BULK_ACTION_COPY[normalizedOutcome] || PAPER_BULK_ACTION_COPY.pending;
+  const compatibleCategories = (Array.isArray(categories) ? categories : []).filter(category => (
+    normalizeCategoryMetricType(
+      category?.metricType,
+      inferMetricTypeFromCategory(category)
+    ) === normalizedOutcome
+  ));
   const modal = document.getElementById("paperBulkCategoryModal");
   const eyebrow = document.getElementById("paperBulkCategoryModalEyebrow");
   const title = document.getElementById("paperBulkCategoryModalTitle");
@@ -2983,7 +3006,7 @@ function openPaperBulkCategoryModal(outcome, categories, selectedCount) {
   if (!modal || !options) return;
 
   paperBulkPendingOutcome = normalizedOutcome;
-  paperBulkPendingCategories = categories;
+  paperBulkPendingCategories = compatibleCategories;
   if (eyebrow) eyebrow.textContent = `Classificação em lote · ${copy.result}`;
   if (title) title.textContent = "Escolha a categoria que será aplicada";
   if (description) {
@@ -2994,25 +3017,30 @@ function openPaperBulkCategoryModal(outcome, categories, selectedCount) {
   const categorySelect = document.getElementById("paperExclusionCategorySelect");
   const criterionSelect = document.getElementById("paperExclusionCriterionSelect");
   const newInput = document.getElementById("paperExclusionNewCriterion");
+  exclusionFields?.classList.add("hidden");
+  if (exclusionFields) {
+    exclusionFields.hidden = true;
+    exclusionFields.style.display = "none";
+  }
   if (normalizedOutcome === "excluded" && exclusionFields && categorySelect && criterionSelect) {
     exclusionFields.classList.remove("hidden");
-    categorySelect.innerHTML = categories.map(category =>
+    exclusionFields.hidden = false;
+    exclusionFields.style.display = "";
+    categorySelect.innerHTML = compatibleCategories.map(category =>
       `<option value="${escapeHtml(category.label)}">${escapeHtml(category.title || category.label)}</option>`
     ).join("");
-    renderExclusionCriteria(categories[0]);
+    renderExclusionCriteria(compatibleCategories[0]);
     categorySelect.onchange = () => {
-      const selected = categories.find(item => item.label === categorySelect.value);
+      const selected = compatibleCategories.find(item => item.label === categorySelect.value);
       renderExclusionCriteria(selected);
     };
     criterionSelect.onchange = (event) => renderExclusionCriteria(
-      categories.find(item => item.label === categorySelect.value),
+      compatibleCategories.find(item => item.label === categorySelect.value),
       event.target.value
     );
     document.getElementById("btnConfirmPaperExclusion").onclick = () => confirmPaperExclusion(false);
     document.getElementById("btnSavePaperExclusionCriterion").onclick = () => confirmPaperExclusion(true);
     if (newInput) newInput.value = "";
-  } else {
-    exclusionFields?.classList.add("hidden");
   }
 
   options.innerHTML = "";
@@ -3023,7 +3051,7 @@ function openPaperBulkCategoryModal(outcome, categories, selectedCount) {
     modal.setAttribute("aria-hidden", "false");
     return;
   }
-  for (const category of categories) {
+  for (const category of compatibleCategories) {
     const option = document.createElement("button");
     option.type = "button";
     option.className = "paperBulkCategoryOption";
